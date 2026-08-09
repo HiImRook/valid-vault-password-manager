@@ -5,6 +5,35 @@ All notable changes to Local Vault will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.3] - 2026-08-08
+
+### Added
+- qrcode.js - vendored QR generator, MIT licensed, fully local with no network calls
+  - Produces scannable QR codes from pairing and vault data
+  - Self-contained ES module, no runtime dependencies
+- frames.js - frame batching so any vault size can move as scannable QR codes
+  - splitIntoFrames() breaks a payload into numbered frames tagged with index and total
+  - createFrameCollector() reassembles frames, handling out-of-order arrival and duplicates
+  - Rejects incomplete frame sets so a partial scan cannot produce a corrupt vault
+- extension/manage.js - animated frame display in the Sync tab
+  - Small payloads show a single static QR
+  - Large payloads cycle through numbered frames automatically for the scanning device
+- extension Sync tab with Start Sync, QR display, comparison code entry, and PIN confirmation
+
+### Changed
+- Sync tab content is isolated to the Sync tab and no longer bleeds into other settings tabs
+- package.json version aligned to 0.3.3
+
+### Notes
+- Frame batching validated in Node: a 50-credential vault splits into 17 frames and reassembles exactly, in order, out of order, and with duplicate frames present.
+- The transport stays fully local. QR frames carry data device to device with no network, no cloud, and no account.
+- QR display works on both the app and the extension. Each device reads the other's credentials, then writes its own identical merged vault locally rather than receiving a finished file.
+
+### In Progress
+- Webcam QR scanning in the browser so it can read frames back from the phone
+- QR frame display on the phone so it can show its credentials to the browser
+- Send-only fallback for devices without a camera
+
 ## [0.3.2] - 2026-08-07
 
 ### Added

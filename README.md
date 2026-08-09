@@ -1,8 +1,12 @@
-# Local Vault Password Manager
+# Valid Vault Password Manager
 
 A local, encrypted, QR code portable password manager. No cloud, no accounts, or sync servers. Your credentials live on your device, encrypted under keys only you can produce, and move between devices over a QR pairing ceremony.
 
 ---
+
+> ✅ **Sync Transport Notice - v0.3.3**
+>
+> The sync transport is taking shape. A vendored, fully local QR generator and a frame batching system now move credential data of any size between devices as scannable QR codes, with no network, no cloud, and no account. The extension Sync tab shows the pairing QR and comparison code. Webcam scanning on the browser and QR display on the phone are actively being built. See [CHANGELOG.md](CHANGELOG.md) for full details.
 
 > ✅ **Credential Sync Notice - v0.3.2**
 >
@@ -14,9 +18,9 @@ A local, encrypted, QR code portable password manager. No cloud, no accounts, or
 
 ---
 
-## What is Local Vault?
+## What is Valid Vault?
 
-Local Vault is a self-hosted password manager built on a master key wrap architecture. One random 256-bit master key encrypts your vault. That key is never stored raw, it's wrapped independently under each unlock method you enroll, and unwrapping it is the act of authentication itself.
+Valid Vault is a self-hosted password manager built on a master key wrap architecture. One random 256-bit master key encrypts your vault. That key is never stored raw, it's wrapped independently under each unlock method you enroll, and unwrapping it is the act of authentication itself.
 
 **How unlock works:**
 - Password - wrapping key derived via PBKDF2-SHA256 at 600,000 iterations with a per-wrap salt
@@ -66,7 +70,7 @@ No cloud service holds your data. No company can be subpoenaed for it, breached 
 - Android via Capacitor
 - Zero runtime dependencies beyond WebCrypto and IndexedDB
 
-## Current Status: v0.3.2
+## Current Status: v0.3.3
 
 **Completed:**
 * ✅ Master key wrap architecture - one random 256-bit key, wrapped per method
@@ -112,7 +116,7 @@ No cloud service holds your data. No company can be subpoenaed for it, breached 
 - Verify-by-unwrap replaces stored hashes
 - PBKDF2 600k with silent migration
 - Ephemeral session-only PIN
-- Rebrand to Local Vault
+- Rebrand to Valid Vault
 
 ### Phase 3: Credential Sync Engine ✅ (Complete - v0.3.2)
 - Username-keyed merge, newest password wins
@@ -121,17 +125,24 @@ No cloud service holds your data. No company can be subpoenaed for it, breached 
 - Tombstone deletes propagate across devices
 - App and extension share one merge engine
 
-### Phase 4: Sync UI 📋 (Future)
-- QR pairing flow on both app and extension
-- Comparison code confirmation screen
-- Sync status and conflict reporting
+### Phase 4: Sync Transport ✅ (Complete - v0.3.3)
+- Vendored local QR generator, no network
+- Frame batching for any vault size, out-of-order and duplicate safe
+- Animated frame display in the extension Sync tab
+- Comparison code and PIN confirmation in the Sync tab
 
-### Phase 5: Vault Schema Hardening 📋 (Future)
+### Phase 5: Sync UI 📋 (In Progress)
+- Webcam QR scanning in the browser to read frames back
+- QR frame display on the phone
+- Send-only fallback for camera-less devices
+- Sync status and progress reporting
+
+### Phase 6: Vault Schema Hardening 📋 (Future)
 - Single-blob vault encryption - site list becomes invisible at rest
 - Vault format version bump with migration
 - Fresh IV discipline audit across all encrypt paths
 
-### Phase 6: Platform Hardening 📋 (Future)
+### Phase 7: Platform Hardening 📋 (Future)
 - Android hardware keystore binding via Capacitor plugin
 - PRF fallback strategy per device capability
 - Web build parity decisions
