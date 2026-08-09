@@ -240,7 +240,7 @@ function hideModal() {
   document.getElementById('modal-container').classList.add('hidden')
 }
 
-window.showSetFingerprint = async function() {
+window.showEnrollFingerprint = async function() {
   vault.auth.startFingerprintEnrollment()
   log('Starting fingerprint enrollment...')
   var masterKey = vault.session.getMasterKey()
@@ -255,13 +255,16 @@ window.showSetFingerprint = async function() {
 }
 
 window.authFingerprint = async function() {
-  log('Authenticating fingerprint...')
+  log('Logging in with fingerprint...')
   var result = await vault.auth.authenticateFingerprint()
   if (result.success) {
     log('Fingerprint auth success', 'success')
     vault.session.setMasterKey(result.masterKey)
+    if (result.requiresReenroll) {
+      log('Legacy fingerprint wrap migrated and removed. Enroll fingerprint again now.', 'error')
+    }
   } else {
-    log('Auth failed: ' + result.error, 'error')
+    log('Login failed: ' + result.error, 'error')
   }
   updateStatus()
 }
@@ -309,7 +312,7 @@ window.authPIN = async function() {
         log(result.error, 'error')
       }
     } else {
-      log('PIN resumes a locked session. Unlock with password or fingerprint first.', 'error')
+      log(vault.session.hasMasterKey() ? 'Already unlocked this session.' : 'No session PIN set. Unlock with password or fingerprint first.', 'error')
     }
   }
   updateStatus()
@@ -341,13 +344,13 @@ window.authPassword = async function() {
     log('Password auth success', 'success')
     vault.session.setMasterKey(result.masterKey)
   } else {
-    log('Auth failed: ' + result.error, 'error')
+    log('Login failed: ' + result.error, 'error')
   }
   updateStatus()
 }
 
 window.showSaveCredential = function() {
-  if (!vault.session.hasMasterKey()) { log('Auth required', 'error'); return }
+  if (!vault.session.hasMasterKey()) { log('Login required', 'error'); return }
   var domain = document.getElementById('domain-input').value || 'example.com'
   showModal('<h3>Add Credential</h3><input type="text" id="modal-domain" value="' + domain + '" placeholder="domain"><input type="text" id="modal-login" placeholder="username"><input type="password" id="modal-password-cred" placeholder="password"><div style="margin-top:16px;"><button onclick="saveCredential()">Save</button><button onclick="hideModal()" class="secondary">Cancel</button></div>')
 }
@@ -372,7 +375,7 @@ window.loadCredentials = async function() {
   var masterKey = vault.session.getMasterKey()
   var domain = document.getElementById('domain-input').value
   var listEl = document.getElementById('credentials-list')
-  if (!masterKey) { listEl.innerHTML = '<p style="color:#666;">Auth required</p>'; return }
+  if (!masterKey) { listEl.innerHTML = '<p style="color:#666;">Login required</p>'; return }
   if (!domain) { listEl.innerHTML = '<p style="color:#666;">Enter domain</p>'; return }
   var result = await vault.passwords.getCredentials(domain, masterKey)
   if (!result.success) { listEl.innerHTML = '<p style="color:#e74c3c;">' + result.error + '</p>'; return }
@@ -383,20 +386,76 @@ window.loadCredentials = async function() {
 }
 
 window.lockAll = function() {
-  vault.session.lockAll()
-  log('Session locked', 'success')
+  if (vault.session.hasSessionPin()) {
+    vault.session.softLockNow()
+    log('Locked. Resume with your session PIN.', 'success')
+  } else {
+    vault.session.lockAll()
+    log('Session locked', 'success')
+  }
   updateStatus()
 }
 
-window.clearAll = async function() {
-  if (!confirm('Clear all data?')) return
+window.clearAll = function() {
+  showModal('<h3>Clear All Data</h3><p style="color:#666;font-size:13px;">Deletes the vault, every credential, and all login methods on this device. This cannot be undone.</p><div style="margin-top:16px;"><button onclick="confirmClearAll()" class="danger">Nuke It</button><button onclick="hideModal()" class="secondary">Cancel</button></div>')
+}
+
+window.confirmClearAll = async function() {
   await vault.store.clearAll()
+  vault.session.lockAll()
+  hideModal()
   log('All data cleared', 'success')
   updateStatus()
 }
 
-window.startSecureSync = function() {
-  log('Sync not implemented yet')
+window.startSecureSync = async function() {
+  if (typeof Capacitor === 'undefined' || !Capacitor.isNativePlatform || !Capacitor.isNativePlatform()) {
+    log('Camera scanning works in the installed app. Open Local Vault on your phone to scan.', 'error')
+    return
+  }
+
+  if (!vault.session.hasMasterKey()) {
+    log('Unlock your vault before syncing', 'error')
+    return
+  }
+
+  try {
+    const scanner = Capacitor.Plugins.BarcodeScanner
+    const granted = await scanner.requestPermissions()
+    if (granted.camera !== 'granted' && granted.camera !== 'limited') {
+      log('Camera permission is required to scan', 'error')
+      return
+    }
+
+    log('Point your camera at the code on your other device...')
+    const result = await scanner.scan()
+    if (!result || !result.barcodes || result.barcodes.length === 0) {
+      log('No code detected', 'error')
+      return
+    }
+
+    const qrText = result.barcodes[0].rawValue
+    const parsed = vault.pairing.parseQR(qrText)
+    if (!parsed.success) {
+      log('That is not a Local Vault sync code', 'error')
+      return
+    }
+
+    const response = await vault.pairing.respondToPairing(parsed.publicKey)
+    syncScanState = { sharedKey: response.sharedKey, pin: response.pin }
+
+    showModal('<h3>Sync</h3><p style=\"color:#666;font-size:13px;\">1. Type this code into your other device:</p><div style=\"background:#2a2a2a;padding:12px;border-radius:6px;word-break:break-all;font-size:12px;color:#00d4aa;\">' + escapeHtml(response.responseData) + '</div><p style=\"color:#666;font-size:13px;margin-top:16px;\">2. Confirm this number matches both screens:</p><div style=\"font-size:28px;font-weight:700;color:#00d4aa;letter-spacing:4px;text-align:center;\">' + response.pin + '</div><div style=\"margin-top:16px;\"><button onclick=\"confirmScanSync()\">Numbers Match, Sync</button><button onclick=\"hideModal()\" class=\"secondary\">Cancel</button></div>')
+  } catch (error) {
+    log('Scan failed: ' + error.message, 'error')
+  }
+}
+
+let syncScanState = null
+
+window.confirmScanSync = async function() {
+  if (!syncScanState) return
+  log('Numbers confirmed. Transfer and merge will complete here once the return channel lands.', 'success')
+  hideModal()
 }
 </script>${afterScript}`
 

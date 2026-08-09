@@ -2,6 +2,9 @@ import * as auth from './auth.js'
 import * as passwords from './passwords.js'
 import * as session from './session.js'
 import * as store from './store.js'
+import * as pairing from './pairing.js'
+import QRCode from './qrcode.js'
+import { splitIntoFrames, createFrameCollector } from './frames.js'
 
 const tabs = document.querySelectorAll('.sidebar-tab')
 const tabManage = document.getElementById('tab-manage')
@@ -37,6 +40,7 @@ function showTab(tabName) {
   
   tabManage.classList.add('hidden')
   tabPersonal.classList.add('hidden')
+  document.getElementById('tab-sync').classList.add('hidden')
   tabSettings.classList.add('hidden')
   tabAbout.classList.add('hidden')
   
@@ -63,9 +67,9 @@ async function loadAuthStatus() {
     btnEditFp.textContent = 'Enroll'
   }
   
-  if (status.hasPIN) {
+  if (session.hasSessionPin()) {
     cardPin.classList.add('active')
-    statusPin.textContent = 'Set'
+    statusPin.textContent = 'Active this session'
     btnEditPin.textContent = 'Edit'
   } else {
     cardPin.classList.remove('active')
@@ -238,10 +242,12 @@ async function promptAuth() {
     if (result.success) return { success: true, masterKey: result.masterKey }
   }
   
-  const pin = prompt('Enter PIN:')
-  if (pin) {
-    const result = await auth.authenticatePIN(pin)
-    if (result.success) return { success: true, masterKey: result.masterKey }
+  if (session.isSoftLocked()) {
+    const pin = prompt('Enter session PIN:')
+    if (pin) {
+      const result = await session.resumeWithPin(pin)
+      if (result.success) return { success: true, masterKey: result.masterKey }
+    }
   }
   
   const pw = prompt('Enter Password:')
@@ -260,7 +266,21 @@ function escapeHtml(str) {
 }
 
 btnEditFp.onclick = () => showMsg(msgManage, 'Fingerprint editing coming soon')
-btnEditPin.onclick = () => showMsg(msgManage, 'PIN editing coming soon')
+btnEditPin.onclick = async () => {
+  if (!session.hasMasterKey()) {
+    showMsg(msgManage, 'Unlock first to set a session PIN', 'error')
+    return
+  }
+  const pin = prompt('Set a 4-6 digit session PIN:')
+  if (!pin) return
+  const result = await session.setSessionPin(pin)
+  if (result.success) {
+    showMsg(msgManage, 'Session PIN set. Clears when browser closes.', 'success')
+    loadAuthStatus()
+  } else {
+    showMsg(msgManage, result.error, 'error')
+  }
+}
 btnEditPw.onclick = () => showMsg(msgManage, 'Password editing coming soon')
 
 btnDelFp.onclick = async () => {
@@ -276,14 +296,10 @@ btnDelFp.onclick = async () => {
 }
 
 btnDelPin.onclick = async () => {
-  if (confirm('Delete PIN authentication?')) {
-    const result = await auth.removePIN()
-    if (result.success) {
-      showMsg(msgManage, 'PIN removed', 'success')
-      loadAuthStatus()
-    } else {
-      showMsg(msgManage, result.error, 'error')
-    }
+  if (confirm('Clear the session PIN?')) {
+    session.clearSessionPin()
+    showMsg(msgManage, 'Session PIN cleared', 'success')
+    loadAuthStatus()
   }
 }
 
@@ -326,6 +342,7 @@ btnClearVault.onclick = async () => {
   if (confirm2) {
     await store.clearAll()
     session.lockAll()
+    await session.clearStorageSession()
     showMsg(msgSettings, 'Vault cleared. Redirecting to setup...', 'success')
     setTimeout(() => window.close(), 2000)
   }
@@ -342,6 +359,85 @@ async function init() {
   const settings = await chrome.storage.local.get(['lockOnPopupClose', 'autoLockTimeout'])
   if (settings.lockOnPopupClose) toggleLockPopup.classList.add('active')
   if (settings.autoLockTimeout) inputTimeout.value = settings.autoLockTimeout
+}
+
+
+const btnStartSync = document.getElementById('btn-start-sync')
+const syncQr = document.getElementById('sync-qr')
+const syncCodeEntry = document.getElementById('sync-code-entry')
+const inputSyncCode = document.getElementById('input-sync-code')
+const btnConfirmSyncCode = document.getElementById('btn-confirm-sync-code')
+const syncPin = document.getElementById('sync-pin')
+const syncPinValue = document.getElementById('sync-pin-value')
+const btnConfirmSyncPin = document.getElementById('btn-confirm-sync-pin')
+const msgSync = document.getElementById('msg-sync')
+
+let syncState = null
+
+let frameAnimationTimer = null
+
+function displayFramedQR(container, payload) {
+  const frames = splitIntoFrames(payload)
+  let current = 0
+
+  if (frameAnimationTimer) {
+    clearInterval(frameAnimationTimer)
+    frameAnimationTimer = null
+  }
+
+  function renderFrame() {
+    const qr = new QRCode({ content: frames[current], width: 256, height: 256, padding: 2, color: '#000000', background: '#ffffff' })
+    const label = frames.length > 1 ? '<div style="text-align:center;color:#888;font-size:12px;margin-top:8px;">Frame ' + (current + 1) + ' of ' + frames.length + '</div>' : ''
+    container.innerHTML = qr.svg() + label
+    current = (current + 1) % frames.length
+  }
+
+  renderFrame()
+  if (frames.length > 1) {
+    frameAnimationTimer = setInterval(renderFrame, 600)
+  }
+}
+
+function stopFramedQR() {
+  if (frameAnimationTimer) {
+    clearInterval(frameAnimationTimer)
+    frameAnimationTimer = null
+  }
+}
+
+btnStartSync.onclick = async function() {
+  const pairData = await pairing.initiatePairing()
+  syncState = { privateKey: pairData.privateKey, sessionId: pairData.sessionId }
+
+  const qr = new QRCode({ content: pairData.qrData, width: 256, height: 256, padding: 2, color: '#000000', background: '#ffffff' })
+  syncQr.innerHTML = qr.svg()
+
+  syncCodeEntry.classList.remove('hidden')
+}
+
+btnConfirmSyncCode.onclick = async function() {
+  const phoneResponse = inputSyncCode.value.trim()
+  if (!phoneResponse) {
+    showMsg(msgSync, 'Enter the code from your phone', 'error')
+    return
+  }
+
+  const parsed = pairing.parseResponse(phoneResponse)
+  if (!parsed.success) {
+    showMsg(msgSync, 'Invalid code from phone', 'error')
+    return
+  }
+
+  const completed = await pairing.completePairing(syncState.privateKey, parsed.publicKey)
+  syncState.sharedKey = completed.sharedKey
+  syncState.pin = completed.pin
+
+  syncPinValue.textContent = completed.pin
+  syncPin.classList.remove('hidden')
+}
+
+btnConfirmSyncPin.onclick = async function() {
+  showMsg(msgSync, 'Sync starting...', 'success')
 }
 
 init()

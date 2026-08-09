@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Local Vault Password Manager",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Decentralized password manager with fingerprint authentication",
   "permissions": [
     "storage",
@@ -23,7 +23,7 @@
       "js": [
         "content.js"
       ],
-      "run_at": "document_idle",
+      "run_at": "document_start",
       "all_frames": false
     }
   ],
@@ -33,6 +33,17 @@
     "128": "icons/icon128.png"
   },
   "background": {
-    "service_worker": "background.js"
-  }
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "manage.html"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
+    }
+  ]
 }
