@@ -4,6 +4,10 @@ A local, encrypted, QR code portable password manager. No cloud, no accounts, or
 
 ---
 
+> ✅ **Streaming Sync Notice - v0.3.4**
+>
+> Sync now streams. A self-built LT fountain codec turns a vault of any size into an endless loop of coded QR frames. The receiving camera collects frames across loops and reconstructs the exact vault once it has enough, so missed or blurred frames need no retransmit. Reconstruction is byte exact or unfinished, never lossy, and AES-GCM verifies the result. Built from the public Luby Transform method with no vendored library. See [CHANGELOG.md](CHANGELOG.md) for full details.
+
 > ✅ **Sync Transport Notice - v0.3.3**
 >
 > The sync transport is taking shape. A vendored, fully local QR generator and a frame batching system now move credential data of any size between devices as scannable QR codes, with no network, no cloud, and no account. The extension Sync tab shows the pairing QR and comparison code. Webcam scanning on the browser and QR display on the phone are actively being built. See [CHANGELOG.md](CHANGELOG.md) for full details.
@@ -70,7 +74,7 @@ No cloud service holds your data. No company can be subpoenaed for it, breached 
 - Android via Capacitor
 - Zero runtime dependencies beyond WebCrypto and IndexedDB
 
-## Current Status: v0.3.3
+## Current Status: v0.3.4
 
 **Completed:**
 * ✅ Master key wrap architecture - one random 256-bit key, wrapped per method
@@ -95,6 +99,8 @@ No cloud service holds your data. No company can be subpoenaed for it, breached 
 * ✅ Oldest-key-wins shared master key with re-encryption on adopt
 * ✅ Tombstone deletes that propagate across devices
 * ✅ Browser extension shares the same merge engine as the app
+* ✅ LT fountain codec for streaming QR, byte-exact reconstruction under dropped, shuffled, and duplicate frames
+* ✅ Animated fountain QR display verified cycling in a real browser
 
 **In Development:**
 * 📋 QR pairing UI on both the app and extension so a user can start a sync

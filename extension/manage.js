@@ -5,6 +5,7 @@ import * as store from './store.js'
 import * as pairing from './pairing.js'
 import QRCode from './qrcode.js'
 import { splitIntoFrames, createFrameCollector } from './frames.js'
+import { createEncoder, createDecoder } from './fountain.js'
 
 const tabs = document.querySelectorAll('.sidebar-tab')
 const tabManage = document.getElementById('tab-manage')
@@ -402,6 +403,29 @@ function stopFramedQR() {
   if (frameAnimationTimer) {
     clearInterval(frameAnimationTimer)
     frameAnimationTimer = null
+  }
+}
+
+let fountainTimer = null
+
+function streamFountainQR(container, payload) {
+  stopFountainQR()
+  const encoder = createEncoder(payload)
+
+  function renderNext() {
+    const frame = encoder.nextFrame()
+    const qr = new QRCode({ content: frame, width: 256, height: 256, padding: 2, color: '#000000', background: '#ffffff' })
+    container.innerHTML = qr.svg() + '<div style="text-align:center;color:#888;font-size:12px;margin-top:8px;">Streaming ' + encoder.chunkCount + ' blocks - keep scanning until the other device completes</div>'
+  }
+
+  renderNext()
+  fountainTimer = setInterval(renderNext, 300)
+}
+
+function stopFountainQR() {
+  if (fountainTimer) {
+    clearInterval(fountainTimer)
+    fountainTimer = null
   }
 }
 

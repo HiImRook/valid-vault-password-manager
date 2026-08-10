@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Local Vault Password Manager",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "description": "Decentralized password manager with fingerprint authentication",
   "permissions": [
     "storage",

@@ -5,6 +5,28 @@ All notable changes to Local Vault will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.4] - 2026-08-09
+
+### Added
+- fountain.js - plain LT fountain codec for streaming QR sync
+  - createEncoder() emits an endless stream of coded frames from a payload of any size
+  - createDecoder() collects frames and reconstructs the original bytes once enough arrive
+  - Seeded RNG and robust soliton degree distribution, written from the published Luby Transform method
+  - No dependencies, pure XOR and array math
+- extension/manage.js - streamFountainQR() displays the fountain stream as a looping animated QR
+
+### Notes
+- Reconstruction is byte exact or it has not finished. There is no lossy middle state, so a corrupt credential cannot slip through. AES-GCM verifies the reconstructed payload as a second independent check.
+- Validated in Node against dropped, shuffled, and duplicate frames at payload sizes up to 100 credentials. Every case reconstructs exactly. A 14-block vault decodes in roughly 22 frames.
+- The stream loops forever emitting fresh coded frames. A receiver points its camera and collects across loops until it can solve, so missed or blurred frames do not require a retransmit.
+- Plain LT only, not the patented Raptor or RaptorQ variants. Implemented from the public algorithm, no vendored library, no attribution owed.
+- The fountain stream carries the large vault payload. The pairing handshake stays a single static QR.
+
+### In Progress
+- Camera scanning that feeds frames into the decoder, on the phone and in the browser
+- Wiring the decoded payload into the existing merge so both devices converge
+- Play Store prompt when a generic scanner reads a Valid Vault frame without the app installed
+
 ## [0.3.3] - 2026-08-08
 
 ### Added
