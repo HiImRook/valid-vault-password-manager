@@ -408,55 +408,34 @@ window.confirmClearAll = async function() {
   updateStatus()
 }
 
-window.startSecureSync = async function() {
-  if (typeof Capacitor === 'undefined' || !Capacitor.isNativePlatform || !Capacitor.isNativePlatform()) {
-    log('Camera scanning works in the installed app. Open Local Vault on your phone to scan.', 'error')
-    return
-  }
-
-  if (!vault.session.hasMasterKey()) {
-    log('Unlock your vault before syncing', 'error')
-    return
-  }
-
-  try {
-    const scanner = Capacitor.Plugins.BarcodeScanner
-    const granted = await scanner.requestPermissions()
-    if (granted.camera !== 'granted' && granted.camera !== 'limited') {
-      log('Camera permission is required to scan', 'error')
-      return
-    }
-
-    log('Point your camera at the code on your other device...')
-    const result = await scanner.scan()
-    if (!result || !result.barcodes || result.barcodes.length === 0) {
-      log('No code detected', 'error')
-      return
-    }
-
-    const qrText = result.barcodes[0].rawValue
-    const parsed = vault.pairing.parseQR(qrText)
-    if (!parsed.success) {
-      log('That is not a Local Vault sync code', 'error')
-      return
-    }
-
-    const response = await vault.pairing.respondToPairing(parsed.publicKey)
-    syncScanState = { sharedKey: response.sharedKey, pin: response.pin }
-
-    showModal('<h3>Sync</h3><p style=\"color:#666;font-size:13px;\">1. Type this code into your other device:</p><div style=\"background:#2a2a2a;padding:12px;border-radius:6px;word-break:break-all;font-size:12px;color:#00d4aa;\">' + escapeHtml(response.responseData) + '</div><p style=\"color:#666;font-size:13px;margin-top:16px;\">2. Confirm this number matches both screens:</p><div style=\"font-size:28px;font-weight:700;color:#00d4aa;letter-spacing:4px;text-align:center;\">' + response.pin + '</div><div style=\"margin-top:16px;\"><button onclick=\"confirmScanSync()\">Numbers Match, Sync</button><button onclick=\"hideModal()\" class=\"secondary\">Cancel</button></div>')
-  } catch (error) {
-    log('Scan failed: ' + error.message, 'error')
-  }
+window.toggleMenu = function() {
+  document.getElementById('menu-dropdown').classList.toggle('hidden')
 }
 
-let syncScanState = null
-
-window.confirmScanSync = async function() {
-  if (!syncScanState) return
-  log('Numbers confirmed. Transfer and merge will complete here once the return channel lands.', 'success')
-  hideModal()
+window.openMenu = function() {
+  document.getElementById('menu-dropdown').classList.add('hidden')
+  document.getElementById('page-main').classList.remove('active')
+  document.getElementById('page-menu').classList.add('active')
+  window.showMenuTab('manage', document.querySelector('.menu-tab'))
 }
+
+window.closeMenu = function() {
+  document.getElementById('page-menu').classList.remove('active')
+  document.getElementById('page-main').classList.add('active')
+}
+
+window.showMenuTab = function(name, el) {
+  var panels = document.querySelectorAll('.menu-panel')
+  for (var i = 0; i < panels.length; i++) panels[i].classList.remove('active')
+  var tabs = document.querySelectorAll('.menu-tab')
+  for (var j = 0; j < tabs.length; j++) tabs[j].classList.remove('active')
+  document.getElementById('menu-' + name).classList.add('active')
+  if (el) el.classList.add('active')
+}
+
+window.syncVault = function() { log('Sync Vault coming in the next build', 'error') }
+window.getSyncKey = function() { log('Get Sync Key coming in the next build', 'error') }
+window.importSync = function() { log('Import coming in the next build', 'error') }
 </script>${afterScript}`
 
 fs.writeFileSync(testHtmlPath, bundledHtml)

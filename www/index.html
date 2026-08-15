@@ -8,7 +8,7 @@
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0a0a0a; color: #e0e0e0; padding: 20px; }
     .container { max-width: 500px; margin: 0 auto; }
-    h1 { color: #00d4aa; margin-bottom: 20px; text-align: center; }
+    h1 { color: #00d4aa; margin-bottom: 20px; }
     h2 { color: #888; font-size: 14px; margin: 20px 0 10px; text-transform: uppercase; }
     .section { background: #1a1a1a; border-radius: 8px; padding: 16px; margin-bottom: 12px; }
     button { background: #00d4aa; color: #000; border: none; padding: 12px 20px; border-radius: 6px; cursor: pointer; font-size: 14px; margin: 4px; }
@@ -52,11 +52,33 @@
     .vault-info-label { color: #888; }
     .vault-info-value { color: #00d4aa; }
     .app-subtitle { color: #888; font-size: 13px; letter-spacing: 3px; text-transform: uppercase; text-align: center; margin: -12px 0 24px 0; }
+    .app-header { display: flex; align-items: center; justify-content: space-between; position: relative; }
+    .hamburger { background: none; border: none; color: #00d4aa; font-size: 28px; cursor: pointer; padding: 8px 12px; margin: 0; }
+    .menu-dropdown { position: absolute; top: 48px; right: 8px; background: #1a1a1a; border: 1px solid #333; border-radius: 8px; overflow: hidden; z-index: 50; min-width: 160px; }
+    .menu-dropdown.hidden { display: none; }
+    .menu-item { padding: 14px 20px; color: #e0e0e0; cursor: pointer; font-size: 15px; }
+    .menu-item:hover { background: #00d4aa; color: #000; }
+    .page { display: none; }
+    .page.active { display: block; }
+    .page-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+    .back-arrow { background: none; border: none; color: #00d4aa; font-size: 24px; cursor: pointer; padding: 4px 8px; margin: 0; }
+    .menu-tabs { display: flex; overflow-x: auto; border-bottom: 1px solid #333; margin-bottom: 16px; }
+    .menu-tab { padding: 12px 14px; cursor: pointer; color: #888; border-bottom: 2px solid transparent; font-size: 13px; white-space: nowrap; }
+    .menu-tab.active { color: #00d4aa; border-bottom-color: #00d4aa; }
+    .menu-panel { display: none; }
+    .menu-panel.active { display: block; }
   </style>
 </head>
 <body>
   <div class="container">
-    <h1>Valid Vault</h1>
+    <div id="page-main" class="page active">
+    <div class="app-header">
+      <h1>Valid Vault</h1>
+      <button class="hamburger" onclick="toggleMenu()">&#9776;</button>
+      <div id="menu-dropdown" class="menu-dropdown hidden">
+        <div class="menu-item" onclick="openMenu()">Settings Menu</div>
+      </div>
+    </div>
 
     <div class="section">
       <div id="status">
@@ -84,18 +106,84 @@
       <div id="lockout-display"></div>
     </div>
 
-    <h2>Sync</h2>
-    <div class="section">
-      <p style="color:#888;font-size:12px;margin-bottom:12px;">Move logins between your devices. Do this somewhere private.</p>
-      <div class="row">
-        <button onclick="syncVault()">Sync Vault</button>
-        <button onclick="getSyncKey()" class="secondary">Get Sync Key</button>
-        <button onclick="importSync()" class="secondary">Import</button>
-      </div>
+    <div class="log" id="log"></div>
     </div>
 
-    <div class="log" id="log"></div>
-  </div>
+    <div id="page-menu" class="page">
+      <div class="page-header">
+        <button class="back-arrow" onclick="closeMenu()">&#8592;</button>
+        <h1 style="margin:0;">Menu</h1>
+      </div>
+
+      <div class="menu-tabs">
+        <div class="menu-tab active" onclick="showMenuTab('manage', this)">Manage</div>
+        <div class="menu-tab" onclick="showMenuTab('personal', this)">Personal Info</div>
+        <div class="menu-tab" onclick="showMenuTab('sync', this)">Sync</div>
+        <div class="menu-tab" onclick="showMenuTab('settings', this)">Settings</div>
+        <div class="menu-tab" onclick="showMenuTab('about', this)">About</div>
+      </div>
+
+      <div id="menu-manage" class="menu-panel active">
+        <h2>Auth Methods</h2>
+        <div class="section">
+          <button onclick="showEnrollFingerprint()">Fingerprint</button>
+          <button onclick="showSetPIN()" class="secondary">PIN</button>
+          <button onclick="showSetPassword()" class="secondary">Password</button>
+        </div>
+        <h2>Website Credentials</h2>
+        <div class="section">
+          <div class="row">
+            <input type="text" id="vault-domain" placeholder="website.com">
+            <button onclick="showSaveCredential()">Add</button>
+            <button onclick="loadCredentials()" class="secondary">Load</button>
+          </div>
+          <div id="credentials-list"></div>
+        </div>
+      </div>
+
+      <div id="menu-personal" class="menu-panel">
+        <div class="section">
+          <p style="color:#888;font-size:13px;line-height:1.6;">Coming soon: store addresses, credit cards, IDs, and other personal information.</p>
+        </div>
+      </div>
+
+      <div id="menu-sync" class="menu-panel">
+        <div class="section">
+          <p style="color:#888;font-size:12px;margin-bottom:12px;">Move logins between your devices. Do this somewhere private.</p>
+          <div class="row">
+            <button onclick="syncVault()">Sync Vault</button>
+            <button onclick="getSyncKey()" class="secondary">Get Sync Key</button>
+            <button onclick="importSync()" class="secondary">Import</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="menu-settings" class="menu-panel">
+        <div class="section">
+          <div class="row">
+            <label style="color:#888;font-size:13px;flex:1;">Auto-lock timeout (minutes)</label>
+            <input type="number" id="setting-timeout" min="0" max="60" value="0" style="width:70px;">
+          </div>
+          <button onclick="lockAll()" class="secondary">Lock Now</button>
+        </div>
+        <div class="section" style="border:1px solid #e74c3c;">
+          <h3 style="color:#e74c3c;margin-top:0;">Clear Vault</h3>
+          <p style="color:#888;font-size:12px;line-height:1.5;">Permanently deletes all credentials and login methods on this device. Cannot be undone. Back up with Sync first.</p>
+          <button onclick="clearAll()" class="danger">Clear Vault</button>
+        </div>
+      </div>
+
+      <div id="menu-about" class="menu-panel">
+        <div class="section">
+          <p style="color:#888;font-size:14px;line-height:1.8;">
+            <strong style="color:#00d4aa;">Valid Vault Password Manager v0.3.5</strong><br><br>
+            A decentralized password manager with fingerprint authentication. All data stored locally with zero server communication.<br><br>
+            Built by Rook<br>
+            <a href="https://github.com/HiImRook/valid-vault-password-manager" style="color:#00d4aa;">GitHub Repository</a>
+          </p>
+        </div>
+      </div>
+    </div>
 
   <div id="modal-container" class="hidden"></div>
 
@@ -1957,53 +2045,32 @@ window.confirmClearAll = async function() {
   updateStatus()
 }
 
-window.startSecureSync = async function() {
-  if (typeof Capacitor === 'undefined' || !Capacitor.isNativePlatform || !Capacitor.isNativePlatform()) {
-    log('Camera scanning works in the installed app. Open Local Vault on your phone to scan.', 'error')
-    return
-  }
-
-  if (!vault.session.hasMasterKey()) {
-    log('Unlock your vault before syncing', 'error')
-    return
-  }
-
-  try {
-    const scanner = Capacitor.Plugins.BarcodeScanner
-    const granted = await scanner.requestPermissions()
-    if (granted.camera !== 'granted' && granted.camera !== 'limited') {
-      log('Camera permission is required to scan', 'error')
-      return
-    }
-
-    log('Point your camera at the code on your other device...')
-    const result = await scanner.scan()
-    if (!result || !result.barcodes || result.barcodes.length === 0) {
-      log('No code detected', 'error')
-      return
-    }
-
-    const qrText = result.barcodes[0].rawValue
-    const parsed = vault.pairing.parseQR(qrText)
-    if (!parsed.success) {
-      log('That is not a Local Vault sync code', 'error')
-      return
-    }
-
-    const response = await vault.pairing.respondToPairing(parsed.publicKey)
-    syncScanState = { sharedKey: response.sharedKey, pin: response.pin }
-
-    showModal('<h3>Sync</h3><p style="color:#666;font-size:13px;">1. Type this code into your other device:</p><div style="background:#2a2a2a;padding:12px;border-radius:6px;word-break:break-all;font-size:12px;color:#00d4aa;">' + escapeHtml(response.responseData) + '</div><p style="color:#666;font-size:13px;margin-top:16px;">2. Confirm this number matches both screens:</p><div style="font-size:28px;font-weight:700;color:#00d4aa;letter-spacing:4px;text-align:center;">' + response.pin + '</div><div style="margin-top:16px;"><button onclick="confirmScanSync()">Numbers Match, Sync</button><button onclick="hideModal()" class="secondary">Cancel</button></div>')
-  } catch (error) {
-    log('Scan failed: ' + error.message, 'error')
-  }
+window.toggleMenu = function() {
+  document.getElementById('menu-dropdown').classList.toggle('hidden')
 }
 
-let syncScanState = null
-
-window.confirmScanSync = async function() {
-  if (!syncScanState) return
-  log('Numbers confirmed. Transfer and merge will complete here once the return channel lands.', 'success')
-  hideModal()
+window.openMenu = function() {
+  document.getElementById('menu-dropdown').classList.add('hidden')
+  document.getElementById('page-main').classList.remove('active')
+  document.getElementById('page-menu').classList.add('active')
+  window.showMenuTab('manage', document.querySelector('.menu-tab'))
 }
+
+window.closeMenu = function() {
+  document.getElementById('page-menu').classList.remove('active')
+  document.getElementById('page-main').classList.add('active')
+}
+
+window.showMenuTab = function(name, el) {
+  var panels = document.querySelectorAll('.menu-panel')
+  for (var i = 0; i < panels.length; i++) panels[i].classList.remove('active')
+  var tabs = document.querySelectorAll('.menu-tab')
+  for (var j = 0; j < tabs.length; j++) tabs[j].classList.remove('active')
+  document.getElementById('menu-' + name).classList.add('active')
+  if (el) el.classList.add('active')
+}
+
+window.syncVault = function() { log('Sync Vault coming in the next build', 'error') }
+window.getSyncKey = function() { log('Get Sync Key coming in the next build', 'error') }
+window.importSync = function() { log('Import coming in the next build', 'error') }
 </script>

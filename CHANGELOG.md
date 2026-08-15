@@ -5,6 +5,33 @@ All notable changes to Local Vault will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.5] - 2026-08-15
+
+### Added
+- Stateless sync model across all surfaces - no pairing ceremony, no key exchange round-trip. A device shows a fountain QR, another scans it. Same method works browser to phone, phone to browser, or to any device with a screen and camera.
+- Three sync actions, separated for clarity: Sync Vault (stream your logins), Get Sync Key (give a new device the key it needs), and Import (scan another device to receive either).
+- Browser extension Sync tab rebuilt around the three actions with a cycling fountain QR display.
+- Browser webcam scanning for Import using the native BarcodeDetector, no vendored decoder.
+- Phone Settings Menu behind a hamburger, opening on Manage, with tabs for Manage, Personal Info, Sync, Settings, and About.
+
+### Changed
+- Extension popup: the Expand control is now a hamburger that opens the full settings page. Back up with Secure Sync is now a primary action that jumps to the Sync tab.
+- Phone front screen simplified to login only. Vault management, sync, and settings moved into the Settings Menu.
+- About sections updated to Valid Vault branding and the current repository.
+
+### Security model
+- Sync moves the key and vault in the stream itself. The protection is physical, the same trust you rely on when typing a password: do it somewhere private. There is no back channel and no server.
+
+### Notes
+- Phone sync is not functional yet. The three sync buttons on the phone are present but stubbed, they display a placeholder message rather than streaming or scanning. The phone bundle still needs the fountain codec and a QR display wired in, plus mlkit camera scanning fed into the decoder. This is the next build.
+- Browser Import requires the native BarcodeDetector API. It is available in Chromium browsers but is inconsistent on Windows desktop, where it may report the API exists yet decode nothing. When unavailable, the browser can still send (Sync Vault, Get Sync Key) but cannot receive. A vendored decoder fallback is not yet included.
+- The browser send side is verified: the fountain QR cycles correctly for both Sync Vault and Get Sync Key.
+- Auth method management on the phone Manage tab currently exposes enroll and set actions only. Per-method edit and delete, present in the browser, are not yet on the phone.
+- Personal Info is a placeholder on both surfaces.
+- The WebAuthn RP name remains "Local Vault" in code even though the UI now reads "Valid Vault". Changing the RP name would invalidate every enrolled fingerprint, so it is deliberately left unchanged.
+- Version numbers across the app and extension are aligned to 0.3.5.
+
+
 ## [0.3.4] - 2026-08-09
 
 ### Added
