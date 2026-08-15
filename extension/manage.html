@@ -102,16 +102,16 @@
         <h1>Sync</h1>
         <p style="color:#666;font-size:14px;">Sync your credentials to another device. Show this code on this device, then scan it with your phone.</p>
         <button id="btn-start-sync" style="padding:12px 20px;background:#00d9a0;color:#000;border:none;border-radius:8px;font-weight:600;cursor:pointer;">Start Sync</button>
-        <div id="sync-qr" style="margin-top:20px;max-width:280px;"></div>
-        <div id="sync-code-entry" class="hidden" style="margin-top:20px;">
-          <p style="color:#e0e0e0;font-size:14px;">Enter the code shown on your phone:</p>
-          <input type="text" id="input-sync-code" placeholder="Code from phone" style="padding:10px;background:#2a2a2a;border:1px solid #444;color:#e0e0e0;border-radius:6px;width:200px;">
-          <button id="btn-confirm-sync-code" style="padding:10px 16px;background:#00d9a0;color:#000;border:none;border-radius:6px;font-weight:600;cursor:pointer;margin-left:8px;">Confirm</button>
-        </div>
-        <div id="sync-pin" class="hidden" style="margin-top:20px;">
-          <p style="color:#e0e0e0;font-size:14px;">Confirm this number matches your phone:</p>
-          <div id="sync-pin-value" style="font-size:32px;font-weight:700;color:#00d9a0;letter-spacing:4px;"></div>
-          <button id="btn-confirm-sync-pin" style="margin-top:12px;padding:10px 16px;background:#00d9a0;color:#000;border:none;border-radius:6px;font-weight:600;cursor:pointer;">Numbers Match, Sync</button>
+        <button id="btn-stop-sync" class="hidden" style="padding:12px 20px;background:#ff5555;color:#fff;border:none;border-radius:8px;font-weight:600;cursor:pointer;margin-left:8px;">Stop</button>
+        <div style="display:flex;gap:20px;flex-wrap:wrap;margin-top:20px;">
+          <div style="flex:1;min-width:240px;">
+            <div id="sync-qr-label" class="hidden" style="color:#888;font-size:13px;margin-bottom:8px;">Show this to your phone</div>
+            <div id="sync-qr" style="max-width:280px;"></div>
+          </div>
+          <div style="flex:1;min-width:240px;">
+            <div id="sync-cam-label" class="hidden" style="color:#888;font-size:13px;margin-bottom:8px;">Point your webcam at your phone</div>
+            <video id="sync-video" class="hidden" style="max-width:280px;border-radius:8px;" playsinline></video>
+          </div>
         </div>
         <div id="msg-sync" class="msg hidden" style="margin-top:16px;"></div>
       </div>

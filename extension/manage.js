@@ -364,13 +364,11 @@ async function init() {
 
 
 const btnStartSync = document.getElementById('btn-start-sync')
+const btnStopSync = document.getElementById('btn-stop-sync')
 const syncQr = document.getElementById('sync-qr')
-const syncCodeEntry = document.getElementById('sync-code-entry')
-const inputSyncCode = document.getElementById('input-sync-code')
-const btnConfirmSyncCode = document.getElementById('btn-confirm-sync-code')
-const syncPin = document.getElementById('sync-pin')
-const syncPinValue = document.getElementById('sync-pin-value')
-const btnConfirmSyncPin = document.getElementById('btn-confirm-sync-pin')
+const syncQrLabel = document.getElementById('sync-qr-label')
+const syncVideo = document.getElementById('sync-video')
+const syncCamLabel = document.getElementById('sync-cam-label')
 const msgSync = document.getElementById('msg-sync')
 
 let syncState = null
@@ -429,39 +427,109 @@ function stopFountainQR() {
   }
 }
 
+let syncActive = false
+let scanLoopRunning = false
+
+function stopSync() {
+  syncActive = false
+  scanLoopRunning = false
+  stopFountainQR()
+  if (syncVideo.srcObject) {
+    syncVideo.srcObject.getTracks().forEach(function (t) { t.stop() })
+    syncVideo.srcObject = null
+  }
+  syncVideo.classList.add('hidden')
+  syncCamLabel.classList.add('hidden')
+  btnStopSync.classList.add('hidden')
+}
+
+async function scanLoop(detector, myPrivateKey) {
+  const seenKeys = new Set()
+  const decoder = createDecoder()
+  let sharedKey = null
+  let receiving = false
+
+  scanLoopRunning = true
+  while (scanLoopRunning) {
+    try {
+      const found = await detector.detect(syncVideo)
+      for (const code of found) {
+        const raw = code.rawValue
+        if (!receiving) {
+          const parsed = pairing.parseQR(raw)
+          if (parsed.success && !seenKeys.has(raw)) {
+            seenKeys.add(raw)
+            sharedKey = await pairing.deriveSharedKey(myPrivateKey, parsed.publicKey)
+            receiving = true
+            const masterKey = session.getMasterKey()
+            const transfer = await pairing.prepareTransfer(masterKey, sharedKey)
+            if (transfer.success) {
+              streamFountainQR(syncQr, transfer.data.payload)
+            }
+            showMsg(msgSync, 'Phone key received, streaming vault and reading theirs...', 'success')
+          }
+        } else {
+          const outcome = decoder.addFrame(raw)
+          if (outcome.success) {
+            showMsg(msgSync, 'Receiving vault: ' + outcome.solved + ' of ' + outcome.total + ' blocks', 'success')
+            if (outcome.complete) {
+              const assembled = decoder.assemble()
+              const localMasterKey = session.getMasterKey()
+              const merged = await pairing.applyIncomingVault(assembled.payload, sharedKey, localMasterKey)
+              if (merged.success) {
+                showMsg(msgSync, 'Sync complete. ' + merged.count + ' credentials.', 'success')
+              } else {
+                showMsg(msgSync, 'Merge failed: ' + merged.error, 'error')
+              }
+              stopSync()
+              return
+            }
+          }
+        }
+      }
+    } catch (error) {
+    }
+    await new Promise(function (r) { setTimeout(r, 100) })
+  }
+}
+
 btnStartSync.onclick = async function() {
-  const pairData = await pairing.initiatePairing()
-  syncState = { privateKey: pairData.privateKey, sessionId: pairData.sessionId }
-
-  const qr = new QRCode({ content: pairData.qrData, width: 256, height: 256, padding: 2, color: '#000000', background: '#ffffff' })
-  syncQr.innerHTML = qr.svg()
-
-  syncCodeEntry.classList.remove('hidden')
-}
-
-btnConfirmSyncCode.onclick = async function() {
-  const phoneResponse = inputSyncCode.value.trim()
-  if (!phoneResponse) {
-    showMsg(msgSync, 'Enter the code from your phone', 'error')
+  const masterKey = session.getMasterKey()
+  if (!masterKey) {
+    showMsg(msgSync, 'Unlock your vault before syncing', 'error')
     return
   }
 
-  const parsed = pairing.parseResponse(phoneResponse)
-  if (!parsed.success) {
-    showMsg(msgSync, 'Invalid code from phone', 'error')
+  syncActive = true
+  btnStopSync.classList.remove('hidden')
+
+  const keyPair = await pairing.generateKeyPair()
+  const myQrData = JSON.stringify({ type: 'valid-vault-pair', publicKey: keyPair.publicKey })
+
+  syncQrLabel.classList.remove('hidden')
+  const keyQr = new QRCode({ content: myQrData, width: 256, height: 256, padding: 2, color: '#000000', background: '#ffffff' })
+  syncQr.innerHTML = keyQr.svg()
+
+  if (!('BarcodeDetector' in window)) {
+    showMsg(msgSync, 'This browser cannot scan. Sending only - your phone will receive.', 'success')
     return
   }
 
-  const completed = await pairing.completePairing(syncState.privateKey, parsed.publicKey)
-  syncState.sharedKey = completed.sharedKey
-  syncState.pin = completed.pin
-
-  syncPinValue.textContent = completed.pin
-  syncPin.classList.remove('hidden')
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+    syncVideo.srcObject = stream
+    syncVideo.classList.remove('hidden')
+    syncCamLabel.classList.remove('hidden')
+    await syncVideo.play()
+    const detector = new BarcodeDetector({ formats: ['qr_code'] })
+    scanLoop(detector, keyPair.privateKey)
+  } catch (error) {
+    showMsg(msgSync, 'Camera unavailable, sending only: ' + error.message, 'success')
+  }
 }
 
-btnConfirmSyncPin.onclick = async function() {
-  showMsg(msgSync, 'Sync starting...', 'success')
+btnStopSync.onclick = function() {
+  stopSync()
+  showMsg(msgSync, 'Sync stopped', 'success')
 }
-
 init()

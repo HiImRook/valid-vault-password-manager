@@ -460,4 +460,5 @@ window.confirmScanSync = async function() {
 </script>${afterScript}`
 
 fs.writeFileSync(testHtmlPath, bundledHtml)
+fs.writeFileSync(path.join(dir, 'www', 'index.html'), bundledHtml)
 console.log('Build complete:', new Date().toISOString())

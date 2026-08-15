@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Local Vault - Password Manager</title>
+  <title>Valid Vault</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0a0a0a; color: #e0e0e0; padding: 20px; }
@@ -56,8 +56,7 @@
 </head>
 <body>
   <div class="container">
-    <h1>Local Vault</h1>
-    <div class="app-subtitle">Password Manager</div>
+    <h1>Valid Vault</h1>
 
     <div class="section">
       <div id="status">
@@ -85,26 +84,14 @@
       <div id="lockout-display"></div>
     </div>
 
-    <h2>Password Manager</h2>
+    <h2>Sync</h2>
     <div class="section">
+      <p style="color:#888;font-size:12px;margin-bottom:12px;">Move logins between your devices. Do this somewhere private.</p>
       <div class="row">
-        <input type="text" id="domain-input" placeholder="website.com">
-        <button onclick="showSaveCredential()">Add</button>
-        <button onclick="loadCredentials()" class="secondary">Load</button>
+        <button onclick="syncVault()">Sync Vault</button>
+        <button onclick="getSyncKey()" class="secondary">Get Sync Key</button>
+        <button onclick="importSync()" class="secondary">Import</button>
       </div>
-      <div id="credentials-list"></div>
-    </div>
-
-    <h2>Secure Sync</h2>
-    <div class="section">
-      <button onclick="startSecureSync()">Secure Sync</button>
-      <p style="color:#666;font-size:12px;margin-top:8px;">Sync your vault to another device</p>
-    </div>
-
-    <h2>Session</h2>
-    <div class="section">
-      <button onclick="lockAll()" class="danger">Lock All</button>
-      <button onclick="clearAll()" class="danger">Clear All Data</button>
     </div>
 
     <div class="log" id="log"></div>
