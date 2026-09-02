@@ -1,24 +1,20 @@
 # Valid Vault Password Manager
 
-A local, encrypted, QR code portable password manager. No cloud, no accounts, or sync servers. Your credentials live on your device, encrypted under keys only you can produce, and move between devices over a QR pairing ceremony.
+A local, encrypted, QR code portable password manager. No cloud, no accounts, no sync servers. Your credentials live on your device, encrypted under keys only you can produce, and move between devices over a fully local QR stream.
 
 ---
 
-> ✅ **Streaming Sync Notice - v0.3.4**
+> ✅ **Rebrand and Lock Model Notice - v0.4.0**
 >
-> Sync now streams. A self-built LT fountain codec turns a vault of any size into an endless loop of coded QR frames. The receiving camera collects frames across loops and reconstructs the exact vault once it has enough, so missed or blurred frames need no retransmit. Reconstruction is byte exact or unfinished, never lossy, and AES-GCM verifies the result. Built from the public Luby Transform method with no vendored library. See [CHANGELOG.md](CHANGELOG.md) for full details.
+> The extension and phone now share a terminal-green identity with an Orbitron wordmark and the Valid globe logo. The lock model has been reworked. Fingerprint and password are hard unlocks that open the vault from any state. The PIN is now a permanent credential that only resumes a soft-locked idle session, it never opens a vault from a hard lock. Lock soft-locks when a PIN is set, otherwise hard-locks, and closing the browser always hard-locks. Soft-lock and hard-lock inactivity timers are configurable in Settings. See [CHANGELOG.md](CHANGELOG.md) for full details.
 
-> ✅ **Sync Transport Notice - v0.3.3**
+> ✅ **Stateless Sync Notice - v0.3.5**
 >
-> The sync transport is taking shape. A vendored, fully local QR generator and a frame batching system now move credential data of any size between devices as scannable QR codes, with no network, no cloud, and no account. The extension Sync tab shows the pairing QR and comparison code. Webcam scanning on the browser and QR display on the phone are actively being built. See [CHANGELOG.md](CHANGELOG.md) for full details.
-
-> ✅ **Credential Sync Notice - v0.3.2**
->
-> Paired devices now merge their stored credentials instead of overwriting each other. Within a site the username identifies the login, matching usernames resolve to the newest password, and different usernames stay as separate logins. Deletions propagate to both devices. The vault with the oldest creation time supplies the shared master key, which is internal and never shown. Unlock methods stay local to each device and never sync. See [CHANGELOG.md](CHANGELOG.md) for full details.
+> Sync is stateless and universal, with no pairing ceremony and no key exchange. A device shows a fountain QR carrying its key and vault, another device scans it and writes its own identical vault. Three actions separate the flow: Sync Vault streams your logins, Get Sync Key gives a new device the key it needs, and Import scans another device to receive either. See [CHANGELOG.md](CHANGELOG.md) for full details.
 
 > ✅ **Security Overhaul Notice - v0.3.0**
 >
-> The key protection layer has been reworked. Fingerprint unlock is now cryptographically bound to the device authenticator via WebAuthn PRF. Stored verification hashes are gone - wrong credentials fail at the AES-GCM unwrap, so every offline guess pays the full key derivation cost. PBKDF2 raised to 600k iterations with silent migration on unlock. PIN no longer wraps the master key and never touches disk - it is an ephemeral session convenience that clears when the app closes. See [CHANGELOG.md](CHANGELOG.md) for full details.
+> The key protection layer was reworked. Fingerprint unlock is cryptographically bound to the device authenticator via WebAuthn PRF. Stored verification hashes are gone, wrong credentials fail at the AES-GCM unwrap, so every offline guess pays the full key derivation cost. PBKDF2 raised to 600k iterations with silent migration on unlock. See [CHANGELOG.md](CHANGELOG.md) for full details.
 
 ---
 
@@ -29,10 +25,10 @@ Valid Vault is a self-hosted password manager built on a master key wrap archite
 **How unlock works:**
 - Password - wrapping key derived via PBKDF2-SHA256 at 600,000 iterations with a per-wrap salt
 - Fingerprint - wrapping key derived via HKDF from WebAuthn PRF output, secret material only your device authenticator can produce
-- Session PIN - ephemeral quick unlock for the current session only, held in memory, gone on app close
+- PIN - a permanent quick-resume credential that unlocks a soft-locked idle session only, never a hard lock
 - Wrong credential means the AES-GCM unwrap fails. There is no stored hash to attack, no shortcut, no oracle.
 
-No cloud service holds your data. No company can be subpoenaed for it, breached for it, and there is never any data for anyone to sell. You cannot leak what you never sent anywhere.
+No cloud service holds your data. No company can be subpoenaed for it or breached for it, and there is never any data for anyone to sell. You cannot leak what you never sent anywhere.
 
 ---
 
@@ -45,11 +41,13 @@ No cloud service holds your data. No company can be subpoenaed for it, breached 
 - Fresh salt on every credential change
 - Silent KDF migration - legacy wraps upgrade to current cost on first successful unlock
 
-**Session PIN:**
-- Ephemeral by design - never written to disk, exists only for the current session
-- Soft lock on inactivity - raw key nulled, only a PIN-encrypted blob remains in memory
-- Three wrong attempts wipes the session entirely - back to the real credential
-- Force-closing the app clears it. A fresh session means proving you hold the real key.
+**Lock Model:**
+- Fingerprint and password are hard unlocks - either one opens the vault from any state
+- The PIN is a permanent credential that resumes a soft-locked idle session only, never a hard lock
+- Lock soft-locks when a PIN is set, otherwise hard-locks
+- Inactivity soft-locks at the soft timer when a PIN exists, and hard-locks at the hard timer
+- Closing the browser always hard-locks
+- Soft-lock and hard-lock timers are configurable in Settings, defaulting to 5 and 20 minutes
 
 **Vault:**
 - Per-credential AES-GCM encryption of usernames and passwords
@@ -57,24 +55,19 @@ No cloud service holds your data. No company can be subpoenaed for it, breached 
 - Session timeout with automatic lock
 
 **Credential Sync:**
+- Stateless fountain QR stream - a device shows its key and vault, another scans and writes its own identical vault
 - Devices merge credentials on sync, they do not overwrite each other
 - Username is the identity within a site, newest password wins, different usernames coexist
 - Deletions propagate to both devices through tombstones
 - Oldest creation time supplies the shared master key, other devices re-encrypt under it
 - Unlock methods stay local to each device and never sync
 
-**Device Transfer:**
-- ECDH pairing over QR code - ephemeral keys per session
-- Numeric comparison code - short authentication string against MITM
-- AES-GCM encrypted vault transfer with HMAC payload signature
-- No relay servers - devices talk directly
-
 **Platform:**
 - Single-file web bundle - modules assembled by build.js into one self-contained HTML file
 - Android via Capacitor
 - Zero runtime dependencies beyond WebCrypto and IndexedDB
 
-## Current Status: v0.3.4
+## Current Status: v0.4.0
 
 **Completed:**
 * ✅ Master key wrap architecture - one random 256-bit key, wrapped per method
@@ -83,81 +76,42 @@ No cloud service holds your data. No company can be subpoenaed for it, breached 
 * ✅ PRF-less devices refused honestly - no decorative biometric gate
 * ✅ PBKDF2-SHA256 at 600k iterations - per-method iteration count persisted
 * ✅ Silent rewrap migration - legacy 100k wraps upgrade on first unlock with fresh salt
-* ✅ PIN demoted to ephemeral session resume - never touches disk
-* ✅ Session soft lock - raw key nulled on inactivity, PIN-encrypted blob only
-* ✅ Three-attempt session wipe - brute-forcing the resume path ejects to real credentials
-* ✅ Legacy PIN vault migration - one-time unlock, purge, prompt for real credential
-* ✅ Legacy fingerprint migration - one-time unwrap, insecure wrap deleted, re-enrollment required
-* ✅ Fresh salts on every credential set
+* ✅ Fingerprint and password as hard unlocks - either opens the vault from any state
+* ✅ PIN as a permanent soft-lock resume credential - never opens a hard lock
+* ✅ Soft-lock and hard-lock split with configurable timers in Settings
+* ✅ Enroll and re-enroll auth controls on the extension setup and manage surfaces
 * ✅ Removal guards - each wrap method requires another as backup before removal
-* ✅ ECDH QR pairing with numeric comparison code
-* ✅ Encrypted device-to-device vault transfer
-* ✅ Pairing code generation free of modulo bias
-* ✅ clearAll commits transactions before returning
+* ✅ Fresh salts on every credential set
 * ✅ Crypto flows validated in Node against WebCrypto
 * ✅ Credential merge engine - username-keyed, newest password wins, different usernames coexist
 * ✅ Oldest-key-wins shared master key with re-encryption on adopt
 * ✅ Tombstone deletes that propagate across devices
 * ✅ Browser extension shares the same merge engine as the app
 * ✅ LT fountain codec for streaming QR, byte-exact reconstruction under dropped, shuffled, and duplicate frames
-* ✅ Animated fountain QR display verified cycling in a real browser
+* ✅ Stateless sync - Sync Vault, Get Sync Key, and Import across the extension
+* ✅ Terminal-green rebrand and Valid globe logo across extension and phone
 
 **In Development:**
-* 📋 QR pairing UI on both the app and extension so a user can start a sync
-* 📋 Comparison code confirmation screen during pairing
+* 📋 Phone lock timer enforcement verified across Capacitor WebView
+* 📋 Per-method auth edit and delete on the phone Manage tab
+* 📋 Phone sync wired end to end - fountain codec, QR display, and mlkit scanning in the phone bundle
 * 📋 Vault blob encryption - domain names currently plaintext object keys
-* 📋 On-device PRF validation across Capacitor WebView versions
 
-## Development Phases
+## Lock Model
 
-### Phase 1: Vault Foundation ✅ (Complete - v0.2.0-alpha)
-- Master key wrap architecture
-- Fingerprint, PIN, and password unlock paths
-- Per-credential encryption
-- QR pairing and encrypted transfer
-- Capacitor Android wrapper
+**Two lock types, and a PIN that only bridges one of them.**
 
-### Phase 2: Key Protection Overhaul ✅ (Complete - v0.3.0)
-- WebAuthn PRF fingerprint binding
-- Verify-by-unwrap replaces stored hashes
-- PBKDF2 600k with silent migration
-- Ephemeral session-only PIN
-- Rebrand to Valid Vault
+Fingerprint and password are hard unlocks. Either one opens the vault from any state, a fresh start, a manual lock, or an expired session. They are the only way to open a hard lock.
 
-### Phase 3: Credential Sync Engine ✅ (Complete - v0.3.2)
-- Username-keyed merge, newest password wins
-- Oldest creation time supplies the shared master key
-- Re-encryption under the shared key on adopt
-- Tombstone deletes propagate across devices
-- App and extension share one merge engine
+The PIN is a permanent credential with a deliberately narrow power. It resumes a session that is soft-locked, meaning the session was open and went idle. It cannot open a vault from a hard lock, and it cannot substitute for fingerprint or password.
 
-### Phase 4: Sync Transport ✅ (Complete - v0.3.3)
-- Vendored local QR generator, no network
-- Frame batching for any vault size, out-of-order and duplicate safe
-- Animated frame display in the extension Sync tab
-- Comparison code and PIN confirmation in the Sync tab
-
-### Phase 5: Sync UI 📋 (In Progress)
-- Webcam QR scanning in the browser to read frames back
-- QR frame display on the phone
-- Send-only fallback for camera-less devices
-- Sync status and progress reporting
-
-### Phase 6: Vault Schema Hardening 📋 (Future)
-- Single-blob vault encryption - site list becomes invisible at rest
-- Vault format version bump with migration
-- Fresh IV discipline audit across all encrypt paths
-
-### Phase 7: Platform Hardening 📋 (Future)
-- Android hardware keystore binding via Capacitor plugin
-- PRF fallback strategy per device capability
-- Web build parity decisions
+Locking splits accordingly. Hitting Lock soft-locks the session when a PIN is set, so a quick PIN brings you back. With no PIN set, Lock hard-locks. Inactivity soft-locks at the soft timer when a PIN exists and hard-locks at the hard timer. Closing the browser always hard-locks. Both timers are configurable in Settings, defaulting to 5 minutes soft and 20 minutes hard.
 
 ## Sync Model
 
 **Two independent rules govern sync, and they never interact.**
 
-Master key selection uses the oldest creation time. Every device starts with its own master key. When two devices pair, the vault with the oldest creation time supplies the shared master key, and the other device re-encrypts its credentials under it. The master key is internal and never shown, so this convergence is invisible during normal use.
+Master key selection uses the oldest creation time. Every device starts with its own master key. When two devices sync, the vault with the oldest creation time supplies the shared master key, and the other device re-encrypts its credentials under it. The master key is internal and never shown, so this convergence is invisible during normal use.
 
 Credential merge uses the newest update time. Within a site the username is the identity. Matching usernames resolve to the newest password and the older one is discarded. Different usernames on the same site remain as separate logins. A credential on only one device is kept.
 
@@ -170,15 +124,15 @@ Convergence is guaranteed. If every device eventually syncs with the group, all 
 **Encryption at rest:**
 - Passwords are wrapped with PBKDF2-SHA256 at 600,000 iterations per credential
 - Fingerprint wraps derive their key material from the device authenticator, so the wrapping secret lives in hardware rather than in the database
-- The PIN is never persisted, so there is nothing PIN-related stored on disk
+- The PIN wrap exists to resume a soft-locked session and never grants a hard unlock
 
-**Session PINs are ephemeral by design.** The PIN never touches disk, exists only for the current session, and vanishes when the app closes. Three wrong attempts wipes the session and returns you to a real credential.
+**The PIN is deliberately the weakest credential.** It resumes an already-open idle session and nothing more. A manual lock or a closed browser always requires fingerprint or password, so a short PIN can never stand in for real authentication.
 
 **Unlock methods stay local.** Fingerprint, PIN, and password are how you open the vault on one specific device. They are per device and never enter a sync. Your phone can use fingerprint while your browser uses a password. Only stored website credentials move between devices.
 
 **Design boundaries:**
 - Domain names are currently stored as plaintext object keys. Encrypting the vault as a single blob is planned so the site list is not readable at rest.
-- Physical access to an unlocked or in-session device is outside the threat model, as it is for any password manager. Security assumes the device itself is not compromised while in use.
+- Physical access to an unlocked or in-session device is outside the threat model, as it is for any password manager.
 - The master key is handled in memory during multi-method enrollment, which is inherent to key management in the browser without a hardware keystore. Hardware keystore binding on Android is planned.
 - Fingerprint unlock requires an authenticator with WebAuthn PRF support. Devices without it use password unlock. There is no fake biometric path.
 
@@ -190,8 +144,8 @@ Convergence is guaranteed. If every device eventually syncs with the group, all 
 
 ### Build from Source
 ```bash
-git clone https://github.com/HiImRook/local-vault-password-manager.git
-cd local-vault-password-manager
+git clone https://github.com/HiImRook/valid-vault-password-manager.git
+cd valid-vault-password-manager
 node build.js
 ```
 
@@ -211,20 +165,17 @@ There are no stored password or PIN hashes. Authentication is the act of derivin
 **PRF-Bound Fingerprint:**
 The fingerprint wrapping key is derived via HKDF from the WebAuthn PRF extension output. That output requires the physical authenticator and user verification to produce. The database contains a wrapped key and a salt, the secret ingredient is in the hardware, not the data.
 
+**Soft Lock and the PIN:**
+A soft lock nulls the raw master key while the session is otherwise intact, and the PIN resumes it. A hard lock requires a full unlock. The PIN's reach ends at the soft lock by design, which is what keeps a short PIN from ever being a substitute for a real credential.
+
 **Credential Merge:**
-Two paired devices reconcile their vaults credential by credential. The username identifies a login within a site, so matching usernames resolve to the newest password while different usernames coexist. The merge runs on decrypted usernames inside the unlocked session, then re-encrypts under the shared key. The app and the browser extension run the exact same merge code.
-
-**Ephemeral Session PIN:**
-The PIN is a session artifact, not a stored credential. Setting it encrypts the in-memory master key under a PIN-derived key. Inactivity nulls the raw key and keeps only the blob. Resume decrypts it. Close the app and the whole construction evaporates. The guarantee comes from the absence of the artifact.
-
-**In-Memory Session State:**
-Session state lives in plain objects and Sets. No session persistence, tokens, or cookies.
+Two devices reconcile their vaults credential by credential. The username identifies a login within a site, so matching usernames resolve to the newest password while different usernames coexist. The merge runs on decrypted usernames inside the unlocked session, then re-encrypts under the shared key. The app and the browser extension run the exact same merge code.
 
 **Single-File Bundle:**
 build.js assembles the source modules into one self-contained HTML file. No module loader, no CDN, no external requests at runtime.
 
-**QR Pairing Ceremony:**
-Device transfer uses ephemeral ECDH keys exchanged over QR, a numeric comparison code derived from the shared secret as a short authentication string, and AES-GCM for the transfer itself. No relay, server, or account needed.
+**Stateless QR Sync:**
+Sync moves the key and vault in a fountain QR stream. A device shows an endless loop of coded frames, the receiver collects across loops and reconstructs the exact vault, then writes its own identical merged vault. No relay, server, or account needed.
 
 ## Related Projects
 
