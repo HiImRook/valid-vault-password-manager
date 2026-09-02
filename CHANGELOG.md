@@ -5,6 +5,37 @@ All notable changes to Local Vault will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-09-01
+
+### Added
+- Terminal-green visual identity across the extension and phone - Orbitron wordmark, monospace UI, off-black background, shared palette so both surfaces read as one product.
+- Valid globe logo - a rotating wireframe globe with a sliced V, rendered live in the phone header and animated on the project sites.
+- Configurable lock timers in Settings - separate Soft-lock timer and Hard-lock timer fields, defaulting to 5 minutes soft and 20 minutes hard.
+- Extension hamburger dropdown with Settings Menu and Website entries.
+- Phone enroll and re-enroll setup flow with view routing across setup, hard-lock, soft-lock, and unlocked states.
+
+### Changed
+- PIN role redefined. The PIN is now a permanent credential that resumes a soft-locked idle session only. It never opens a vault from a hard lock. This replaces the 0.3.0 ephemeral session-PIN model.
+- Lock behavior split into soft and hard. Hitting Lock soft-locks when a PIN is set, otherwise hard-locks. Inactivity soft-locks at the soft timer when a PIN exists, and hard-locks at the hard timer. Closing the browser always hard-locks.
+- Fingerprint and password are the two hard unlocks. Either one fully opens the vault, from any state. The hard-lock screen offers fingerprint and password only, the PIN field is not shown there.
+- Auth method controls now read Enroll and Re-enroll. An unset method shows a green Enroll, an already-set method shows a red Re-enroll, on both the extension setup and manage surfaces.
+- Extension Back up with Secure Sync jumps to the Sync tab.
+- Extension Settings replaced the single auto-lock row with the two soft and hard timer rows and dropped the lock-on-popup-close toggle.
+- Phone front screen rebranded with the globe header, and the developer log was removed from the user-facing view.
+
+### Fixed
+- Phone bundle crash on load. The phone build read module function lists that had drifted from the reworked session and auth modules, throwing a ReferenceError before any view rendered. The bundler's session and auth wrappers were realigned to the current module exports.
+
+### Security model
+- The PIN is deliberately the weakest credential. It resumes an already-open idle session and nothing more. A manual lock or a closed browser always requires fingerprint or password, so a short PIN can never substitute for real authentication.
+
+### Notes
+- The WebAuthn RP name remains "Local Vault" in code even though the UI reads "Valid Vault". Changing it would invalidate every enrolled fingerprint, so it is deliberately left unchanged.
+- Phone sync remains a work in progress. The sync surface is present but not yet wired end to end.
+- Personal Info is still a placeholder on both surfaces.
+- Per-method auth edit and delete remain deferred on the phone.
+- Version numbers across the app and extension are aligned to 0.4.0.
+
 ## [0.3.5] - 2026-08-15
 
 ### Added
