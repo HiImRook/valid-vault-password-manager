@@ -4,3 +4,6 @@ android/app/build/
 .gradle/
 build/
 app-debug.apk
+
+android/.idea/
+.idea/

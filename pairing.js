@@ -291,6 +291,50 @@ async function verifyTransfer(transferData, masterKey) {
   }
 }
 
+async function applyIncomingVault(payloadText, sharedKey, localMasterKey) {
+  const data = JSON.parse(payloadText)
+
+  if (data.version !== 2 || !data.wrappedMasterKey) {
+    return { success: false, error: 'Incompatible transfer format' }
+  }
+
+  const incomingMasterKey = await unwrapMasterKeyFromTransfer(data.wrappedMasterKey, sharedKey)
+  const incomingVault = data.vault
+  const localVault = await getPasswordVault()
+
+  if (!localVault) {
+    incomingVault.meta.lastAccess = Date.now()
+    await setPasswordVault(incomingVault)
+    const count = Object.values(incomingVault.credentials || {}).flat().filter(function (c) { return !c.deleted }).length
+    return { success: true, count, masterKey: incomingMasterKey, requiresAuthSetup: true }
+  }
+
+  const localCreatedAt = localVault.meta.createdAt
+  const incomingCreatedAt = incomingVault.meta.createdAt
+
+  let sharedMasterKey
+  let localForMerge
+  let incomingForMerge
+
+  if (incomingCreatedAt <= localCreatedAt) {
+    sharedMasterKey = incomingMasterKey
+    localForMerge = await reEncryptVault(localVault, localMasterKey, sharedMasterKey)
+    incomingForMerge = incomingVault
+  } else {
+    sharedMasterKey = localMasterKey
+    localForMerge = localVault
+    incomingForMerge = await reEncryptVault(incomingVault, incomingMasterKey, sharedMasterKey)
+  }
+
+  const merged = await mergeVaults(localForMerge, incomingForMerge, sharedMasterKey)
+  merged.meta.createdAt = Math.min(localCreatedAt, incomingCreatedAt)
+  merged.meta.lastAccess = Date.now()
+  await setPasswordVault(merged)
+
+  const count = Object.values(merged.credentials || {}).flat().filter(function (c) { return !c.deleted }).length
+  return { success: true, count, masterKey: sharedMasterKey }
+}
+
 async function receiveTransfer(transferData, sharedKey, localMasterKey) {
   if (!sharedKey) {
     return { success: false, error: 'Pairing key required' }
@@ -362,6 +406,7 @@ function isExpired(expiresAt) {
 }
 
 export {
+  generateKeyPair,
   generatePairingCode,
   generateSessionId,
   initiatePairing,
@@ -375,6 +420,7 @@ export {
   decryptTransfer,
   verifyTransfer,
   receiveTransfer,
+  applyIncomingVault,
   deriveSharedKey,
   derivePinFromSharedKey,
   isExpired

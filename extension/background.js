@@ -60,3 +60,68 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
   }
   return false
 })
+
+// ---- Inactivity soft/hard lock (driven by the service worker) ----
+
+async function getLockSettings() {
+  let soft = 5, hard = 20
+  try {
+    const r = await chrome.storage.local.get(['softLockTimeout', 'hardLockTimeout'])
+    if (r.softLockTimeout) soft = r.softLockTimeout
+    if (r.hardLockTimeout) hard = r.hardLockTimeout
+  } catch (e) {}
+  return { softMs: soft * 60000, hardMs: hard * 60000 }
+}
+
+async function authHasPin() {
+  const auth = await new Promise(function (resolve) {
+    const req = indexedDB.open('ValidVault', 1)
+    req.onsuccess = function () {
+      try {
+        const tx = req.result.transaction('auth', 'readonly')
+        const g = tx.objectStore('auth').get('primary')
+        g.onsuccess = function () { resolve(g.result || null) }
+        g.onerror = function () { resolve(null) }
+      } catch (e) { resolve(null) }
+    }
+    req.onerror = function () { resolve(null) }
+  })
+  return !!(auth && auth.pinWrappedKey)
+}
+
+async function markActivity() {
+  try { await chrome.storage.session.set({ lastActivity: Date.now() }) } catch (e) {}
+}
+
+async function checkInactivity() {
+  const stored = await chrome.storage.session.get(['masterKeyBytes', 'lastActivity'])
+  if (!stored || !stored.masterKeyBytes) return  // already locked
+  const last = stored.lastActivity || Date.now()
+  const elapsed = Date.now() - last
+  const { softMs, hardMs } = await getLockSettings()
+  if (elapsed >= hardMs) {
+    // hard lock: wipe key + soft flag
+    try { await chrome.storage.session.remove(['masterKeyBytes', 'softLocked']) } catch (e) {}
+  } else if (elapsed >= softMs) {
+    // soft lock: wipe live key but set soft flag IF a PIN exists to resume
+    if (await authHasPin()) {
+      try {
+        await chrome.storage.session.remove('masterKeyBytes')
+        await chrome.storage.session.set({ softLocked: true })
+      } catch (e) {}
+    } else {
+      try { await chrome.storage.session.remove(['masterKeyBytes', 'softLocked']) } catch (e) {}
+    }
+  }
+}
+
+chrome.alarms.create('inactivityCheck', { periodInMinutes: 0.5 })
+chrome.alarms.onAlarm.addListener(function (alarm) {
+  if (alarm.name === 'inactivityCheck') checkInactivity()
+})
+
+// any message counts as activity
+chrome.runtime.onMessage.addListener(function (request) {
+  if (request && request.action === 'activity') markActivity()
+  return false
+})

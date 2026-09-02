@@ -8,28 +8,30 @@ const viewLocked = document.getElementById('view-locked')
 const viewUnlocked = document.getElementById('view-unlocked')
 const viewAdd = document.getElementById('view-add')
 
-const setupStatusFp = document.getElementById('setup-status-fp')
-const setupStatusPin = document.getElementById('setup-status-pin')
-const setupStatusPw = document.getElementById('setup-status-pw')
-
+const setupStateFp = document.getElementById('setup-state-fp')
 const btnSetupFp = document.getElementById('btn-setup-fp')
-const btnSkipFp = document.getElementById('btn-skip-fp')
 const btnSetupPin = document.getElementById('btn-setup-pin')
 const btnSetupPw = document.getElementById('btn-setup-pw')
 const setupPin = document.getElementById('setup-pin')
 const setupPassword = document.getElementById('setup-password')
+const btnSetupDone = document.getElementById('btn-setup-done')
 const msgSetup = document.getElementById('msg-setup')
 
 const statusFp = document.getElementById('status-fp')
-const statusPin = document.getElementById('status-pin')
 const statusPw = document.getElementById('status-pw')
 
 const btnFingerprint = document.getElementById('btn-fingerprint')
-const btnPin = document.getElementById('btn-pin')
 const btnPassword = document.getElementById('btn-password')
-const inputPin = document.getElementById('input-pin')
 const inputPassword = document.getElementById('input-password')
 const msgLocked = document.getElementById('msg-locked')
+
+const viewSoftlock = document.getElementById('view-softlock')
+const inputSoftpin = document.getElementById('input-softpin')
+const btnSoftpin = document.getElementById('btn-softpin')
+const btnSoftFingerprint = document.getElementById('btn-soft-fingerprint')
+const inputSoftpassword = document.getElementById('input-softpassword')
+const btnSoftPassword = document.getElementById('btn-soft-password')
+const msgSoftlock = document.getElementById('msg-softlock')
 
 const btnLock = document.getElementById('btn-lock')
 const btnExpand = document.getElementById('btn-expand')
@@ -53,12 +55,13 @@ async function persistKey() {
     const mk = session.getMasterKey()
     if (!mk) return
     const bytes = new Uint8Array(await crypto.subtle.exportKey('raw', mk))
-    await chrome.storage.session.set({ masterKeyBytes: Array.from(bytes) })
+    await chrome.storage.session.set({ masterKeyBytes: Array.from(bytes), lastActivity: Date.now() })
   } catch (e) {}
 }
 
 function showView(view) {
   viewSetup.classList.add('hidden')
+  if (viewSoftlock) viewSoftlock.classList.add('hidden')
   viewLocked.classList.add('hidden')
   viewUnlocked.classList.add('hidden')
   viewAdd.classList.add('hidden')
@@ -71,36 +74,50 @@ function showMsg(el, msg, type) {
   setTimeout(() => { el.textContent = '' }, 3000)
 }
 
-function updateSetupStatus() {
-  setupStatusFp.className = 'status' + (setupState.hasFp ? ' active' : '')
-  setupStatusPin.className = 'status' + (setupState.hasPin ? ' active' : '')
-  setupStatusPw.className = 'status' + (setupState.hasPw ? ' active' : '')
-  
-  btnSetupPin.disabled = !setupState.hasFp
-  btnSetupPw.disabled = !setupState.hasPin
-  setupPin.disabled = !setupState.hasFp
-  setupPassword.disabled = !setupState.hasPin
-  
-  if (setupState.hasFp && setupState.hasPin && setupState.hasPw) {
-    showMsg(msgSetup, 'Setup complete!', 'success')
-    setTimeout(() => init(), 1000)
+function setEnrollButton(btn, enrolled) {
+  if (enrolled) {
+    btn.textContent = 'Re-enroll'
+    btn.classList.remove('enroll')
+    btn.classList.add('reenroll')
+  } else {
+    btn.textContent = 'Enroll'
+    btn.classList.remove('reenroll')
+    btn.classList.add('enroll')
   }
+}
+
+function updateSetupStatus() {
+  if (setupStateFp) setupStateFp.textContent = setupState.hasFp ? 'Enrolled' : ''
+  setEnrollButton(btnSetupFp, setupState.hasFp)
+  setEnrollButton(btnSetupPin, setupState.hasPin)
+  setEnrollButton(btnSetupPw, setupState.hasPw)
+  // Finish is available once at least one HARD unlock (fingerprint or password) exists.
+  const canFinish = setupState.hasFp || setupState.hasPw
+  btnSetupDone.disabled = !canFinish
+  btnSetupDone.style.opacity = canFinish ? '1' : '0.5'
 }
 
 async function updateStatus() {
   const status = await auth.initAuth()
   if (statusFp) statusFp.className = 'status' + (status.hasFingerprint ? ' active' : '')
-  if (statusPin) statusPin.className = 'status' + (status.hasPIN ? ' active' : '')
   if (statusPw) statusPw.className = 'status' + (status.hasPassword ? ' active' : '')
   return status
 }
 
 async function init() {
   const status = await updateStatus()
-  
+
+  // seed setup state from real enrollment so Enroll/Re-enroll shows correctly
+  setupState.hasFp = !!status.hasFingerprint
+  setupState.hasPin = !!status.hasPIN
+  setupState.hasPw = !!status.hasPassword
+
   if (session.hasMasterKey()) {
     showView(viewUnlocked)
     await loadCurrentSite()
+  } else if (await session.isSoftLocked()) {
+    // idle soft-lock: PIN can resume, fingerprint/password also work
+    showView(viewSoftlock)
   } else if (status.hasFingerprint || status.hasPIN || status.hasPassword) {
     showView(viewLocked)
   } else {
@@ -186,12 +203,6 @@ btnSetupFp.onclick = async () => {
   }
 }
 
-btnSkipFp.onclick = () => {
-  setupState.hasFp = true
-  updateSetupStatus()
-  showMsg(msgSetup, 'Fingerprint skipped', 'success')
-}
-
 btnSetupPin.onclick = async () => {
   const pin = setupPin.value
   if (pin.length < 4 || pin.length > 6) {
@@ -202,7 +213,6 @@ btnSetupPin.onclick = async () => {
     showMsg(msgSetup, 'PIN must be numbers only', 'error')
     return
   }
-  
   auth.startPINCreation()
   const result = await auth.setPIN(pin, masterKey)
   if (result.success) {
@@ -212,7 +222,7 @@ btnSetupPin.onclick = async () => {
     setupState.hasPin = true
     setupPin.value = ''
     updateSetupStatus()
-    showMsg(msgSetup, 'PIN set', 'success')
+    showMsg(msgSetup, 'PIN enrolled', 'success')
   } else {
     showMsg(msgSetup, result.error, 'error')
   }
@@ -224,7 +234,6 @@ btnSetupPw.onclick = async () => {
     showMsg(msgSetup, 'Password must be 8+ characters', 'error')
     return
   }
-  
   auth.startPasswordCreation()
   const result = await auth.setPassword(pw, masterKey)
   if (result.success) {
@@ -234,9 +243,23 @@ btnSetupPw.onclick = async () => {
     setupState.hasPw = true
     setupPassword.value = ''
     updateSetupStatus()
-    showMsg(msgSetup, 'Password set', 'success')
+    showMsg(msgSetup, 'Password enrolled', 'success')
   } else {
     showMsg(msgSetup, result.error, 'error')
+  }
+}
+
+btnSetupDone.onclick = async () => {
+  if (!(setupState.hasFp || setupState.hasPw)) {
+    showMsg(msgSetup, 'Enroll fingerprint or password first', 'error')
+    return
+  }
+  await updateStatus()
+  if (session.hasMasterKey()) {
+    showView(viewUnlocked)
+    await loadCurrentSite()
+  } else {
+    showView(viewLocked)
   }
 }
 
@@ -245,21 +268,6 @@ btnFingerprint.onclick = async () => {
   if (result.success) {
     session.setMasterKey(result.masterKey)
     await persistKey()
-    await updateStatus()
-    showView(viewUnlocked)
-    await loadCurrentSite()
-  } else {
-    showMsg(msgLocked, result.error, 'error')
-  }
-}
-
-btnPin.onclick = async () => {
-  const pin = inputPin.value
-  const result = await auth.authenticatePIN(pin)
-  if (result.success) {
-    session.setMasterKey(result.masterKey)
-    await persistKey()
-    inputPin.value = ''
     await updateStatus()
     showView(viewUnlocked)
     await loadCurrentSite()
@@ -283,17 +291,89 @@ btnPassword.onclick = async () => {
   }
 }
 
-btnLock.onclick = () => {
-  session.lockAll()
-  try { chrome.storage.session.remove('masterKeyBytes') } catch (e) {}
-  updateStatus()
-  showView(viewLocked)
-  credentialsList.innerHTML = ''
+// ---- Soft-lock (idle) resume handlers ----
+btnSoftpin.onclick = async () => {
+  const pin = inputSoftpin.value
+  const result = await auth.authenticatePIN(pin)
+  if (result.success) {
+    session.setMasterKey(result.masterKey)
+    inputSoftpin.value = ''
+    await persistKey()
+    await updateStatus()
+    showView(viewUnlocked)
+    await loadCurrentSite()
+  } else {
+    showMsg(msgSoftlock, result.error || 'Incorrect PIN', 'error')
+  }
 }
 
-btnExpand.onclick = () => {
+btnSoftFingerprint.onclick = async () => {
+  const result = await auth.authenticateFingerprint()
+  if (result.success) {
+    session.setMasterKey(result.masterKey)
+    await persistKey()
+    await updateStatus()
+    showView(viewUnlocked)
+    await loadCurrentSite()
+  } else {
+    showMsg(msgSoftlock, result.error, 'error')
+  }
+}
+
+btnSoftPassword.onclick = async () => {
+  const pw = inputSoftpassword.value
+  const result = await auth.authenticatePassword(pw)
+  if (result.success) {
+    session.setMasterKey(result.masterKey)
+    await persistKey()
+    inputSoftpassword.value = ''
+    await updateStatus()
+    showView(viewUnlocked)
+    await loadCurrentSite()
+  } else {
+    showMsg(msgSoftlock, result.error, 'error')
+  }
+}
+
+btnLock.onclick = async () => {
+  // Lock icon soft-locks: PIN can resume, fingerprint/password also work.
+  // Only soft-lock if a PIN exists to resume with; otherwise hard-lock.
+  const status = await auth.initAuth()
+  if (status.hasPIN) {
+    await session.softLock()
+    try { chrome.storage.session.remove('masterKeyBytes') } catch (e) {}
+    credentialsList.innerHTML = ''
+    showView(viewSoftlock)
+  } else {
+    await session.lockAll()
+    try { chrome.storage.session.remove('masterKeyBytes') } catch (e) {}
+    credentialsList.innerHTML = ''
+    showView(viewLocked)
+  }
+}
+
+const menuDropdown = document.getElementById('menu-dropdown')
+const menuSettings = document.getElementById('menu-settings')
+
+btnExpand.onclick = (e) => {
+  e.stopPropagation()
+  menuDropdown.classList.toggle('hidden')
+}
+
+menuSettings.onclick = () => {
   chrome.tabs.create({ url: 'manage.html' })
 }
+
+const menuWebsite = document.getElementById('menu-website')
+menuWebsite.onclick = () => {
+  chrome.tabs.create({ url: 'https://hiimrook.github.io/valid-vault-password-manager/' })
+}
+
+document.addEventListener('click', (e) => {
+  if (!menuDropdown.classList.contains('hidden') && !e.target.closest('.menu-wrap')) {
+    menuDropdown.classList.add('hidden')
+  }
+})
 
 btnAdd.onclick = async () => {
   addDomain.value = activeDomain
@@ -327,8 +407,9 @@ btnSave.onclick = async () => {
   }
 }
 
-inputPin.onkeydown = (e) => { if (e.key === 'Enter') btnPin.click() }
 inputPassword.onkeydown = (e) => { if (e.key === 'Enter') btnPassword.click() }
+inputSoftpin.onkeydown = (e) => { if (e.key === 'Enter') btnSoftpin.click() }
+inputSoftpassword.onkeydown = (e) => { if (e.key === 'Enter') btnSoftPassword.click() }
 setupPin.onkeydown = (e) => { if (e.key === 'Enter') btnSetupPin.click() }
 setupPassword.onkeydown = (e) => { if (e.key === 'Enter') btnSetupPw.click() }
 

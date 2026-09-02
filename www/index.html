@@ -5,66 +5,82 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Valid Vault</title>
   <style>
+    @font-face { font-family: 'Orbitron'; src: url('Orbitron.ttf') format('truetype'); font-weight: 700 900; font-display: swap; }
+    :root {
+      --bg: #0a0e0a; --bg-raise: #0d130d; --panel: #101710;
+      --green: #33ff66; --green-dim: #1f9e40; --green-faint: #163020;
+      --text: #b8f0c4; --text-dim: #6fae7f; --danger: #ff5555;
+    }
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0a0a0a; color: #e0e0e0; padding: 20px; }
+    body { font-family: "Courier New", "Consolas", "DejaVu Sans Mono", monospace; background: var(--bg); color: var(--text); padding: 20px; }
     .container { max-width: 500px; margin: 0 auto; }
-    h1 { color: #00d4aa; margin-bottom: 20px; }
-    h2 { color: #888; font-size: 14px; margin: 20px 0 10px; text-transform: uppercase; }
-    .section { background: #1a1a1a; border-radius: 8px; padding: 16px; margin-bottom: 12px; }
-    button { background: #00d4aa; color: #000; border: none; padding: 12px 20px; border-radius: 6px; cursor: pointer; font-size: 14px; margin: 4px; }
-    button:hover { background: #00b894; }
-    button.secondary { background: #333; color: #e0e0e0; }
-    button.danger { background: #e74c3c; color: #fff; }
+    h1 { font-family: 'Orbitron', sans-serif; font-weight: 900; color: var(--green); margin-bottom: 20px; letter-spacing: 2px; text-shadow: 0 0 8px rgba(51,255,102,0.4); }
+    h2 { color: var(--text-dim); font-size: 14px; margin: 20px 0 10px; text-transform: uppercase; letter-spacing: 1px; }
+    .section { background: var(--bg-raise); border: 1px solid var(--green-faint); border-radius: 8px; padding: 16px; margin-bottom: 12px; }
+    button { background: var(--green); color: #05140a; border: none; padding: 12px 20px; border-radius: 6px; cursor: pointer; font-family: inherit; font-size: 14px; font-weight: 700; letter-spacing: 0.5px; margin: 4px; transition: background 0.15s, box-shadow 0.15s; }
+    button:hover { background: #5aff80; box-shadow: 0 0 14px rgba(51,255,102,0.25); }
+    button.secondary { background: transparent; color: var(--green); border: 1px solid var(--green-dim); font-weight: 400; }
+    button.secondary:hover { background: var(--green-faint); box-shadow: none; }
+    button.danger { background: transparent; color: var(--danger); border: 1px solid var(--danger); font-weight: 400; }
+    button.danger:hover { background: rgba(255,85,85,0.12); box-shadow: none; }
     button.small { padding: 8px 12px; font-size: 12px; }
-    input { background: #2a2a2a; border: 1px solid #444; color: #e0e0e0; padding: 10px; border-radius: 6px; width: 100%; margin: 4px 0; }
-    .log { background: #111; border-radius: 6px; padding: 12px; margin-top: 20px; font-family: monospace; font-size: 12px; max-height: 200px; overflow-y: auto; }
-    .log-entry { padding: 4px 0; border-bottom: 1px solid #222; }
-    .log-entry.success { color: #00d4aa; }
-    .log-entry.error { color: #e74c3c; }
-    .status { display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 12px; margin: 2px; }
-    .status.active { background: #00d4aa; color: #000; }
-    .status.inactive { background: #333; color: #888; }
+    button.enroll { background: var(--green); color: #05140a; font-weight: 700; }
+    button.reenroll { background: transparent; color: var(--danger); border: 1px solid var(--danger); font-weight: 400; }
+    button.reenroll:hover { background: rgba(255,85,85,0.12); box-shadow: none; }
+    input { background: var(--bg); border: 1px solid var(--green-faint); color: var(--text); padding: 10px; border-radius: 6px; width: 100%; margin: 4px 0; font-family: inherit; font-size: 14px; }
+    input:focus { outline: none; border-color: var(--green-dim); box-shadow: 0 0 0 2px rgba(51,255,102,0.1); }
+    input::placeholder { color: var(--text-dim); }
+    .log { background: var(--panel); border: 1px solid var(--green-faint); border-radius: 6px; padding: 12px; margin-top: 20px; font-family: monospace; font-size: 12px; max-height: 200px; overflow-y: auto; }
+    .log-entry { padding: 4px 0; border-bottom: 1px solid var(--green-faint); color: var(--text-dim); }
+    .log-entry.success { color: var(--green); }
+    .log-entry.error { color: var(--danger); }
+    .status { display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 12px; margin: 2px; background: var(--panel); color: var(--text-dim); border: 1px solid var(--green-faint); }
+    .status.active { background: var(--green); color: #05140a; border-color: var(--green); font-weight: 700; }
+    .status.inactive { background: var(--panel); color: var(--text-dim); }
     .hidden { display: none; }
     .row { display: flex; gap: 8px; align-items: center; margin: 8px 0; }
     .row input { flex: 1; margin: 0; }
-    .eyeball { background: none; border: none; color: #888; cursor: pointer; padding: 8px; font-size: 16px; }
-    .eyeball:hover { color: #00d4aa; }
+    .eyeball { background: none; border: none; color: var(--text-dim); cursor: pointer; padding: 8px; font-size: 16px; }
+    .eyeball:hover { color: var(--green); }
     .eyeball svg { width: 20px; height: 20px; fill: currentColor; }
-    .credential-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #333; }
+    .credential-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--green-faint); }
     .credential-row:last-child { border-bottom: none; }
     .credential-info { flex: 1; }
-    .credential-login { color: #00d4aa; font-weight: 500; }
-    .credential-pass { color: #666; font-family: monospace; }
-    .modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; z-index: 100; }
-    .modal-content { background: #1a1a1a; border-radius: 12px; padding: 24px; max-width: 420px; width: 90%; max-height: 90vh; overflow-y: auto; }
-    .modal h3 { color: #00d4aa; margin-bottom: 16px; }
-    .timer { color: #e74c3c; font-size: 12px; margin-top: 8px; }
-    .lockout-msg { color: #e74c3c; font-size: 12px; margin-top: 8px; padding: 8px; background: #2a1a1a; border-radius: 4px; }
-    .pin-display { font-size: 48px; font-weight: bold; letter-spacing: 12px; text-align: center; color: #00d4aa; padding: 20px; background: #111; border-radius: 8px; margin: 16px 0; font-family: monospace; }
+    .credential-login { color: var(--green); font-weight: 700; }
+    .credential-pass { color: var(--text-dim); font-family: monospace; }
+    .modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.85); display: flex; align-items: center; justify-content: center; z-index: 100; }
+    .modal-content { background: var(--bg-raise); border: 1px solid var(--green-faint); border-radius: 12px; padding: 24px; max-width: 420px; width: 90%; max-height: 90vh; overflow-y: auto; }
+    .modal h3 { font-family: 'Orbitron', sans-serif; color: var(--green); margin-bottom: 16px; letter-spacing: 1px; }
+    .timer { color: var(--danger); font-size: 12px; margin-top: 8px; }
+    .lockout-msg { color: var(--danger); font-size: 12px; margin-top: 8px; padding: 8px; background: rgba(255,85,85,0.08); border: 1px solid rgba(255,85,85,0.3); border-radius: 4px; }
+    .pin-display { font-size: 48px; font-weight: bold; letter-spacing: 12px; text-align: center; color: var(--green); padding: 20px; background: var(--panel); border: 1px solid var(--green-faint); border-radius: 8px; margin: 16px 0; font-family: monospace; text-shadow: 0 0 10px rgba(51,255,102,0.4); }
     .qr-container { background: #fff; padding: 16px; margin: 16px auto; display: inline-block; border-radius: 8px; }
     .qr-container svg { display: block; }
     .qr-wrapper { text-align: center; }
-    .sync-step { color: #888; font-size: 14px; margin-bottom: 12px; }
-    .sync-step.active { color: #00d4aa; }
-    textarea { background: #2a2a2a; border: 1px solid #444; color: #e0e0e0; padding: 10px; border-radius: 6px; width: 100%; margin: 4px 0; font-family: monospace; font-size: 11px; resize: vertical; }
-    .vault-info { background: #111; border-radius: 6px; padding: 12px; margin: 12px 0; font-size: 13px; }
+    .sync-step { color: var(--text-dim); font-size: 14px; margin-bottom: 12px; }
+    .sync-step.active { color: var(--green); }
+    textarea { background: var(--bg); border: 1px solid var(--green-faint); color: var(--text); padding: 10px; border-radius: 6px; width: 100%; margin: 4px 0; font-family: monospace; font-size: 11px; resize: vertical; }
+    textarea:focus { outline: none; border-color: var(--green-dim); }
+    .vault-info { background: var(--panel); border: 1px solid var(--green-faint); border-radius: 6px; padding: 12px; margin: 12px 0; font-size: 13px; }
     .vault-info-row { display: flex; justify-content: space-between; padding: 4px 0; }
-    .vault-info-label { color: #888; }
-    .vault-info-value { color: #00d4aa; }
-    .app-subtitle { color: #888; font-size: 13px; letter-spacing: 3px; text-transform: uppercase; text-align: center; margin: -12px 0 24px 0; }
+    .vault-info-label { color: var(--text-dim); }
+    .vault-info-value { color: var(--green); }
+    .app-subtitle { color: var(--text-dim); font-size: 13px; letter-spacing: 3px; text-transform: uppercase; text-align: center; margin: -12px 0 24px 0; }
     .app-header { display: flex; align-items: center; justify-content: space-between; position: relative; }
-    .hamburger { background: none; border: none; color: #00d4aa; font-size: 28px; cursor: pointer; padding: 8px 12px; margin: 0; }
-    .menu-dropdown { position: absolute; top: 48px; right: 8px; background: #1a1a1a; border: 1px solid #333; border-radius: 8px; overflow: hidden; z-index: 50; min-width: 160px; }
+    .globe-wrap { display: flex; justify-content: center; margin: 4px 0 18px; }
+    .globe-wrap canvas { width: 180px; height: 180px; filter: drop-shadow(0 0 5px rgba(51,255,102,0.4)); }
+    .hamburger { background: none; border: none; color: var(--green); font-size: 28px; cursor: pointer; padding: 8px 12px; margin: 0; }
+    .menu-dropdown { position: absolute; top: 48px; right: 8px; background: var(--bg-raise); border: 1px solid var(--green-dim); border-radius: 8px; overflow: hidden; z-index: 50; min-width: 160px; box-shadow: 0 4px 16px rgba(0,0,0,0.5); }
     .menu-dropdown.hidden { display: none; }
-    .menu-item { padding: 14px 20px; color: #e0e0e0; cursor: pointer; font-size: 15px; }
-    .menu-item:hover { background: #00d4aa; color: #000; }
+    .menu-item { padding: 14px 20px; color: var(--text); cursor: pointer; font-size: 15px; }
+    .menu-item:hover { background: var(--green); color: #05140a; }
     .page { display: none; }
     .page.active { display: block; }
     .page-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
-    .back-arrow { background: none; border: none; color: #00d4aa; font-size: 24px; cursor: pointer; padding: 4px 8px; margin: 0; }
-    .menu-tabs { display: flex; overflow-x: auto; border-bottom: 1px solid #333; margin-bottom: 16px; }
-    .menu-tab { padding: 12px 14px; cursor: pointer; color: #888; border-bottom: 2px solid transparent; font-size: 13px; white-space: nowrap; }
-    .menu-tab.active { color: #00d4aa; border-bottom-color: #00d4aa; }
+    .back-arrow { background: none; border: none; color: var(--green); font-size: 24px; cursor: pointer; padding: 4px 8px; margin: 0; }
+    .menu-tabs { display: flex; overflow-x: auto; border-bottom: 1px solid var(--green-faint); margin-bottom: 16px; }
+    .menu-tab { padding: 12px 14px; cursor: pointer; color: var(--text-dim); border-bottom: 2px solid transparent; font-size: 13px; white-space: nowrap; }
+    .menu-tab.active { color: var(--green); border-bottom-color: var(--green); }
     .menu-panel { display: none; }
     .menu-panel.active { display: block; }
   </style>
@@ -73,11 +89,16 @@
   <div class="container">
     <div id="page-main" class="page active">
     <div class="app-header">
-      <h1>Valid Vault</h1>
+      <div style="width:44px;"></div>
+      <h1 style="flex:1;text-align:center;margin:0;">Valid Vault</h1>
       <button class="hamburger" onclick="toggleMenu()">&#9776;</button>
       <div id="menu-dropdown" class="menu-dropdown hidden">
         <div class="menu-item" onclick="openMenu()">Settings Menu</div>
+        <div class="menu-item" onclick="openWebsite()">Website</div>
       </div>
+    </div>
+    <div class="globe-wrap">
+      <canvas id="globe" width="180" height="180"></canvas>
     </div>
 
     <div class="section">
@@ -89,24 +110,69 @@
       </div>
     </div>
 
-    <h2>Login</h2>
-    <div class="section">
-      <button onclick="authFingerprint()">Login with Fingerprint</button>
-      <button onclick="showEnrollFingerprint()" class="secondary small">Enroll New</button>
-      <div class="row">
-        <input type="text" id="pin-input" placeholder="PIN (4-6 digits)" maxlength="6">
-        <button onclick="authPIN()">Login</button>
-        <button onclick="showSetPIN()" class="secondary small">Set</button>
+    <!-- SETUP: unregistered vault -->
+    <div id="view-setup" class="hidden">
+      <h2>Set Up Your Vault</h2>
+      <div class="section">
+        <p style="color:var(--text-dim);font-size:13px;margin-bottom:12px;">Enroll at least one unlock method. Fingerprint or password can unlock the vault; a PIN quickly resumes an idle session.</p>
+        <div class="row">
+          <span style="flex:1;">Fingerprint</span>
+          <button id="setup-fp-btn" class="small enroll" onclick="enrollFp()">Enroll</button>
+        </div>
+        <div class="row">
+          <input type="text" id="setup-pin" placeholder="PIN (4-6 digits)" maxlength="6">
+          <button id="setup-pin-btn" class="small enroll" onclick="enrollPin()">Enroll</button>
+        </div>
+        <div class="row">
+          <input type="password" id="setup-pw" placeholder="Password (8+ chars)">
+          <button id="setup-pw-btn" class="small enroll" onclick="enrollPw()">Enroll</button>
+        </div>
+        <button onclick="finishSetup()" style="margin-top:10px;">Finish &amp; Unlock</button>
+        <div id="setup-msg" style="font-size:12px;color:var(--text-dim);margin-top:8px;min-height:8px;"></div>
       </div>
-      <div class="row">
-        <input type="password" id="password-input" placeholder="Password (8+ chars)">
-        <button onclick="authPassword()">Login</button>
-        <button onclick="showSetPassword()" class="secondary small">Set</button>
-      </div>
-      <div id="lockout-display"></div>
     </div>
 
-    <div class="log" id="log"></div>
+    <!-- HARD LOCK: fingerprint or password only -->
+    <div id="view-locked" class="hidden">
+      <h2>Unlock</h2>
+      <div class="section">
+        <button onclick="unlockFp()">Unlock with Fingerprint</button>
+        <div class="row">
+          <input type="password" id="lock-password" placeholder="Password">
+          <button onclick="unlockPw()">Go</button>
+        </div>
+        <div id="lockout-display"></div>
+      </div>
+    </div>
+
+    <!-- SOFT LOCK: PIN resume + fingerprint/password -->
+    <div id="view-softlock" class="hidden">
+      <h2>Resume Session</h2>
+      <div class="section">
+        <div class="row">
+          <input type="password" id="soft-pin" placeholder="PIN" maxlength="6">
+          <button onclick="resumePin()">Resume</button>
+        </div>
+        <button onclick="unlockFp()" class="secondary">Unlock with Fingerprint</button>
+        <div class="row">
+          <input type="password" id="soft-password" placeholder="Password">
+          <button onclick="unlockPw()">Go</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- UNLOCKED: credentials -->
+    <div id="view-unlocked" class="hidden">
+      <h2>Credentials</h2>
+      <div class="section">
+        <div class="row">
+          <input type="text" id="domain-input" placeholder="Filter by domain">
+          <button onclick="showSaveCredential()" class="small">Add</button>
+        </div>
+        <div id="credentials-list"></div>
+      </div>
+    </div>
+
     </div>
 
     <div id="page-menu" class="page">
@@ -143,13 +209,13 @@
 
       <div id="menu-personal" class="menu-panel">
         <div class="section">
-          <p style="color:#888;font-size:13px;line-height:1.6;">Coming soon: store addresses, credit cards, IDs, and other personal information.</p>
+          <p style="color:var(--text-dim);font-size:13px;line-height:1.6;">Coming soon: store addresses, credit cards, IDs, and other personal information.</p>
         </div>
       </div>
 
       <div id="menu-sync" class="menu-panel">
         <div class="section">
-          <p style="color:#888;font-size:12px;margin-bottom:12px;">Move logins between your devices. Do this somewhere private.</p>
+          <p style="color:var(--text-dim);font-size:12px;margin-bottom:12px;">Move logins between your devices. Do this somewhere private.</p>
           <div class="row">
             <button onclick="syncVault()">Sync Vault</button>
             <button onclick="getSyncKey()" class="secondary">Get Sync Key</button>
@@ -161,25 +227,25 @@
       <div id="menu-settings" class="menu-panel">
         <div class="section">
           <div class="row">
-            <label style="color:#888;font-size:13px;flex:1;">Auto-lock timeout (minutes)</label>
+            <label style="color:var(--text-dim);font-size:13px;flex:1;">Auto-lock timeout (minutes)</label>
             <input type="number" id="setting-timeout" min="0" max="60" value="0" style="width:70px;">
           </div>
           <button onclick="lockAll()" class="secondary">Lock Now</button>
         </div>
-        <div class="section" style="border:1px solid #e74c3c;">
-          <h3 style="color:#e74c3c;margin-top:0;">Clear Vault</h3>
-          <p style="color:#888;font-size:12px;line-height:1.5;">Permanently deletes all credentials and login methods on this device. Cannot be undone. Back up with Sync first.</p>
+        <div class="section" style="border:1px solid var(--danger);">
+          <h3 style="color:var(--danger);margin-top:0;">Clear Vault</h3>
+          <p style="color:var(--text-dim);font-size:12px;line-height:1.5;">Permanently deletes all credentials and login methods on this device. Cannot be undone. Back up with Sync first.</p>
           <button onclick="clearAll()" class="danger">Clear Vault</button>
         </div>
       </div>
 
       <div id="menu-about" class="menu-panel">
         <div class="section">
-          <p style="color:#888;font-size:14px;line-height:1.8;">
-            <strong style="color:#00d4aa;">Valid Vault Password Manager v0.3.5</strong><br><br>
+          <p style="color:var(--text-dim);font-size:14px;line-height:1.8;">
+            <strong style="color:var(--green);">Valid Vault Password Manager v0.3.6</strong><br><br>
             A decentralized password manager with fingerprint authentication. All data stored locally with zero server communication.<br><br>
             Built by Rook<br>
-            <a href="https://github.com/HiImRook/valid-vault-password-manager" style="color:#00d4aa;">GitHub Repository</a>
+            <a href="https://github.com/HiImRook/valid-vault-password-manager" style="color:var(--green);">GitHub Repository</a>
           </p>
         </div>
       </div>
@@ -508,25 +574,88 @@ const sessionModule = (function() {
 const {
   generateSalt,
   deriveKeyFromSecret,
-  masterKeyToCryptoKey,
-  encrypt,
-  decrypt
+  wrapMasterKey,
+  unwrapMasterKey
 } = cryptoModule
+const { getAuth } = storeModule
+// Session model:
+// - masterKey (CryptoKey) held in memory = unlocked (per-context).
+// - Hard unlock: fingerprint OR password (setMasterKey). Both fully unlock.
+// - Session PIN: wraps the master-key bytes with a PIN-derived key. Stored in
+//   chrome.storage.session so it is SHARED across popup + manage + background
+//   and auto-clears when the browser closes. Lets an inactivity SOFT-lock be
+//   resumed quickly with the PIN.
+// - Manual lock = hard lock: wipes masterKey AND the shared PIN wrap. PIN cannot resume.
+// - Inactivity timeout = SOFT lock IF a session PIN is set; else hard lock.
+
 const session = {
-  masterKey: null,
-  softLock: null,
-  resumeAttempts: 0,
+  masterKey: null,          // CryptoKey when unlocked, null when locked
   unlockedDomains: new Set(),
   lastActivity: 0,
-  timeoutId: null
+  timeoutId: null,
+  softLocked: false
 }
 
-const SESSION_TIMEOUT = 300000
-const MAX_RESUME_ATTEMPTS = 3
+const DEFAULT_SOFT_MIN = 5
+const DEFAULT_HARD_MIN = 20
+
+async function getTimeouts() {
+  let soft = DEFAULT_SOFT_MIN, hard = DEFAULT_HARD_MIN
+  try {
+    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+      const r = await chrome.storage.local.get(['softLockTimeout', 'hardLockTimeout'])
+      if (r.softLockTimeout) soft = r.softLockTimeout
+      if (r.hardLockTimeout) hard = r.hardLockTimeout
+    }
+  } catch (e) {}
+  return { softMs: soft * 60000, hardMs: hard * 60000 }
+}
+const PIN_KEY = 'sessionPin'   // chrome.storage.session: { salt:[], wrapped:{iv,wrapped} }
+const SOFT_KEY = 'softLocked'  // chrome.storage.session: true when idle/manual soft-locked
+
+async function cryptoKeyToBytes(cryptoKey) {
+  return new Uint8Array(await crypto.subtle.exportKey('raw', cryptoKey))
+}
+
+function haveStorage() {
+  return typeof chrome !== 'undefined' && chrome.storage && chrome.storage.session
+}
+
+async function readPin() {
+  if (!haveStorage()) return null
+  try {
+    const r = await chrome.storage.session.get(PIN_KEY)
+    return r && r[PIN_KEY] ? r[PIN_KEY] : null
+  } catch (e) { return null }
+}
+
+async function writePin(obj) {
+  if (!haveStorage()) return
+  try { await chrome.storage.session.set({ [PIN_KEY]: obj }) } catch (e) {}
+}
+
+async function removePin() {
+  if (!haveStorage()) return
+  try { await chrome.storage.session.remove(PIN_KEY) } catch (e) {}
+}
+
+async function writeSoftFlag(v) {
+  if (!haveStorage()) return
+  try {
+    if (v) await chrome.storage.session.set({ [SOFT_KEY]: true })
+    else await chrome.storage.session.remove(SOFT_KEY)
+  } catch (e) {}
+}
+async function readSoftFlag() {
+  if (!haveStorage()) return false
+  try { const r = await chrome.storage.session.get(SOFT_KEY); return !!(r && r[SOFT_KEY]) } catch (e) { return false }
+}
 
 function setMasterKey(key) {
   session.masterKey = key
   session.lastActivity = Date.now()
+  session.softLocked = false
+  writeSoftFlag(false)
   startTimeout()
 }
 
@@ -538,117 +667,62 @@ function hasMasterKey() {
   return session.masterKey !== null
 }
 
-async function setSessionPin(pin) {
-  if (!session.masterKey) {
-    return { success: false, error: 'Unlock vault first' }
-  }
+// ---- Session PIN (shared via chrome.storage.session) ----
 
-  if (pin.length < 4 || pin.length > 6 || !/^\d+$/.test(pin)) {
-    return { success: false, error: 'PIN must be 4-6 digits' }
-  }
+// async: reads shared storage
 
-  const salt = await generateSalt()
-  const wrappingKey = await deriveKeyFromSecret(pin, salt)
-  const masterKeyBytes = new Uint8Array(await crypto.subtle.exportKey('raw', session.masterKey))
-  const encryptedKey = await encrypt(JSON.stringify(Array.from(masterKeyBytes)), wrappingKey)
 
-  session.softLock = { encryptedKey, salt }
-  session.resumeAttempts = 0
-  return { success: true }
+
+// async: reads shared storage
+async function isSoftLocked() {
+  const soft = await readSoftFlag()
+  if (!soft) return false
+  const pin = await readPin()
+  return pin !== null
 }
 
-function clearSessionPin() {
-  session.softLock = null
-  session.resumeAttempts = 0
-}
 
-function hasSessionPin() {
-  return session.softLock !== null
-}
+// ---- Domains ----
 
-function isSoftLocked() {
-  return session.masterKey === null && session.softLock !== null
-}
+function unlockDomain(domain) { session.unlockedDomains.add(domain) }
+function lockDomain(domain) { session.unlockedDomains.delete(domain) }
+function isDomainUnlocked(domain) { return session.unlockedDomains.has(domain) }
+function getUnlockedDomains() { return Array.from(session.unlockedDomains) }
 
-function softLockNow() {
-  if (!session.softLock) return false
-  session.masterKey = null
-  session.unlockedDomains.clear()
-  stopTimeout()
-  return true
-}
+// ---- Activity / timeout ----
 
-async function resumeWithPin(pin) {
-  if (!session.softLock) {
-    return { success: false, error: 'No session to resume' }
-  }
+function resetActivity() { session.lastActivity = Date.now() }
 
-  if (session.masterKey) {
-    return { success: false, error: 'Session already unlocked' }
-  }
-
-  try {
-    const unwrappingKey = await deriveKeyFromSecret(pin, session.softLock.salt)
-    const decrypted = await decrypt(session.softLock.encryptedKey, unwrappingKey)
-    const masterKeyBytes = new Uint8Array(JSON.parse(decrypted))
-    const masterKey = await masterKeyToCryptoKey(masterKeyBytes)
-
-    session.resumeAttempts = 0
-    setMasterKey(masterKey)
-    return { success: true, masterKey }
-  } catch (error) {
-    session.resumeAttempts++
-    if (session.resumeAttempts >= MAX_RESUME_ATTEMPTS) {
-      lockAll()
-      return { success: false, error: 'Too many attempts. Vault locked. Unlock with password or fingerprint.' }
-    }
-    return { success: false, error: `Invalid PIN. ${MAX_RESUME_ATTEMPTS - session.resumeAttempts} attempts remaining` }
-  }
-}
-
-function unlockDomain(domain) {
-  session.unlockedDomains.add(domain)
-}
-
-function lockDomain(domain) {
-  session.unlockedDomains.delete(domain)
-}
-
-function isDomainUnlocked(domain) {
-  return session.unlockedDomains.has(domain)
-}
-
-function getUnlockedDomains() {
-  return Array.from(session.unlockedDomains)
-}
-
-function resetActivity() {
-  session.lastActivity = Date.now()
-}
-
-function checkTimeout() {
+async function checkTimeout() {
   if (!session.masterKey) return false
-
   const elapsed = Date.now() - session.lastActivity
-  if (elapsed >= SESSION_TIMEOUT) {
-    if (session.softLock) {
-      softLockNow()
-    } else {
-      lockAll()
-    }
+  const { softMs, hardMs } = await getTimeouts()
+  // hard-lock takes over at the longer threshold
+  if (elapsed >= hardMs) {
+    await lockAll()
     return true
   }
+  // soft-lock at the shorter threshold IF a permanent PIN exists to resume with
+  if (elapsed >= softMs) {
+    const status = await getAuthPinPresent()
+    if (status) { await softLock() } else { await lockAll() }
+    return true
+  }
+  return false
+}
 
+// checks whether a permanent auth PIN exists (in vault auth data)
+async function getAuthPinPresent() {
+  try {
+    const auth = await getAuth()
+    return !!(auth && auth.pinWrappedKey)
+  } catch (e) {}
   return false
 }
 
 function startTimeout() {
   stopTimeout()
-  session.timeoutId = setInterval(() => {
-    if (checkTimeout()) {
-      console.log('Session locked due to inactivity')
-    }
-  }, 10000)
+  session.timeoutId = setInterval(() => { checkTimeout() }, 10000)
 }
 
 function stopTimeout() {
@@ -658,20 +732,37 @@ function stopTimeout() {
   }
 }
 
-function lockAll() {
+// Soft lock: clear the live master key but KEEP the shared PIN wrap so
+// resumeWithPin can restore it. Fingerprint/password still work too.
+async function softLock() {
   session.masterKey = null
-  session.softLock = null
-  session.resumeAttempts = 0
   session.unlockedDomains.clear()
   session.lastActivity = 0
+  session.softLocked = true
+  await writeSoftFlag(true)
   stopTimeout()
 }
 
-function getState() {
+// Hard lock: wipe everything, including the shared session PIN. Full re-auth required.
+async function lockAll() {
+  session.masterKey = null
+  session.unlockedDomains.clear()
+  session.lastActivity = 0
+  session.softLocked = false
+  await writeSoftFlag(false)
+  stopTimeout()
+}
+
+// Clears the persisted service-worker copy of the master key bytes.
+async function clearStorageSession() {
+  if (!haveStorage()) return
+  try { await chrome.storage.session.remove('masterKeyBytes') } catch (e) {}
+}
+
+async function getState() {
   return {
     hasMasterKey: hasMasterKey(),
-    hasSessionPin: hasSessionPin(),
-    isSoftLocked: isSoftLocked(),
+    softLocked: await isSoftLocked(),
     unlockedDomains: getUnlockedDomains(),
     lastActivity: session.lastActivity
   }
@@ -680,19 +771,16 @@ return {
   setMasterKey,
   getMasterKey,
   hasMasterKey,
-  setSessionPin,
-  clearSessionPin,
-  hasSessionPin,
   isSoftLocked,
-  softLockNow,
-  resumeWithPin,
   unlockDomain,
   lockDomain,
   isDomainUnlocked,
   getUnlockedDomains,
   resetActivity,
   checkTimeout,
+  softLock,
   lockAll,
+  clearStorageSession,
   getState
 }
 })();
@@ -1119,6 +1207,7 @@ async function initAuth() {
   const auth = await getAuth()
   return {
     hasFingerprint: !!(auth && auth.fingerprintEnabled && auth.fingerprintWrappedKey),
+    hasPIN: !!(auth && auth.pinWrappedKey),
     hasPassword: !!(auth && auth.passwordWrappedKey),
     hasLegacyPIN: !!(auth && auth.pinWrappedKey),
     hasVault: hasWrappedKeys(auth),
@@ -1284,7 +1373,6 @@ async function authenticateFingerprint() {
     const unwrappingKey = await deriveKeyFromPrfOutput(prfOutput, PRF_INFO)
     const masterKey = await unwrapMasterKey(auth.fingerprintWrappedKey, unwrappingKey)
 
-    await purgeLegacyPin()
     await migrateLegacyMasterKey()
 
     clearAttempts('fingerprint')
@@ -1293,6 +1381,87 @@ async function authenticateFingerprint() {
     recordFailedAttempt('fingerprint')
     return { success: false, error: error.message }
   }
+}
+
+function startPINCreation() {
+  return startCreationTimer('pin')
+}
+
+async function setPIN(pin, existingMasterKey) {
+  const timerCheck = checkCreationTimer('pin')
+  if (!timerCheck.valid) {
+    return { success: false, error: timerCheck.error }
+  }
+
+  if (pin.length < 4 || pin.length > 6 || !/^\d+$/.test(pin)) {
+    return { success: false, error: 'PIN must be 4-6 digits' }
+  }
+
+  const auth = await getAuth() || {}
+  const resolved = await resolveMasterKeyBytes(existingMasterKey, auth)
+  if (resolved.error) {
+    return { success: false, error: 'Vault exists. Unlock first to add PIN.' }
+  }
+
+  const salt = await generateSalt()
+  const wrappingKey = await deriveKeyFromSecret(pin, salt)
+
+  auth.pinWrappedKey = await wrapMasterKey(resolved.bytes, wrappingKey)
+  auth.pinSalt = Array.from(salt)
+  auth.pinKdfIterations = PBKDF2_ITERATIONS
+  delete auth.pinHash
+
+  await setAuth(auth)
+
+  cancelCreationTimer('pin')
+
+  const masterKey = await masterKeyToCryptoKey(resolved.bytes)
+  return { success: true, masterKey, isNewVault: resolved.isNewVault }
+}
+
+async function authenticatePIN(pin) {
+  const rateCheck = checkRateLimit('pin')
+  if (!rateCheck.allowed) {
+    return { success: false, error: `Too many attempts. Wait ${rateCheck.remaining}s` }
+  }
+
+  const auth = await getAuth()
+  if (!auth || !auth.pinWrappedKey) {
+    return { success: false, error: 'No PIN set' }
+  }
+
+  try {
+    const salt = new Uint8Array(auth.pinSalt)
+    const iterations = auth.pinKdfIterations || LEGACY_PBKDF2_ITERATIONS
+    const unwrappingKey = await deriveKeyFromSecret(pin, salt, iterations)
+    const masterKey = await unwrapMasterKey(auth.pinWrappedKey, unwrappingKey)
+
+    await upgradeWrap(auth, 'pin', pin, masterKey)
+    await migrateLegacyMasterKey()
+
+    clearAttempts('pin')
+    return { success: true, masterKey }
+  } catch (error) {
+    recordFailedAttempt('pin')
+    return { success: false, error: 'Invalid PIN' }
+  }
+}
+
+async function removePIN() {
+  const auth = await getAuth()
+  if (!auth) return { success: false, error: 'No auth configured' }
+
+  if (!auth.fingerprintEnabled && !auth.passwordWrappedKey) {
+    return { success: false, error: 'Cannot remove PIN without fingerprint or password backup' }
+  }
+
+  delete auth.pinWrappedKey
+  delete auth.pinSalt
+  delete auth.pinKdfIterations
+  delete auth.pinHash
+  await setAuth(auth)
+
+  return { success: true }
 }
 
 function startPasswordCreation() {
@@ -1349,7 +1518,6 @@ async function authenticatePassword(password) {
     const masterKey = await unwrapMasterKey(auth.passwordWrappedKey, unwrappingKey)
 
     await upgradeWrap(auth, 'password', password, masterKey)
-    await purgeLegacyPin()
     await migrateLegacyMasterKey()
 
     clearAttempts('password')
@@ -1377,7 +1545,6 @@ async function authenticateLegacyPIN(pin) {
     const unwrappingKey = await deriveKeyFromSecret(pin, salt, iterations)
     const masterKey = await unwrapMasterKey(auth.pinWrappedKey, unwrappingKey)
 
-    await purgeLegacyPin()
     await migrateLegacyMasterKey()
 
     clearAttempts('pin')
@@ -1431,6 +1598,10 @@ return {
   startPasswordCreation,
   setPassword,
   authenticatePassword,
+  startPINCreation,
+  setPIN,
+  authenticatePIN,
+  removePIN,
   authenticateLegacyPIN,
   removeFingerprint,
   removePassword,
@@ -1731,6 +1902,50 @@ async function verifyTransfer(transferData, masterKey) {
   }
 }
 
+async function applyIncomingVault(payloadText, sharedKey, localMasterKey) {
+  const data = JSON.parse(payloadText)
+
+  if (data.version !== 2 || !data.wrappedMasterKey) {
+    return { success: false, error: 'Incompatible transfer format' }
+  }
+
+  const incomingMasterKey = await unwrapMasterKeyFromTransfer(data.wrappedMasterKey, sharedKey)
+  const incomingVault = data.vault
+  const localVault = await getPasswordVault()
+
+  if (!localVault) {
+    incomingVault.meta.lastAccess = Date.now()
+    await setPasswordVault(incomingVault)
+    const count = Object.values(incomingVault.credentials || {}).flat().filter(function (c) { return !c.deleted }).length
+    return { success: true, count, masterKey: incomingMasterKey, requiresAuthSetup: true }
+  }
+
+  const localCreatedAt = localVault.meta.createdAt
+  const incomingCreatedAt = incomingVault.meta.createdAt
+
+  let sharedMasterKey
+  let localForMerge
+  let incomingForMerge
+
+  if (incomingCreatedAt <= localCreatedAt) {
+    sharedMasterKey = incomingMasterKey
+    localForMerge = await reEncryptVault(localVault, localMasterKey, sharedMasterKey)
+    incomingForMerge = incomingVault
+  } else {
+    sharedMasterKey = localMasterKey
+    localForMerge = localVault
+    incomingForMerge = await reEncryptVault(incomingVault, incomingMasterKey, sharedMasterKey)
+  }
+
+  const merged = await mergeVaults(localForMerge, incomingForMerge, sharedMasterKey)
+  merged.meta.createdAt = Math.min(localCreatedAt, incomingCreatedAt)
+  merged.meta.lastAccess = Date.now()
+  await setPasswordVault(merged)
+
+  const count = Object.values(merged.credentials || {}).flat().filter(function (c) { return !c.deleted }).length
+  return { success: true, count, masterKey: sharedMasterKey }
+}
+
 async function receiveTransfer(transferData, sharedKey, localMasterKey) {
   if (!sharedKey) {
     return { success: false, error: 'Pairing key required' }
@@ -1840,9 +2055,33 @@ window.onerror = function(msg, url, line) {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
-  log('Local Vault loaded')
   updateStatus()
+  initGlobe()
+  routeView()
 })
+
+function openWebsite() {
+  window.open('https://hiimrook.github.io/valid-vault-password-manager/', '_blank')
+}
+
+function initGlobe() {
+  var cv = document.getElementById('globe')
+  if (!cv) return
+  var ctx = cv.getContext('2d')
+  var CX = 90, CY = 90, R = 68
+  var tilt = -0.35, ang = 0
+  function rotY(p, a){ var c=Math.cos(a), s=Math.sin(a); return {x:p.x*c+p.z*s, y:p.y, z:-p.x*s+p.z*c} }
+  function rotX(p, a){ var c=Math.cos(a), s=Math.sin(a); return {x:p.x, y:p.y*c-p.z*s, z:p.y*s+p.z*c} }
+  var lats=[], lons=[], LAT=7, LON=12, SEG=48
+  for (var i=1;i<LAT+1;i++){ var phi=-Math.PI/2+(Math.PI*i/(LAT+1)); var ring=[]; for(var j=0;j<=SEG;j++){ var th=2*Math.PI*j/SEG; ring.push({x:Math.cos(phi)*Math.cos(th),y:Math.sin(phi),z:Math.cos(phi)*Math.sin(th)}) } lats.push(ring) }
+  for (var i2=0;i2<LON;i2++){ var th2=2*Math.PI*i2/LON; var mer=[]; for(var j2=0;j2<=SEG;j2++){ var phi2=-Math.PI/2+Math.PI*j2/SEG; mer.push({x:Math.cos(phi2)*Math.cos(th2),y:Math.sin(phi2),z:Math.cos(phi2)*Math.sin(th2)}) } lons.push(mer) }
+  function drawWire(pts, a, side){ for(var k=0;k<pts.length-1;k++){ var A=rotX(rotY(pts[k],a),tilt); var B=rotX(rotY(pts[k+1],a),tilt); var z=(A.z+B.z)/2; if(side==='back'&&z>=0)continue; if(side==='front'&&z<0)continue; var al=0.14+0.7*((z+1)/2); ctx.strokeStyle='rgba(51,255,102,'+al.toFixed(3)+')'; ctx.lineWidth=0.5+0.8*((z+1)/2); ctx.beginPath(); ctx.moveTo(CX+A.x*R,CY-A.y*R); ctx.lineTo(CX+B.x*R,CY-B.y*R); ctx.stroke() } }
+  var VT=-38, VB=44
+  function vPath(){ var ht=34, thick=18; var p=new Path2D(); p.moveTo(CX-ht,CY+VT); p.lineTo(CX,CY+VB); p.lineTo(CX+ht,CY+VT); p.lineTo(CX+ht-thick,CY+VT); p.lineTo(CX,CY+VB-thick*1.15); p.lineTo(CX-ht+thick,CY+VT); p.closePath(); return p }
+  function drawV(){ var path=vPath(); ctx.save(); var g=ctx.createLinearGradient(0,CY+VT,0,CY+VB); g.addColorStop(0,'rgba(51,255,102,1)'); g.addColorStop(1,'rgba(20,120,55,1)'); ctx.shadowColor='rgba(51,255,102,0.8)'; ctx.shadowBlur=8; ctx.fillStyle=g; ctx.fill(path); ctx.shadowBlur=0; ctx.save(); ctx.clip(path); ctx.strokeStyle='rgba(10,14,10,0.85)'; ctx.lineWidth=2; for(var y=CY+VT;y<=CY+VB;y+=5){ ctx.beginPath(); ctx.moveTo(CX-50,y); ctx.lineTo(CX+50,y); ctx.stroke() } ctx.restore(); ctx.lineWidth=1.2; ctx.strokeStyle='#7dffa6'; ctx.stroke(path); ctx.restore() }
+  function frame(){ ctx.clearRect(0,0,cv.width,cv.height); for(var a=0;a<lats.length;a++) drawWire(lats[a],ang,'back'); for(var b2=0;b2<lons.length;b2++) drawWire(lons[b2],ang,'back'); drawV(); for(var c=0;c<lats.length;c++) drawWire(lats[c],ang,'front'); for(var d=0;d<lons.length;d++) drawWire(lons[d],ang,'front'); ctx.strokeStyle='#33ff66'; ctx.lineWidth=1.5; ctx.beginPath(); ctx.arc(CX,CY,R,0,2*Math.PI); ctx.stroke(); ang+=0.005; requestAnimationFrame(frame) }
+  frame()
+}
 
 function log(msg, type) {
   var el = document.getElementById('log')
@@ -1856,15 +2095,17 @@ function log(msg, type) {
 async function updateStatus() {
   try {
     var status = await vault.auth.initAuth()
-    var state = vault.session.getState()
+    var unlocked = vault.session.hasMasterKey()
     document.getElementById('status-fingerprint').className = 'status ' + (status.hasFingerprint ? 'active' : 'inactive')
-    document.getElementById('status-pin').className = 'status ' + (state.hasSessionPin ? 'active' : 'inactive')
+    document.getElementById('status-pin').className = 'status ' + (status.hasPIN ? 'active' : 'inactive')
     document.getElementById('status-password').className = 'status ' + (status.hasPassword ? 'active' : 'inactive')
-    document.getElementById('status-session').className = 'status ' + (state.hasMasterKey ? 'active' : 'inactive')
-    log('Status updated')
-  } catch (e) {
-    log('Status error: ' + e.message, 'error')
-  }
+    document.getElementById('status-session').className = 'status ' + (unlocked ? 'active' : 'inactive')
+    // hamburger only visible when unlocked
+    var ham = document.querySelector('.hamburger')
+    if (ham) ham.style.display = unlocked ? '' : 'none'
+    var menu = document.getElementById('menu-dropdown')
+    if (menu && !unlocked) menu.classList.add('hidden')
+  } catch (e) {}
 }
 
 function showModal(html) {
@@ -1877,113 +2118,124 @@ function hideModal() {
   document.getElementById('modal-container').classList.add('hidden')
 }
 
-window.showEnrollFingerprint = async function() {
-  vault.auth.startFingerprintEnrollment()
-  log('Starting fingerprint enrollment...')
-  var masterKey = vault.session.getMasterKey()
-  var result = await vault.auth.enrollFingerprint(masterKey)
-  if (result.success) {
-    log('Fingerprint enrolled', 'success')
-    vault.session.setMasterKey(result.masterKey)
+// ---- View routing ----
+window.showPhoneView = function(name) {
+  ;['view-setup','view-locked','view-softlock','view-unlocked'].forEach(function(v){
+    var el = document.getElementById(v)
+    if (el) el.classList.add('hidden')
+  })
+  var show = document.getElementById(name)
+  if (show) show.classList.remove('hidden')
+}
+
+async function routeView() {
+  var status = await vault.auth.initAuth()
+  var unlocked = vault.session.hasMasterKey()
+  if (unlocked) {
+    window.showPhoneView('view-unlocked')
+    if (window.loadCredentials) window.loadCredentials()
+  } else if (await vault.session.isSoftLocked()) {
+    window.showPhoneView('view-softlock')
+  } else if (status.hasFingerprint || status.hasPIN || status.hasPassword) {
+    window.showPhoneView('view-locked')
   } else {
-    log('Enrollment failed: ' + result.error, 'error')
+    window.showPhoneView('view-setup')
+    refreshSetupButtons(status)
   }
+}
+
+function setEnrollBtn(btn, enrolled) {
+  if (!btn) return
+  if (enrolled) { btn.textContent = 'Re-enroll'; btn.classList.remove('enroll'); btn.classList.add('reenroll') }
+  else { btn.textContent = 'Enroll'; btn.classList.remove('reenroll'); btn.classList.add('enroll') }
+}
+
+function refreshSetupButtons(status) {
+  setEnrollBtn(document.getElementById('setup-fp-btn'), status.hasFingerprint)
+  setEnrollBtn(document.getElementById('setup-pin-btn'), status.hasPIN)
+  setEnrollBtn(document.getElementById('setup-pw-btn'), status.hasPassword)
+}
+
+function setupMsg(m) { var el = document.getElementById('setup-msg'); if (el) el.textContent = m }
+
+// ---- Setup enroll handlers ----
+window.enrollFp = async function() {
+  vault.auth.startFingerprintEnrollment()
+  var mk = vault.session.getMasterKey()
+  var result = await vault.auth.enrollFingerprint(mk)
+  if (result.success) {
+    vault.session.setMasterKey(result.masterKey)
+    setupMsg('Fingerprint enrolled')
+  } else { setupMsg(result.error) }
+  refreshSetupButtons(await vault.auth.initAuth())
   updateStatus()
 }
 
-window.authFingerprint = async function() {
-  log('Logging in with fingerprint...')
+window.enrollPin = async function() {
+  var pin = document.getElementById('setup-pin').value
+  if (pin.length < 4 || pin.length > 6 || !/^d+$/.test(pin)) { setupMsg('PIN must be 4-6 digits'); return }
+  var mk = vault.session.getMasterKey()
+  vault.auth.startPINCreation()
+  var result = await vault.auth.setPIN(pin, mk)
+  if (result.success) {
+    vault.session.setMasterKey(result.masterKey)
+    document.getElementById('setup-pin').value = ''
+    setupMsg('PIN enrolled')
+  } else { setupMsg(result.error) }
+  refreshSetupButtons(await vault.auth.initAuth())
+  updateStatus()
+}
+
+window.enrollPw = async function() {
+  var pw = document.getElementById('setup-pw').value
+  if (pw.length < 8) { setupMsg('Password must be 8+ characters'); return }
+  var mk = vault.session.getMasterKey()
+  vault.auth.startPasswordCreation()
+  var result = await vault.auth.setPassword(pw, mk)
+  if (result.success) {
+    vault.session.setMasterKey(result.masterKey)
+    document.getElementById('setup-pw').value = ''
+    setupMsg('Password enrolled')
+  } else { setupMsg(result.error) }
+  refreshSetupButtons(await vault.auth.initAuth())
+  updateStatus()
+}
+
+window.finishSetup = async function() {
+  var status = await vault.auth.initAuth()
+  if (!(status.hasFingerprint || status.hasPassword)) { setupMsg('Enroll fingerprint or password first'); return }
+  updateStatus()
+  routeView()
+}
+
+// ---- Unlock handlers (hard + soft) ----
+window.unlockFp = async function() {
   var result = await vault.auth.authenticateFingerprint()
   if (result.success) {
-    log('Fingerprint auth success', 'success')
     vault.session.setMasterKey(result.masterKey)
-    if (result.requiresReenroll) {
-      log('Legacy fingerprint wrap migrated and removed. Enroll fingerprint again now.', 'error')
-    }
-  } else {
-    log('Login failed: ' + result.error, 'error')
-  }
-  updateStatus()
+    updateStatus(); routeView()
+  } else { log(result.error, 'error') }
 }
 
-window.showSetPIN = function() {
-  if (!vault.session.hasMasterKey()) {
-    log('Unlock vault first to set a session PIN', 'error')
-    return
-  }
-  showModal('<h3>Set Session PIN</h3><p style="color:#666;font-size:13px;">Quick unlock for this session only. Clears when the app closes.</p><input type="text" id="modal-pin" placeholder="4-6 digits" maxlength="6"><div style="margin-top:16px;"><button onclick="confirmSetPIN()">Set PIN</button><button onclick="hideModal()" class="secondary">Cancel</button></div>')
-}
-
-window.confirmSetPIN = async function() {
-  var pin = document.getElementById('modal-pin').value
-  var result = await vault.session.setSessionPin(pin)
+window.unlockPw = async function() {
+  var el = document.getElementById('lock-password') || document.getElementById('soft-password')
+  var pw = el ? el.value : ''
+  var result = await vault.auth.authenticatePassword(pw)
   if (result.success) {
-    log('Session PIN set. Clears when the app closes.', 'success')
-  } else {
-    log('Set PIN failed: ' + result.error, 'error')
-  }
-  hideModal()
-  updateStatus()
-}
-
-window.authPIN = async function() {
-  var pin = document.getElementById('pin-input').value
-  if (vault.session.isSoftLocked()) {
-    var result = await vault.session.resumeWithPin(pin)
-    if (result.success) {
-      log('Session resumed', 'success')
-    } else {
-      log(result.error, 'error')
-    }
-  } else {
-    var status = await vault.auth.initAuth()
-    if (status.hasLegacyPIN) {
-      var result = await vault.auth.authenticateLegacyPIN(pin)
-      if (result.success) {
-        vault.session.setMasterKey(result.masterKey)
-        log('Legacy PIN vault migrated. PIN is now session-only.', 'success')
-        if (result.requiresAuthSetup) {
-          log('Set a password or fingerprint now. PIN can no longer open the vault after restart.', 'error')
-        }
-      } else {
-        log(result.error, 'error')
-      }
-    } else {
-      log(vault.session.hasMasterKey() ? 'Already unlocked this session.' : 'No session PIN set. Unlock with password or fingerprint first.', 'error')
-    }
-  }
-  updateStatus()
-}
-
-window.showSetPassword = function() {
-  vault.auth.startPasswordCreation()
-  showModal('<h3>Set Password</h3><input type="password" id="modal-password" placeholder="8+ characters"><div style="margin-top:16px;"><button onclick="confirmSetPassword()">Set Password</button><button onclick="hideModal()" class="secondary">Cancel</button></div>')
-}
-
-window.confirmSetPassword = async function() {
-  var password = document.getElementById('modal-password').value
-  var masterKey = vault.session.getMasterKey()
-  var result = await vault.auth.setPassword(password, masterKey)
-  if (result.success) {
-    log('Password set', 'success')
     vault.session.setMasterKey(result.masterKey)
-  } else {
-    log('Set password failed: ' + result.error, 'error')
-  }
-  hideModal()
-  updateStatus()
+    if (el) el.value = ''
+    updateStatus(); routeView()
+  } else { log(result.error, 'error') }
 }
 
-window.authPassword = async function() {
-  var password = document.getElementById('password-input').value
-  var result = await vault.auth.authenticatePassword(password)
+window.resumePin = async function() {
+  var pin = document.getElementById('soft-pin').value
+  var result = await vault.auth.authenticatePIN(pin)
   if (result.success) {
-    log('Password auth success', 'success')
     vault.session.setMasterKey(result.masterKey)
-  } else {
-    log('Login failed: ' + result.error, 'error')
-  }
-  updateStatus()
+    document.getElementById('soft-pin').value = ''
+    updateStatus(); routeView()
+  } else { log(result.error || 'Incorrect PIN', 'error') }
 }
 
 window.showSaveCredential = function() {
@@ -2022,15 +2274,15 @@ window.loadCredentials = async function() {
   }).join('')
 }
 
-window.lockAll = function() {
-  if (vault.session.hasSessionPin()) {
-    vault.session.softLockNow()
-    log('Locked. Resume with your session PIN.', 'success')
+window.lockAll = async function() {
+  var status = await vault.auth.initAuth()
+  if (status.hasPIN) {
+    await vault.session.softLock()
   } else {
-    vault.session.lockAll()
-    log('Session locked', 'success')
+    await vault.session.lockAll()
   }
   updateStatus()
+  routeView()
 }
 
 window.clearAll = function() {

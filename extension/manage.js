@@ -31,8 +31,8 @@ const credentialsList = document.getElementById('credentials-list')
 const msgManage = document.getElementById('msg-manage')
 const msgSettings = document.getElementById('msg-settings')
 
-const toggleLockPopup = document.getElementById('toggle-lock-popup')
-const inputTimeout = document.getElementById('input-timeout')
+const inputSoftTimeout = document.getElementById('input-soft-timeout')
+const inputHardTimeout = document.getElementById('input-hard-timeout')
 const btnClearVault = document.getElementById('btn-clear-vault')
 
 function showTab(tabName) {
@@ -55,38 +55,39 @@ function showMsg(el, msg, type) {
   setTimeout(() => el.classList.add('hidden'), 3000)
 }
 
+function applyEnrollBtn(btn, enrolled) {
+  if (enrolled) {
+    btn.textContent = 'Re-enroll'
+    btn.classList.remove('enroll'); btn.classList.add('reenroll')
+  } else {
+    btn.textContent = 'Enroll'
+    btn.classList.remove('reenroll'); btn.classList.add('enroll')
+  }
+}
+
 async function loadAuthStatus() {
   const status = await auth.initAuth()
-  
+
   if (status.hasFingerprint) {
-    cardFp.classList.add('active')
-    statusFp.textContent = 'Enrolled'
-    btnEditFp.textContent = 'Edit'
+    cardFp.classList.add('active'); statusFp.textContent = 'Enrolled'
   } else {
-    cardFp.classList.remove('active')
-    statusFp.textContent = 'Not enrolled'
-    btnEditFp.textContent = 'Enroll'
+    cardFp.classList.remove('active'); statusFp.textContent = 'Not enrolled'
   }
-  
-  if (session.hasSessionPin()) {
-    cardPin.classList.add('active')
-    statusPin.textContent = 'Active this session'
-    btnEditPin.textContent = 'Edit'
+  applyEnrollBtn(btnEditFp, status.hasFingerprint)
+
+  if (status.hasPIN) {
+    cardPin.classList.add('active'); statusPin.textContent = 'Enrolled'
   } else {
-    cardPin.classList.remove('active')
-    statusPin.textContent = 'Not set'
-    btnEditPin.textContent = 'Set'
+    cardPin.classList.remove('active'); statusPin.textContent = 'Not enrolled'
   }
-  
+  applyEnrollBtn(btnEditPin, status.hasPIN)
+
   if (status.hasPassword) {
-    cardPw.classList.add('active')
-    statusPw.textContent = 'Set'
-    btnEditPw.textContent = 'Edit'
+    cardPw.classList.add('active'); statusPw.textContent = 'Enrolled'
   } else {
-    cardPw.classList.remove('active')
-    statusPw.textContent = 'Not set'
-    btnEditPw.textContent = 'Set'
+    cardPw.classList.remove('active'); statusPw.textContent = 'Not enrolled'
   }
+  applyEnrollBtn(btnEditPw, status.hasPassword)
 }
 
 async function loadAllCredentials() {
@@ -237,26 +238,19 @@ async function loadAllCredentials() {
 
 async function promptAuth() {
   const status = await auth.initAuth()
-  
+
+  // Editing requires a HARD unlock: fingerprint or password (never PIN).
   if (status.hasFingerprint) {
     const result = await auth.authenticateFingerprint()
     if (result.success) return { success: true, masterKey: result.masterKey }
   }
-  
-  if (session.isSoftLocked()) {
-    const pin = prompt('Enter session PIN:')
-    if (pin) {
-      const result = await session.resumeWithPin(pin)
-      if (result.success) return { success: true, masterKey: result.masterKey }
-    }
-  }
-  
+
   const pw = prompt('Enter Password:')
   if (pw) {
     const result = await auth.authenticatePassword(pw)
     if (result.success) return { success: true, masterKey: result.masterKey }
   }
-  
+
   return { success: false }
 }
 
@@ -266,23 +260,60 @@ function escapeHtml(str) {
   return div.innerHTML
 }
 
-btnEditFp.onclick = () => showMsg(msgManage, 'Fingerprint editing coming soon')
-btnEditPin.onclick = async () => {
-  if (!session.hasMasterKey()) {
-    showMsg(msgManage, 'Unlock first to set a session PIN', 'error')
-    return
-  }
-  const pin = prompt('Set a 4-6 digit session PIN:')
-  if (!pin) return
-  const result = await session.setSessionPin(pin)
+async function ensureUnlocked() {
+  if (session.hasMasterKey()) return session.getMasterKey()
+  const authResult = await promptAuth()
+  if (!authResult.success) return null
+  session.setMasterKey(authResult.masterKey)
+  return authResult.masterKey
+}
+
+btnEditFp.onclick = async () => {
+  const mk = await ensureUnlocked()
+  if (!mk) { showMsg(msgManage, 'Authentication required', 'error'); return }
+  auth.startFingerprintEnrollment()
+  const result = await auth.enrollFingerprint(mk)
   if (result.success) {
-    showMsg(msgManage, 'Session PIN set. Clears when browser closes.', 'success')
+    showMsg(msgManage, 'Fingerprint enrolled', 'success')
     loadAuthStatus()
   } else {
     showMsg(msgManage, result.error, 'error')
   }
 }
-btnEditPw.onclick = () => showMsg(msgManage, 'Password editing coming soon')
+
+btnEditPin.onclick = async () => {
+  const mk = await ensureUnlocked()
+  if (!mk) { showMsg(msgManage, 'Authentication required', 'error'); return }
+  const pin = prompt('Enter a 4-6 digit PIN:')
+  if (!pin) return
+  if (pin.length < 4 || pin.length > 6 || !/^\d+$/.test(pin)) {
+    showMsg(msgManage, 'PIN must be 4-6 digits', 'error'); return
+  }
+  auth.startPINCreation()
+  const result = await auth.setPIN(pin, mk)
+  if (result.success) {
+    showMsg(msgManage, 'PIN enrolled', 'success')
+    loadAuthStatus()
+  } else {
+    showMsg(msgManage, result.error, 'error')
+  }
+}
+
+btnEditPw.onclick = async () => {
+  const mk = await ensureUnlocked()
+  if (!mk) { showMsg(msgManage, 'Authentication required', 'error'); return }
+  const pw = prompt('Enter a password (8+ characters):')
+  if (!pw) return
+  if (pw.length < 8) { showMsg(msgManage, 'Password must be 8+ characters', 'error'); return }
+  auth.startPasswordCreation()
+  const result = await auth.setPassword(pw, mk)
+  if (result.success) {
+    showMsg(msgManage, 'Password enrolled', 'success')
+    loadAuthStatus()
+  } else {
+    showMsg(msgManage, result.error, 'error')
+  }
+}
 
 btnDelFp.onclick = async () => {
   if (confirm('Delete fingerprint authentication?')) {
@@ -297,10 +328,14 @@ btnDelFp.onclick = async () => {
 }
 
 btnDelPin.onclick = async () => {
-  if (confirm('Clear the session PIN?')) {
-    session.clearSessionPin()
-    showMsg(msgManage, 'Session PIN cleared', 'success')
-    loadAuthStatus()
+  if (confirm('Remove the PIN?')) {
+    const result = await auth.removePIN()
+    if (result.success) {
+      showMsg(msgManage, 'PIN removed', 'success')
+      loadAuthStatus()
+    } else {
+      showMsg(msgManage, result.error, 'error')
+    }
   }
 }
 
@@ -316,17 +351,18 @@ btnDelPw.onclick = async () => {
   }
 }
 
-toggleLockPopup.onclick = () => {
-  toggleLockPopup.classList.toggle('active')
-  const enabled = toggleLockPopup.classList.contains('active')
-  chrome.storage.local.set({ lockOnPopupClose: enabled })
-  showMsg(msgSettings, 'Setting saved', 'success')
+inputSoftTimeout.onchange = () => {
+  let m = parseInt(inputSoftTimeout.value) || 5
+  if (m < 1) m = 1
+  chrome.storage.local.set({ softLockTimeout: m })
+  showMsg(msgSettings, 'Soft-lock set to ' + m + ' minutes', 'success')
 }
 
-inputTimeout.onchange = () => {
-  const minutes = parseInt(inputTimeout.value) || 0
-  chrome.storage.local.set({ autoLockTimeout: minutes })
-  showMsg(msgSettings, 'Timeout set to ' + minutes + ' minutes', 'success')
+inputHardTimeout.onchange = () => {
+  let m = parseInt(inputHardTimeout.value) || 20
+  if (m < 1) m = 1
+  chrome.storage.local.set({ hardLockTimeout: m })
+  showMsg(msgSettings, 'Hard-lock set to ' + m + ' minutes', 'success')
 }
 
 btnClearVault.onclick = async () => {
@@ -342,7 +378,7 @@ btnClearVault.onclick = async () => {
   
   if (confirm2) {
     await store.clearAll()
-    session.lockAll()
+    await session.lockAll()
     await session.clearStorageSession()
     showMsg(msgSettings, 'Vault cleared. Redirecting to setup...', 'success')
     setTimeout(() => window.close(), 2000)
@@ -351,15 +387,18 @@ btnClearVault.onclick = async () => {
 
 tabs.forEach(tab => {
   tab.onclick = () => showTab(tab.dataset.tab)
+
+const btnBackupSync = document.getElementById('btn-backup-sync')
+if (btnBackupSync) btnBackupSync.onclick = () => showTab('sync')
 })
 
 async function init() {
   await loadAuthStatus()
   await loadAllCredentials()
   
-  const settings = await chrome.storage.local.get(['lockOnPopupClose', 'autoLockTimeout'])
-  if (settings.lockOnPopupClose) toggleLockPopup.classList.add('active')
-  if (settings.autoLockTimeout) inputTimeout.value = settings.autoLockTimeout
+  const settings = await chrome.storage.local.get(['softLockTimeout', 'hardLockTimeout'])
+  inputSoftTimeout.value = settings.softLockTimeout || 5
+  inputHardTimeout.value = settings.hardLockTimeout || 20
 }
 
 

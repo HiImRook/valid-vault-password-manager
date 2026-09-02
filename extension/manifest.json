@@ -1,11 +1,12 @@
 {
   "manifest_version": 3,
   "name": "Local Vault Password Manager",
-  "version": "0.3.4",
+  "version": "0.4.0",
   "description": "Decentralized password manager with fingerprint authentication",
   "permissions": [
     "storage",
-    "activeTab"
+    "activeTab",
+    "alarms"
   ],
   "action": {
     "default_popup": "popup.html",

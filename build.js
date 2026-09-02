@@ -65,28 +65,25 @@ const sessionModule = (function() {
 const {
   generateSalt,
   deriveKeyFromSecret,
-  masterKeyToCryptoKey,
-  encrypt,
-  decrypt
+  wrapMasterKey,
+  unwrapMasterKey
 } = cryptoModule
+const { getAuth } = storeModule
 ${session}
 return {
   setMasterKey,
   getMasterKey,
   hasMasterKey,
-  setSessionPin,
-  clearSessionPin,
-  hasSessionPin,
   isSoftLocked,
-  softLockNow,
-  resumeWithPin,
   unlockDomain,
   lockDomain,
   isDomainUnlocked,
   getUnlockedDomains,
   resetActivity,
   checkTimeout,
+  softLock,
   lockAll,
+  clearStorageSession,
   getState
 }
 })();
@@ -128,6 +125,10 @@ return {
   startPasswordCreation,
   setPassword,
   authenticatePassword,
+  startPINCreation,
+  setPIN,
+  authenticatePIN,
+  removePIN,
   authenticateLegacyPIN,
   removeFingerprint,
   removePassword,
@@ -203,9 +204,33 @@ window.onerror = function(msg, url, line) {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
-  log('Local Vault loaded')
   updateStatus()
+  initGlobe()
+  routeView()
 })
+
+function openWebsite() {
+  window.open('https://hiimrook.github.io/valid-vault-password-manager/', '_blank')
+}
+
+function initGlobe() {
+  var cv = document.getElementById('globe')
+  if (!cv) return
+  var ctx = cv.getContext('2d')
+  var CX = 90, CY = 90, R = 68
+  var tilt = -0.35, ang = 0
+  function rotY(p, a){ var c=Math.cos(a), s=Math.sin(a); return {x:p.x*c+p.z*s, y:p.y, z:-p.x*s+p.z*c} }
+  function rotX(p, a){ var c=Math.cos(a), s=Math.sin(a); return {x:p.x, y:p.y*c-p.z*s, z:p.y*s+p.z*c} }
+  var lats=[], lons=[], LAT=7, LON=12, SEG=48
+  for (var i=1;i<LAT+1;i++){ var phi=-Math.PI/2+(Math.PI*i/(LAT+1)); var ring=[]; for(var j=0;j<=SEG;j++){ var th=2*Math.PI*j/SEG; ring.push({x:Math.cos(phi)*Math.cos(th),y:Math.sin(phi),z:Math.cos(phi)*Math.sin(th)}) } lats.push(ring) }
+  for (var i2=0;i2<LON;i2++){ var th2=2*Math.PI*i2/LON; var mer=[]; for(var j2=0;j2<=SEG;j2++){ var phi2=-Math.PI/2+Math.PI*j2/SEG; mer.push({x:Math.cos(phi2)*Math.cos(th2),y:Math.sin(phi2),z:Math.cos(phi2)*Math.sin(th2)}) } lons.push(mer) }
+  function drawWire(pts, a, side){ for(var k=0;k<pts.length-1;k++){ var A=rotX(rotY(pts[k],a),tilt); var B=rotX(rotY(pts[k+1],a),tilt); var z=(A.z+B.z)/2; if(side==='back'&&z>=0)continue; if(side==='front'&&z<0)continue; var al=0.14+0.7*((z+1)/2); ctx.strokeStyle='rgba(51,255,102,'+al.toFixed(3)+')'; ctx.lineWidth=0.5+0.8*((z+1)/2); ctx.beginPath(); ctx.moveTo(CX+A.x*R,CY-A.y*R); ctx.lineTo(CX+B.x*R,CY-B.y*R); ctx.stroke() } }
+  var VT=-38, VB=44
+  function vPath(){ var ht=34, thick=18; var p=new Path2D(); p.moveTo(CX-ht,CY+VT); p.lineTo(CX,CY+VB); p.lineTo(CX+ht,CY+VT); p.lineTo(CX+ht-thick,CY+VT); p.lineTo(CX,CY+VB-thick*1.15); p.lineTo(CX-ht+thick,CY+VT); p.closePath(); return p }
+  function drawV(){ var path=vPath(); ctx.save(); var g=ctx.createLinearGradient(0,CY+VT,0,CY+VB); g.addColorStop(0,'rgba(51,255,102,1)'); g.addColorStop(1,'rgba(20,120,55,1)'); ctx.shadowColor='rgba(51,255,102,0.8)'; ctx.shadowBlur=8; ctx.fillStyle=g; ctx.fill(path); ctx.shadowBlur=0; ctx.save(); ctx.clip(path); ctx.strokeStyle='rgba(10,14,10,0.85)'; ctx.lineWidth=2; for(var y=CY+VT;y<=CY+VB;y+=5){ ctx.beginPath(); ctx.moveTo(CX-50,y); ctx.lineTo(CX+50,y); ctx.stroke() } ctx.restore(); ctx.lineWidth=1.2; ctx.strokeStyle='#7dffa6'; ctx.stroke(path); ctx.restore() }
+  function frame(){ ctx.clearRect(0,0,cv.width,cv.height); for(var a=0;a<lats.length;a++) drawWire(lats[a],ang,'back'); for(var b2=0;b2<lons.length;b2++) drawWire(lons[b2],ang,'back'); drawV(); for(var c=0;c<lats.length;c++) drawWire(lats[c],ang,'front'); for(var d=0;d<lons.length;d++) drawWire(lons[d],ang,'front'); ctx.strokeStyle='#33ff66'; ctx.lineWidth=1.5; ctx.beginPath(); ctx.arc(CX,CY,R,0,2*Math.PI); ctx.stroke(); ang+=0.005; requestAnimationFrame(frame) }
+  frame()
+}
 
 function log(msg, type) {
   var el = document.getElementById('log')
@@ -219,15 +244,17 @@ function log(msg, type) {
 async function updateStatus() {
   try {
     var status = await vault.auth.initAuth()
-    var state = vault.session.getState()
+    var unlocked = vault.session.hasMasterKey()
     document.getElementById('status-fingerprint').className = 'status ' + (status.hasFingerprint ? 'active' : 'inactive')
-    document.getElementById('status-pin').className = 'status ' + (state.hasSessionPin ? 'active' : 'inactive')
+    document.getElementById('status-pin').className = 'status ' + (status.hasPIN ? 'active' : 'inactive')
     document.getElementById('status-password').className = 'status ' + (status.hasPassword ? 'active' : 'inactive')
-    document.getElementById('status-session').className = 'status ' + (state.hasMasterKey ? 'active' : 'inactive')
-    log('Status updated')
-  } catch (e) {
-    log('Status error: ' + e.message, 'error')
-  }
+    document.getElementById('status-session').className = 'status ' + (unlocked ? 'active' : 'inactive')
+    // hamburger only visible when unlocked
+    var ham = document.querySelector('.hamburger')
+    if (ham) ham.style.display = unlocked ? '' : 'none'
+    var menu = document.getElementById('menu-dropdown')
+    if (menu && !unlocked) menu.classList.add('hidden')
+  } catch (e) {}
 }
 
 function showModal(html) {
@@ -240,113 +267,124 @@ function hideModal() {
   document.getElementById('modal-container').classList.add('hidden')
 }
 
-window.showEnrollFingerprint = async function() {
-  vault.auth.startFingerprintEnrollment()
-  log('Starting fingerprint enrollment...')
-  var masterKey = vault.session.getMasterKey()
-  var result = await vault.auth.enrollFingerprint(masterKey)
-  if (result.success) {
-    log('Fingerprint enrolled', 'success')
-    vault.session.setMasterKey(result.masterKey)
+// ---- View routing ----
+window.showPhoneView = function(name) {
+  ;['view-setup','view-locked','view-softlock','view-unlocked'].forEach(function(v){
+    var el = document.getElementById(v)
+    if (el) el.classList.add('hidden')
+  })
+  var show = document.getElementById(name)
+  if (show) show.classList.remove('hidden')
+}
+
+async function routeView() {
+  var status = await vault.auth.initAuth()
+  var unlocked = vault.session.hasMasterKey()
+  if (unlocked) {
+    window.showPhoneView('view-unlocked')
+    if (window.loadCredentials) window.loadCredentials()
+  } else if (await vault.session.isSoftLocked()) {
+    window.showPhoneView('view-softlock')
+  } else if (status.hasFingerprint || status.hasPIN || status.hasPassword) {
+    window.showPhoneView('view-locked')
   } else {
-    log('Enrollment failed: ' + result.error, 'error')
+    window.showPhoneView('view-setup')
+    refreshSetupButtons(status)
   }
+}
+
+function setEnrollBtn(btn, enrolled) {
+  if (!btn) return
+  if (enrolled) { btn.textContent = 'Re-enroll'; btn.classList.remove('enroll'); btn.classList.add('reenroll') }
+  else { btn.textContent = 'Enroll'; btn.classList.remove('reenroll'); btn.classList.add('enroll') }
+}
+
+function refreshSetupButtons(status) {
+  setEnrollBtn(document.getElementById('setup-fp-btn'), status.hasFingerprint)
+  setEnrollBtn(document.getElementById('setup-pin-btn'), status.hasPIN)
+  setEnrollBtn(document.getElementById('setup-pw-btn'), status.hasPassword)
+}
+
+function setupMsg(m) { var el = document.getElementById('setup-msg'); if (el) el.textContent = m }
+
+// ---- Setup enroll handlers ----
+window.enrollFp = async function() {
+  vault.auth.startFingerprintEnrollment()
+  var mk = vault.session.getMasterKey()
+  var result = await vault.auth.enrollFingerprint(mk)
+  if (result.success) {
+    vault.session.setMasterKey(result.masterKey)
+    setupMsg('Fingerprint enrolled')
+  } else { setupMsg(result.error) }
+  refreshSetupButtons(await vault.auth.initAuth())
   updateStatus()
 }
 
-window.authFingerprint = async function() {
-  log('Logging in with fingerprint...')
+window.enrollPin = async function() {
+  var pin = document.getElementById('setup-pin').value
+  if (pin.length < 4 || pin.length > 6 || !/^\d+$/.test(pin)) { setupMsg('PIN must be 4-6 digits'); return }
+  var mk = vault.session.getMasterKey()
+  vault.auth.startPINCreation()
+  var result = await vault.auth.setPIN(pin, mk)
+  if (result.success) {
+    vault.session.setMasterKey(result.masterKey)
+    document.getElementById('setup-pin').value = ''
+    setupMsg('PIN enrolled')
+  } else { setupMsg(result.error) }
+  refreshSetupButtons(await vault.auth.initAuth())
+  updateStatus()
+}
+
+window.enrollPw = async function() {
+  var pw = document.getElementById('setup-pw').value
+  if (pw.length < 8) { setupMsg('Password must be 8+ characters'); return }
+  var mk = vault.session.getMasterKey()
+  vault.auth.startPasswordCreation()
+  var result = await vault.auth.setPassword(pw, mk)
+  if (result.success) {
+    vault.session.setMasterKey(result.masterKey)
+    document.getElementById('setup-pw').value = ''
+    setupMsg('Password enrolled')
+  } else { setupMsg(result.error) }
+  refreshSetupButtons(await vault.auth.initAuth())
+  updateStatus()
+}
+
+window.finishSetup = async function() {
+  var status = await vault.auth.initAuth()
+  if (!(status.hasFingerprint || status.hasPassword)) { setupMsg('Enroll fingerprint or password first'); return }
+  updateStatus()
+  routeView()
+}
+
+// ---- Unlock handlers (hard + soft) ----
+window.unlockFp = async function() {
   var result = await vault.auth.authenticateFingerprint()
   if (result.success) {
-    log('Fingerprint auth success', 'success')
     vault.session.setMasterKey(result.masterKey)
-    if (result.requiresReenroll) {
-      log('Legacy fingerprint wrap migrated and removed. Enroll fingerprint again now.', 'error')
-    }
-  } else {
-    log('Login failed: ' + result.error, 'error')
-  }
-  updateStatus()
+    updateStatus(); routeView()
+  } else { log(result.error, 'error') }
 }
 
-window.showSetPIN = function() {
-  if (!vault.session.hasMasterKey()) {
-    log('Unlock vault first to set a session PIN', 'error')
-    return
-  }
-  showModal('<h3>Set Session PIN</h3><p style="color:#666;font-size:13px;">Quick unlock for this session only. Clears when the app closes.</p><input type="text" id="modal-pin" placeholder="4-6 digits" maxlength="6"><div style="margin-top:16px;"><button onclick="confirmSetPIN()">Set PIN</button><button onclick="hideModal()" class="secondary">Cancel</button></div>')
-}
-
-window.confirmSetPIN = async function() {
-  var pin = document.getElementById('modal-pin').value
-  var result = await vault.session.setSessionPin(pin)
+window.unlockPw = async function() {
+  var el = document.getElementById('lock-password') || document.getElementById('soft-password')
+  var pw = el ? el.value : ''
+  var result = await vault.auth.authenticatePassword(pw)
   if (result.success) {
-    log('Session PIN set. Clears when the app closes.', 'success')
-  } else {
-    log('Set PIN failed: ' + result.error, 'error')
-  }
-  hideModal()
-  updateStatus()
-}
-
-window.authPIN = async function() {
-  var pin = document.getElementById('pin-input').value
-  if (vault.session.isSoftLocked()) {
-    var result = await vault.session.resumeWithPin(pin)
-    if (result.success) {
-      log('Session resumed', 'success')
-    } else {
-      log(result.error, 'error')
-    }
-  } else {
-    var status = await vault.auth.initAuth()
-    if (status.hasLegacyPIN) {
-      var result = await vault.auth.authenticateLegacyPIN(pin)
-      if (result.success) {
-        vault.session.setMasterKey(result.masterKey)
-        log('Legacy PIN vault migrated. PIN is now session-only.', 'success')
-        if (result.requiresAuthSetup) {
-          log('Set a password or fingerprint now. PIN can no longer open the vault after restart.', 'error')
-        }
-      } else {
-        log(result.error, 'error')
-      }
-    } else {
-      log(vault.session.hasMasterKey() ? 'Already unlocked this session.' : 'No session PIN set. Unlock with password or fingerprint first.', 'error')
-    }
-  }
-  updateStatus()
-}
-
-window.showSetPassword = function() {
-  vault.auth.startPasswordCreation()
-  showModal('<h3>Set Password</h3><input type="password" id="modal-password" placeholder="8+ characters"><div style="margin-top:16px;"><button onclick="confirmSetPassword()">Set Password</button><button onclick="hideModal()" class="secondary">Cancel</button></div>')
-}
-
-window.confirmSetPassword = async function() {
-  var password = document.getElementById('modal-password').value
-  var masterKey = vault.session.getMasterKey()
-  var result = await vault.auth.setPassword(password, masterKey)
-  if (result.success) {
-    log('Password set', 'success')
     vault.session.setMasterKey(result.masterKey)
-  } else {
-    log('Set password failed: ' + result.error, 'error')
-  }
-  hideModal()
-  updateStatus()
+    if (el) el.value = ''
+    updateStatus(); routeView()
+  } else { log(result.error, 'error') }
 }
 
-window.authPassword = async function() {
-  var password = document.getElementById('password-input').value
-  var result = await vault.auth.authenticatePassword(password)
+window.resumePin = async function() {
+  var pin = document.getElementById('soft-pin').value
+  var result = await vault.auth.authenticatePIN(pin)
   if (result.success) {
-    log('Password auth success', 'success')
     vault.session.setMasterKey(result.masterKey)
-  } else {
-    log('Login failed: ' + result.error, 'error')
-  }
-  updateStatus()
+    document.getElementById('soft-pin').value = ''
+    updateStatus(); routeView()
+  } else { log(result.error || 'Incorrect PIN', 'error') }
 }
 
 window.showSaveCredential = function() {
@@ -385,15 +423,15 @@ window.loadCredentials = async function() {
   }).join('')
 }
 
-window.lockAll = function() {
-  if (vault.session.hasSessionPin()) {
-    vault.session.softLockNow()
-    log('Locked. Resume with your session PIN.', 'success')
+window.lockAll = async function() {
+  var status = await vault.auth.initAuth()
+  if (status.hasPIN) {
+    await vault.session.softLock()
   } else {
-    vault.session.lockAll()
-    log('Session locked', 'success')
+    await vault.session.lockAll()
   }
   updateStatus()
+  routeView()
 }
 
 window.clearAll = function() {

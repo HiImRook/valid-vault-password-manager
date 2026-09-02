@@ -3,79 +3,135 @@
 <head>
   <meta charset="UTF-8">
   <style>
+    @font-face {
+      font-family: 'Orbitron';
+      src: url('Orbitron.ttf') format('truetype');
+      font-weight: 700 900;
+      font-display: swap;
+    }
+    :root {
+      --bg: #0a0e0a;
+      --bg-raise: #0d130d;
+      --panel: #101710;
+      --green: #33ff66;
+      --green-dim: #1f9e40;
+      --green-faint: #163020;
+      --text: #b8f0c4;
+      --text-dim: #6fae7f;
+      --danger: #ff5555;
+    }
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { width: 320px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0a0a0a; color: #e0e0e0; }
+    body {
+      width: 340px;
+      font-family: "Courier New", "Consolas", "DejaVu Sans Mono", monospace;
+      background: var(--bg);
+      color: var(--text);
+    }
     .container { padding: 16px; }
-    .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
-    .header-icon { width: 40px; height: 40px; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; font-size: 20px; }
-    .header-icon.lock { color: #00d4aa; }
-    .header-icon.expand { color: #888; }
-    .header-label { font-size: 9px; color: #666; margin-top: 2px; }
-    h1 { color: #00d4aa; font-size: 18px; text-align: center; flex: 1; }
-    .section { background: #1a1a1a; border-radius: 8px; padding: 12px; margin-bottom: 10px; }
-    .section-title { color: #888; font-size: 11px; text-transform: uppercase; margin-bottom: 8px; }
-    button { background: #00d4aa; color: #000; border: none; padding: 10px 16px; border-radius: 6px; cursor: pointer; font-size: 13px; width: 100%; margin: 4px 0; }
-    button:hover { background: #00b894; }
-    button.secondary { background: #333; color: #e0e0e0; }
-    button.small { padding: 6px 10px; font-size: 11px; width: auto; }
-    input { background: #2a2a2a; border: 1px solid #444; color: #e0e0e0; padding: 8px; border-radius: 6px; width: 100%; margin: 4px 0; font-size: 13px; }
+    .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+    .header-icon { width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 20px; border-radius: 6px; transition: background 0.15s; }
+    .header-icon:hover { background: var(--green-faint); }
+    .header-icon.lock { color: var(--green); }
+    .header-icon.expand { color: var(--green); }
+    .ham { display: inline-block; width: 20px; height: 2px; background: var(--green); position: relative; box-shadow: 0 6px 0 var(--green), 0 -6px 0 var(--green); }
+    .wordmark {
+      font-family: 'Orbitron', sans-serif;
+      font-weight: 900;
+      color: var(--green);
+      font-size: 17px;
+      letter-spacing: 2px;
+      text-align: center;
+      flex: 1;
+      text-shadow: 0 0 8px rgba(51,255,102,0.4);
+    }
+    .wordmark.solo { margin-bottom: 14px; }
+    .menu-wrap { position: relative; }
+    .menu-dropdown { position: absolute; top: 40px; right: 0; background: var(--bg-raise); border: 1px solid var(--green-dim); border-radius: 6px; overflow: hidden; z-index: 50; min-width: 150px; box-shadow: 0 4px 16px rgba(0,0,0,0.5); }
+    .menu-item { padding: 12px 16px; color: var(--text); font-size: 13px; cursor: pointer; white-space: nowrap; }
+    .menu-item:hover { background: var(--green); color: #05140a; }
+    .section { background: var(--bg-raise); border: 1px solid var(--green-faint); border-radius: 8px; padding: 14px; margin-bottom: 10px; }
+    .section-title { color: var(--text-dim); font-size: 11px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; }
+    button {
+      background: var(--green); color: #05140a; border: none;
+      padding: 11px 16px; border-radius: 6px; cursor: pointer;
+      font-family: inherit; font-size: 13px; font-weight: 700; width: 100%; margin: 4px 0;
+      letter-spacing: 0.5px; transition: background 0.15s, box-shadow 0.15s;
+    }
+    button:hover { background: #5aff80; box-shadow: 0 0 14px rgba(51,255,102,0.25); }
+    button.secondary { background: transparent; color: var(--green); border: 1px solid var(--green-dim); font-weight: 400; }
+    button.secondary:hover { background: var(--green-faint); box-shadow: none; }
+    button.small { padding: 8px 12px; font-size: 12px; width: auto; }
+    button.enroll { background: var(--green); color: #05140a; }
+    button.reenroll { background: transparent; color: var(--danger); border: 1px solid var(--danger); font-weight: 400; }
+    button.reenroll:hover { background: rgba(255,85,85,0.12); box-shadow: none; }
+    .enroll-row { display: flex; gap: 6px; align-items: center; margin: 6px 0; }
+    .enroll-row .label { flex: 1; font-size: 13px; color: var(--text); }
+    .enroll-row .state { font-size: 11px; color: var(--text-dim); margin-right: 6px; }
+    button.danger { background: transparent; color: var(--danger); border: 1px solid var(--danger); font-weight: 400; }
+    button.danger:hover { background: rgba(255,85,85,0.12); box-shadow: none; }
+    input {
+      background: var(--bg); border: 1px solid var(--green-faint); color: var(--text);
+      padding: 10px; border-radius: 6px; width: 100%; margin: 4px 0;
+      font-family: inherit; font-size: 13px;
+    }
+    input:focus { outline: none; border-color: var(--green-dim); box-shadow: 0 0 0 2px rgba(51,255,102,0.1); }
+    input::placeholder { color: var(--text-dim); }
     .row { display: flex; gap: 6px; align-items: center; }
     .row input { flex: 1; }
-    .status-bar { display: flex; gap: 6px; margin-bottom: 12px; justify-content: center; }
-    .status { padding: 4px 10px; border-radius: 10px; font-size: 10px; background: #333; color: #666; }
-    .status.active { background: #00d4aa; color: #000; }
-    .credential-item { background: #222; border-radius: 6px; padding: 10px; margin: 6px 0; }
-    .credential-domain { color: #00d4aa; font-size: 12px; font-weight: 500; }
-    .credential-user { color: #888; font-size: 11px; }
+    .status-bar { display: flex; gap: 6px; margin-bottom: 14px; justify-content: center; }
+    .status { padding: 4px 12px; border-radius: 4px; font-size: 10px; letter-spacing: 1px; background: var(--panel); color: var(--text-dim); border: 1px solid var(--green-faint); }
+    .status.active { background: var(--green); color: #05140a; border-color: var(--green); font-weight: 700; }
+    .credential-item { background: var(--panel); border: 1px solid var(--green-faint); border-radius: 6px; padding: 11px; margin: 6px 0; }
+    .credential-domain { color: var(--green); font-size: 13px; font-weight: 700; }
+    .credential-user { color: var(--text-dim); font-size: 12px; margin-top: 2px; }
     .credential-actions { display: flex; gap: 6px; margin-top: 8px; }
     .hidden { display: none !important; }
-    .msg { font-size: 11px; color: #888; text-align: center; padding: 8px; }
-    .msg.error { color: #e74c3c; }
-    .msg.success { color: #00d4aa; }
-    p { font-size: 12px; color: #888; line-height: 1.4; margin-bottom: 8px; }
+    .msg { font-size: 11px; color: var(--text-dim); text-align: center; padding: 8px; min-height: 8px; }
+    .msg.error { color: var(--danger); }
+    .msg.success { color: var(--green); }
+    p { font-size: 12px; color: var(--text-dim); line-height: 1.5; margin-bottom: 10px; }
+    #current-domain { color: var(--green); font-size: 13px; margin-bottom: 10px; word-break: break-all; }
   </style>
 </head>
 <body>
   <div class="container">
-    
+
     <div id="view-setup" class="hidden">
-      <h1>Local Vault</h1>
-      <div class="status-bar">
-        <span class="status" id="setup-status-fp">FP</span>
-        <span class="status" id="setup-status-pin">PIN</span>
-        <span class="status" id="setup-status-pw">PW</span>
-      </div>
+      <div class="wordmark solo">VALID VAULT</div>
       <div class="section">
-        <div class="section-title">SETUP VAULT</div>
-        <p>No vault found. Create one:</p>
-        <button id="btn-setup-fp">Setup with Fingerprint</button>
-        <button class="secondary small" id="btn-skip-fp">Skip (Optional)</button>
-        <div class="row" style="margin-top:8px;">
-          <input type="password" id="setup-pin" placeholder="Set PIN (4-6 digits)" maxlength="6">
-          <button class="small" id="btn-setup-pin">Set</button>
+        <div class="section-title">Set Up Your Vault</div>
+        <p>Enroll at least one unlock method to create your vault. Fingerprint or password can unlock the vault; a PIN quickly resumes an idle session.</p>
+
+        <div class="enroll-row">
+          <span class="label">Fingerprint</span>
+          <span class="state" id="setup-state-fp"></span>
+          <button class="small enroll" id="btn-setup-fp">Enroll</button>
         </div>
-        <div class="row">
-          <input type="password" id="setup-password" placeholder="Set Password (8+ chars)">
-          <button class="small" id="btn-setup-pw">Set</button>
+
+        <div class="enroll-row">
+          <input type="password" id="setup-pin" placeholder="PIN (4-6 digits)" maxlength="6">
+          <button class="small enroll" id="btn-setup-pin">Enroll</button>
         </div>
+
+        <div class="enroll-row">
+          <input type="password" id="setup-password" placeholder="Password (8+ chars)">
+          <button class="small enroll" id="btn-setup-pw">Enroll</button>
+        </div>
+
+        <button id="btn-setup-done" style="margin-top:10px;">Finish &amp; Unlock</button>
         <div id="msg-setup" class="msg"></div>
       </div>
     </div>
 
     <div id="view-locked" class="hidden">
-      <h1>Local Vault</h1>
+      <div class="wordmark solo">VALID VAULT</div>
       <div class="status-bar">
         <span class="status" id="status-fp">FP</span>
-        <span class="status" id="status-pin">PIN</span>
         <span class="status" id="status-pw">PW</span>
       </div>
       <div class="section">
         <button id="btn-fingerprint">Unlock with Fingerprint</button>
         <div class="row" style="margin-top:8px;">
-          <input type="password" id="input-pin" placeholder="PIN" maxlength="6">
-          <button class="small" id="btn-pin">Go</button>
-        </div>
-        <div class="row">
           <input type="password" id="input-password" placeholder="Password">
           <button class="small" id="btn-password">Go</button>
         </div>
@@ -83,24 +139,44 @@
       <div id="msg-locked" class="msg"></div>
     </div>
 
+    <div id="view-softlock" class="hidden">
+      <div class="wordmark solo">VALID VAULT</div>
+      <div class="status-bar">
+        <span class="status active" id="status-session-soft">Idle - Locked</span>
+      </div>
+      <div class="section">
+        <div class="section-title">Resume Session</div>
+        <div class="row">
+          <input type="password" id="input-softpin" placeholder="PIN" maxlength="6">
+          <button class="small" id="btn-softpin">Resume</button>
+        </div>
+        <button class="secondary" id="btn-soft-fingerprint" style="margin-top:8px;">Unlock with Fingerprint</button>
+        <div class="row">
+          <input type="password" id="input-softpassword" placeholder="Password">
+          <button class="small" id="btn-soft-password">Go</button>
+        </div>
+      </div>
+      <div id="msg-softlock" class="msg"></div>
+    </div>
+
     <div id="view-unlocked" class="hidden">
       <div class="header">
-        <div class="header-icon lock" id="btn-lock">
-          🔓
-          <div class="header-label">Lock</div>
-        </div>
-        <h1>Local Vault</h1>
-        <div class="header-icon expand" id="btn-expand">
-          ▭
-          <div class="header-label">Expand</div>
+        <div class="header-icon lock" id="btn-lock" title="Lock">&#128275;</div>
+        <div class="wordmark">VALID VAULT</div>
+        <div class="menu-wrap">
+          <div class="header-icon expand" id="btn-expand" title="Menu"><span class="ham"></span></div>
+          <div class="menu-dropdown hidden" id="menu-dropdown">
+            <div class="menu-item" id="menu-settings">Settings Menu</div>
+            <div class="menu-item" id="menu-website">Website</div>
+          </div>
         </div>
       </div>
       <div class="status-bar">
         <span class="status active" id="status-session">Session</span>
       </div>
       <div class="section">
-        <div class="section-title">CURRENT SITE</div>
-        <div id="current-domain" style="color:#00d4aa;font-size:13px;margin-bottom:8px;">-</div>
+        <div class="section-title">Current Site</div>
+        <div id="current-domain">-</div>
         <div id="credentials-list"></div>
         <button class="secondary" id="btn-add">Add Credential</button>
       </div>
@@ -108,7 +184,7 @@
     </div>
 
     <div id="view-add" class="hidden">
-      <h1>Add Credential</h1>
+      <div class="wordmark solo">Add Credential</div>
       <div class="section">
         <input type="text" id="add-domain" placeholder="Domain">
         <input type="text" id="add-username" placeholder="Username">
