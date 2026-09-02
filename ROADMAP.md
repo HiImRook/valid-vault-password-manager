@@ -1,11 +1,28 @@
 # Valid Vault - Development Roadmap
 
-**Current Version:** v0.3.5
-**Status:** v0.3.5 released (Pre-1.0 development)
+**Current Version:** v0.4.0
+**Status:** v0.4.0 released (Pre-1.0 development)
 
 ---
 
 ## Version History (Completed)
+
+### v0.4.0 - Terminal-Green Rebrand and Reworked Lock Model (Sep 2026)
+- ✅ Terminal-green identity across extension and phone — Orbitron wordmark, monospace UI, off-black background
+- ✅ Valid globe logo — rotating wireframe globe with a sliced V, live in the phone header and animated on the sites
+- ✅ PIN redefined as a permanent credential that only resumes a soft-locked idle session, never a hard unlock
+- ✅ Soft-lock and hard-lock split — Lock soft-locks when a PIN is set, otherwise hard-locks; browser close always hard-locks
+- ✅ Configurable Soft-lock and Hard-lock timers in Settings, defaulting to 5 and 20 minutes
+- ✅ Fingerprint and password are the two hard unlocks; the hard-lock screen shows them only, not the PIN
+- ✅ Enroll and Re-enroll controls — green to enroll, red to re-enroll — on extension setup and manage
+- ✅ Extension hamburger dropdown with Settings Menu and Website
+- ✅ Phone enroll/re-enroll setup with routing across setup, hard-lock, soft-lock, and unlocked views
+- ✅ Developer log removed from the phone's user-facing screen
+- ✅ Fixed a phone bundle crash caused by module function lists drifting from the reworked session and auth modules
+- ⚠️ Phone sync surface present but not yet wired end to end
+- ⚠️ Per-method auth edit and delete still deferred on the phone
+- ⚠️ Personal Info still a placeholder on both surfaces
+- ⚠️ WebAuthn RP name stays "Local Vault" in code to preserve enrolled fingerprints
 
 ### v0.3.5 - Stateless Sync (Aug 2026)
 - ✅ Pairing/handshake/key-exchange model removed entirely
@@ -20,10 +37,6 @@
 - ✅ Clear Vault moved into a guarded Settings tab
 - ✅ About sections updated to Valid Vault branding and current repository
 - ✅ Versions aligned across app and extension
-- ⚠️ Phone sync buttons stubbed — fountain codec, QR display, and mlkit scanning not yet wired into the phone bundle
-- ⚠️ Browser Import depends on BarcodeDetector — inconsistent on Windows desktop, no decoder fallback yet
-- ⚠️ Phone auth management exposes enroll/set only — per-method edit and delete deferred
-- ⚠️ WebAuthn RP name stays "Local Vault" in code to preserve enrolled fingerprints
 
 ### v0.3.4 - Streaming Sync (Aug 2026)
 - ✅ fountain.js — plain LT fountain codec, byte-exact reconstruction under dropped, shuffled, and duplicate frames
@@ -56,7 +69,7 @@
 - ✅ WebAuthn PRF fingerprint binding
 - ✅ Verify-by-unwrap — no stored password or PIN hashes
 - ✅ PBKDF2 600k iterations
-- ✅ Ephemeral session PIN
+- ✅ Session PIN system (later redefined in v0.4.0)
 
 ### v0.2.0-alpha - Vault Foundation (Nov 2025)
 - ✅ WebCrypto + IndexedDB local encrypted vault
@@ -67,80 +80,71 @@
 
 ## Upcoming Releases
 
-### v0.3.6 - Phone Sync Functional (Target: Aug 2026)
+### v0.4.1 - Phone Lock and Auth Parity (Target: Q3 2026)
 
-**Primary goal:** Make the phone's three sync buttons actually work, bringing the phone to sync parity with the extension's send side.
+**Primary goal:** Bring the phone's lock model and auth management to parity with the extension.
 
 **In scope:**
-- Inject the fountain codec and a QR generator into the phone bundle
-- Add a QR display surface to the phone for Sync Vault and Get Sync Key
-- Wire Import to the mlkit camera scanner feeding the fountain decoder
-- Auto-detect key vs vault payloads on Import and route each correctly
-- Verify browser-to-phone and phone-to-browser sync end to end on real hardware
+- Verify soft-lock and hard-lock timer enforcement on the phone across Capacitor WebView
+- Per-method auth edit and delete on the phone Manage tab
+- Confirm enroll/re-enroll parity and the hard-lock vs soft-lock screens on device
+
+**Out of scope:**
+- Any change to the sync payload format or security model
+
+**Completion criteria:**
+- Phone soft-locks and hard-locks on their configured timers
+- Phone Manage can edit and delete each auth method
+- Hard-lock requires fingerprint or password on the phone, PIN resumes soft-lock only
+
+### v0.4.2 - Phone Sync Functional (Target: Q3 2026)
+
+**Primary goal:** Wire the phone's sync surface end to end so it reaches the extension's send and receive parity.
+
+**In scope:**
+- Fountain codec and QR display driven on the phone for Sync Vault and Get Sync Key
+- Import wired to the mlkit camera scanner feeding the fountain decoder
+- End-to-end browser-to-phone and phone-to-browser verification on real hardware
 - A visible cancel path during any active phone scan
 
-**Out of scope until phone sync is stable:**
-- Phone auth-method edit and delete
-- Personal Info implementation
+**Out of scope:**
 - Any redesign of the merge or transport model
 
 **Completion criteria:**
 - Phone Sync Vault streams a cycling fountain QR
 - Phone Import scans a stream and completes a merge
 - A full round trip converges both devices to the same vault
-- Cancel exits any scan cleanly without killing the app
-
-### v0.3.7 - Browser Receive Fallback (Target: Q3 2026)
-
-**Primary goal:** Make the browser able to receive on machines where the native BarcodeDetector is unavailable or unreliable.
-
-**In scope:**
-- Detect when BarcodeDetector is missing or returns no supported formats
-- Vendored inline QR decoder fallback that runs without a worker under MV3 CSP
-- Keep native BarcodeDetector as the default path when it works
-- Clear send-only messaging on devices with no camera
-
-**Out of scope:**
-- Any change to the sync payload format or security model
-
-**Completion criteria:**
-- Browser Import works on Windows desktop regardless of BarcodeDetector state
-- Native path still used where available
-- Camera-less devices clearly fall back to send-only
 
 ---
 
-## Future Considerations (v0.4.0+)
-
-### Phone Feature Parity
-- Per-method auth edit and delete on the phone Manage tab
-- Auto-lock timeout enforcement wired to the setting
-- Phone reaching full parity with the extension's manage surface
+## Future Considerations (v0.5.0+)
 
 ### Personal Info
 - Store addresses, credit cards, IDs, and other personal information
 - Same local encryption and sync model as credentials
 - Currently a placeholder on both surfaces
 
+### Vault Schema Hardening
+- Single-blob vault encryption so the site list is not readable at rest
+- Vault format version bump with migration
+- Fresh IV discipline audit across all encrypt paths
+
+### Platform Hardening
+- Android hardware keystore binding via Capacitor plugin
+- PRF fallback strategy per device capability
+- Web build parity decisions
+
 ### Onboarding and Discovery
 - Play Store prompt when a generic scanner reads a Valid Vault frame without the app installed
 - Guided first-sync flow that explains Get Sync Key before Sync Vault
-
-### Additional Surfaces
-- Tablet and other devices brought to parity using the same stateless method
-- Each surface shows and scans identically, no surface is special
-
-### Optional Bulk Transport
-- USB or local-file transfer as a deep-setting option for very large first syncs
-- Visual sync remains the default; bulk is opt-in for power users
 
 ---
 
 ## Known Limitations
 
-⚠️ **Phone sync not functional yet** — buttons stubbed; fountain codec, QR display, and mlkit scanning not wired into the phone bundle
-⚠️ **Browser Import depends on BarcodeDetector** — inconsistent on Windows desktop; no vendored decoder fallback yet
-⚠️ **Phone auth management is enroll/set only** — per-method edit and delete deferred
+⚠️ **Phone sync not wired end to end yet** — the sync surface is present but not functional
+⚠️ **Phone lock timers need on-device verification** across Capacitor WebView versions
+⚠️ **Phone auth management is enroll/re-enroll only** — per-method edit and delete deferred
 ⚠️ **Personal Info is a placeholder** on both surfaces
 ⚠️ **WebAuthn RP name remains "Local Vault" in code** — changing it would invalidate enrolled fingerprints, so it is deliberately left unchanged
 ⚠️ **Sync security is physical** — the key and vault travel in the stream; sync in a private area, the same trust as typing a password
@@ -161,4 +165,4 @@ MIT License - See LICENSE file for details
 
 ---
 
-**Last Updated:** Aug 15, 2026
+**Last Updated:** Sep 1, 2026
