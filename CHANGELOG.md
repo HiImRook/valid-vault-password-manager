@@ -5,6 +5,36 @@ All notable changes to Local Vault will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-09-06
+
+This release is a hardening and feature-completion pass driven by internal Play Store testing. Most changes are bug fixes and feature fixes surfaced by running the app on real devices.
+
+### Added
+- Native Android biometric unlock. The phone now uses Android's BiometricPrompt backed by a hardware-backed Keystore key, rather than web WebAuthn. The master key is wrapped by a Keystore key that requires user authentication, so at rest it is protected by device hardware.
+- System PIN as a hard unlock. The device's own PIN/pattern (device credential) unlocks the vault alongside fingerprint, both drive the same Keystore-wrapped master key.
+- Show/hide eye toggle on every PIN and password field, across the setup, unlock, and manage screens. All secret fields mask by default.
+
+### Changed
+- Device unlock replaces the custom app PIN on the phone. Enrolling "device unlock" links the vault to the system authenticator (fingerprint or system PIN). There is no separate app-managed PIN to type.
+- All unlock methods (fingerprint, password, system PIN) are full unlocks. Password remains the universal fallback and the method used for device-to-device sync.
+- The front screen no longer shows credential management. Once unlocked it points to the menu; credentials, sync, and settings live there.
+- Setup copy reworded to describe linking device unlock and setting a backup password.
+
+### Fixed
+- WebAuthn fingerprint failed on the phone with "Error connecting to web authentication service." Root cause: browser WebAuthn does not work inside the Android Capacitor WebView. Resolved by moving the phone to native BiometricPrompt.
+- PIN entry rejected valid 4-6 digit PINs on mobile due to keyboard-injected characters. Inputs are now trimmed and use a numeric keyboard. (Superseded on phone by the move to system PIN.)
+- Clear Vault appeared not to delete and could strand the app on a stale unlocked screen with no menu. It now fully wipes the vault, credentials, and the native Keystore key, then returns to a clean setup screen.
+- Settings-page enroll buttons did nothing. They now use the working enroll flow with Enroll and Re-enroll states.
+- Fixed phone bundle module wiring so the app no longer fails to render from stale function lists.
+
+### Security model
+- On the phone, the master key at rest is encrypted by a hardware Keystore key that only a successful device authentication (fingerprint or system PIN) can use. On the extension, fingerprint unlock is Windows Hello, which already covers the Hello PIN. Password remains available on both surfaces and is required for syncing between devices.
+
+### Notes
+- The WebAuthn RP name remains "Local Vault" in code even though the UI reads "Valid Vault", changing it would invalidate existing enrollments.
+- Phone sync remains a work in progress. Personal Info is still a placeholder.
+- Version numbers across the app and extension are aligned to 0.5.0.
+
 ## [0.4.0] - 2026-09-01
 
 ### Added
