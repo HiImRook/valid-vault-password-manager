@@ -1,6 +1,6 @@
 {
   "name": "local-vault-password-manager",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Decentralized password manager with fingerprint authentication",
   "dependencies": {
     "@capacitor-mlkit/barcode-scanning": "^7.5.0",

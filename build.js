@@ -209,9 +209,58 @@ document.addEventListener('DOMContentLoaded', function() {
   routeView()
 })
 
+
+window.togglePw = function(btn) {
+  var id = btn.getAttribute('data-target')
+  var input = document.getElementById(id)
+  if (!input) return
+  if (input.type === 'password') {
+    input.type = 'text'
+    btn.style.color = 'var(--green)'
+  } else {
+    input.type = 'password'
+    btn.style.color = ''
+  }
+}
+
 function openWebsite() {
   window.open('https://hiimrook.github.io/valid-vault-password-manager/', '_blank')
 }
+
+// ---- Native biometric bridge (Android Capacitor plugin) ----
+function nativeBiometric() {
+  try {
+    if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.BiometricVault) {
+      return window.Capacitor.Plugins.BiometricVault
+    }
+  } catch (e) {}
+  return null
+}
+function bytesToB64(bytes) {
+  var bin = ''; var arr = new Uint8Array(bytes)
+  for (var i = 0; i < arr.length; i++) bin += String.fromCharCode(arr[i])
+  return btoa(bin)
+}
+function b64ToBytes(b64) {
+  var bin = atob(b64); var arr = new Uint8Array(bin.length)
+  for (var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i)
+  return arr
+}
+async function nativeBioAvailable() {
+  var bv = nativeBiometric()
+  if (!bv) return false
+  try { var r = await bv.isAvailable(); return !!r.available } catch (e) { return false }
+}
+async function masterKeyBytesFromSession() {
+  var mk = vault.session.getMasterKey()
+  if (!mk) return null
+  if (mk instanceof CryptoKey) {
+    return new Uint8Array(await crypto.subtle.exportKey('raw', mk))
+  }
+  return new Uint8Array(mk)
+}
+
+
 
 function initGlobe() {
   var cv = document.getElementById('globe')
@@ -243,10 +292,9 @@ function log(msg, type) {
 
 async function updateStatus() {
   try {
-    var status = await vault.auth.initAuth()
+    var status = await getPhoneStatus()
     var unlocked = vault.session.hasMasterKey()
     document.getElementById('status-fingerprint').className = 'status ' + (status.hasFingerprint ? 'active' : 'inactive')
-    document.getElementById('status-pin').className = 'status ' + (status.hasPIN ? 'active' : 'inactive')
     document.getElementById('status-password').className = 'status ' + (status.hasPassword ? 'active' : 'inactive')
     document.getElementById('status-session').className = 'status ' + (unlocked ? 'active' : 'inactive')
     // hamburger only visible when unlocked
@@ -277,15 +325,42 @@ window.showPhoneView = function(name) {
   if (show) show.classList.remove('hidden')
 }
 
-async function routeView() {
+
+
+function fieldVal(setupId, manageId) {
+  var s = document.getElementById(setupId)
+  var m = document.getElementById(manageId)
+  // prefer whichever is visible/non-empty
+  if (m && m.offsetParent !== null && m.value) return { el: m, val: m.value }
+  if (s && s.offsetParent !== null && s.value) return { el: s, val: s.value }
+  if (m && m.value) return { el: m, val: m.value }
+  if (s && s.value) return { el: s, val: s.value }
+  return { el: (m || s), val: (m ? m.value : (s ? s.value : '')) }
+}
+function anyMsg(text) {
+  var ids = ['setup-msg','manage-msg']
+  for (var i=0;i<ids.length;i++){ var e=document.getElementById(ids[i]); if(e && e.offsetParent!==null){ e.textContent=text; return } }
+  for (var j=0;j<ids.length;j++){ var e2=document.getElementById(ids[j]); if(e2){ e2.textContent=text } }
+}
+
+async function getPhoneStatus() {
   var status = await vault.auth.initAuth()
+  try {
+    var auth = await vault.store.getAuth() || {}
+    if (auth.fingerprintNative) status.hasFingerprint = true
+  } catch (e) {}
+  return status
+}
+
+async function routeView() {
+  var status = await getPhoneStatus()
   var unlocked = vault.session.hasMasterKey()
   if (unlocked) {
     window.showPhoneView('view-unlocked')
     if (window.loadCredentials) window.loadCredentials()
   } else if (await vault.session.isSoftLocked()) {
     window.showPhoneView('view-softlock')
-  } else if (status.hasFingerprint || status.hasPIN || status.hasPassword) {
+  } else if (status.hasFingerprint || status.hasPassword) {
     window.showPhoneView('view-locked')
   } else {
     window.showPhoneView('view-setup')
@@ -301,57 +376,89 @@ function setEnrollBtn(btn, enrolled) {
 
 function refreshSetupButtons(status) {
   setEnrollBtn(document.getElementById('setup-fp-btn'), status.hasFingerprint)
-  setEnrollBtn(document.getElementById('setup-pin-btn'), status.hasPIN)
   setEnrollBtn(document.getElementById('setup-pw-btn'), status.hasPassword)
+  setEnrollBtn(document.getElementById('manage-fp-btn'), status.hasFingerprint)
+  setEnrollBtn(document.getElementById('manage-pw-btn'), status.hasPassword)
 }
 
 function setupMsg(m) { var el = document.getElementById('setup-msg'); if (el) el.textContent = m }
 
 // ---- Setup enroll handlers ----
 window.enrollFp = async function() {
-  vault.auth.startFingerprintEnrollment()
-  var mk = vault.session.getMasterKey()
-  var result = await vault.auth.enrollFingerprint(mk)
-  if (result.success) {
-    vault.session.setMasterKey(result.masterKey)
-    setupMsg('Fingerprint enrolled')
-  } else { setupMsg(result.error) }
-  refreshSetupButtons(await vault.auth.initAuth())
+  if (!(await requireVaultOrError())) return
+  var bv = nativeBiometric()
+  if (!bv || !(await nativeBioAvailable())) {
+    anyMsg('Fingerprint is not available on this device. Use password or PIN.')
+    return
+  }
+  // Need a master key to wrap. If vault is fresh and unlocked from a prior enroll, use it;
+  // otherwise require another method first so there is a master key to bind.
+  var mkBytes = await masterKeyBytesFromSession()
+  var auth = await vault.store.getAuth() || {}
+  if (!mkBytes) {
+    if (auth.fingerprintNative || auth.passwordWrappedKey || auth.pinWrappedKey) {
+      anyMsg('Unlock first to add fingerprint.')
+    } else {
+      // brand new vault: generate a master key via the crypto module by enrolling nothing else yet
+      anyMsg('Set a password or PIN first, then add fingerprint.')
+    }
+    return
+  }
+  try {
+    var res = await bv.enroll({ masterKey: bytesToB64(mkBytes) })
+    auth = await vault.store.getAuth() || {}
+    auth.fingerprintNative = { wrapped: res.wrapped, iv: res.iv }
+    auth.fingerprintEnabled = true
+    await vault.store.setAuth(auth)
+    anyMsg('Fingerprint enrolled')
+  } catch (e) {
+    var msg = (e && e.message) ? e.message : String(e)
+    if (/cancel/i.test(msg)) { anyMsg('Fingerprint enrollment canceled.') }
+    else { anyMsg('Fingerprint is not available on this device. Use password or PIN.') }
+  }
+  refreshSetupButtons(await getPhoneStatus())
   updateStatus()
 }
 
-window.enrollPin = async function() {
-  var pin = document.getElementById('setup-pin').value
-  if (pin.length < 4 || pin.length > 6 || !/^\d+$/.test(pin)) { setupMsg('PIN must be 4-6 digits'); return }
-  var mk = vault.session.getMasterKey()
-  vault.auth.startPINCreation()
-  var result = await vault.auth.setPIN(pin, mk)
-  if (result.success) {
-    vault.session.setMasterKey(result.masterKey)
-    document.getElementById('setup-pin').value = ''
-    setupMsg('PIN enrolled')
-  } else { setupMsg(result.error) }
-  refreshSetupButtons(await vault.auth.initAuth())
-  updateStatus()
+
+function isManageActive() {
+  var p = document.getElementById('page-menu')
+  return p && p.classList.contains('active')
 }
+async function requireVaultOrError() {
+  var mk = vault.session.getMasterKey()
+  if (mk) return true
+  // No live master key. On the manage screen this means post-nuke/locked -> send to main.
+  if (isManageActive()) {
+    var auth = {}
+    try { auth = await vault.store.getAuth() || {} } catch (e) {}
+    var hasAny = !!(auth.fingerprintNative || auth.passwordWrappedKey || auth.pinWrappedKey || auth.fingerprintWrappedKey)
+    if (!hasAny) { anyMsg('Go to the main screen to set up your vault first.'); return false }
+    anyMsg('Unlock first from the main screen.'); return false
+  }
+  return true
+}
+
 
 window.enrollPw = async function() {
-  var pw = document.getElementById('setup-pw').value
-  if (pw.length < 8) { setupMsg('Password must be 8+ characters'); return }
+  if (!(await requireVaultOrError())) return
+  var fp = fieldVal('setup-pw','manage-pw')
+  var pw = fp.val || ''
+  if (pw.length < 8) { anyMsg('Password must be 8+ characters'); return }
   var mk = vault.session.getMasterKey()
   vault.auth.startPasswordCreation()
   var result = await vault.auth.setPassword(pw, mk)
   if (result.success) {
     vault.session.setMasterKey(result.masterKey)
-    document.getElementById('setup-pw').value = ''
-    setupMsg('Password enrolled')
-  } else { setupMsg(result.error) }
-  refreshSetupButtons(await vault.auth.initAuth())
+    if (fp.el) fp.el.value = ''
+    anyMsg('Password enrolled')
+  } else { anyMsg(result.error) }
+  refreshSetupButtons(await getPhoneStatus())
   updateStatus()
 }
 
 window.finishSetup = async function() {
-  var status = await vault.auth.initAuth()
+  var status = await getPhoneStatus()
   if (!(status.hasFingerprint || status.hasPassword)) { setupMsg('Enroll fingerprint or password first'); return }
   updateStatus()
   routeView()
@@ -359,6 +466,22 @@ window.finishSetup = async function() {
 
 // ---- Unlock handlers (hard + soft) ----
 window.unlockFp = async function() {
+  var bv = nativeBiometric()
+  var auth = await vault.store.getAuth() || {}
+  if (bv && auth.fingerprintNative) {
+    try {
+      var res = await bv.unlock({ wrapped: auth.fingerprintNative.wrapped, iv: auth.fingerprintNative.iv })
+      var bytes = b64ToBytes(res.masterKey)
+      var ck = await crypto.subtle.importKey('raw', bytes, { name: 'AES-GCM', length: 256 }, true, ['encrypt','decrypt'])
+      vault.session.setMasterKey(ck)
+      updateStatus(); routeView()
+      return
+    } catch (e) {
+      log('Fingerprint unlock failed. Use password or PIN.', 'error')
+      return
+    }
+  }
+  // fallback to web path (extension parity / non-native)
   var result = await vault.auth.authenticateFingerprint()
   if (result.success) {
     vault.session.setMasterKey(result.masterKey)
@@ -377,19 +500,10 @@ window.unlockPw = async function() {
   } else { log(result.error, 'error') }
 }
 
-window.resumePin = async function() {
-  var pin = document.getElementById('soft-pin').value
-  var result = await vault.auth.authenticatePIN(pin)
-  if (result.success) {
-    vault.session.setMasterKey(result.masterKey)
-    document.getElementById('soft-pin').value = ''
-    updateStatus(); routeView()
-  } else { log(result.error || 'Incorrect PIN', 'error') }
-}
 
 window.showSaveCredential = function() {
   if (!vault.session.hasMasterKey()) { log('Login required', 'error'); return }
-  var domain = document.getElementById('domain-input').value || 'example.com'
+  var de = document.getElementById('vault-domain'); var domain = (de && de.value) || 'example.com'
   showModal('<h3>Add Credential</h3><input type="text" id="modal-domain" value="' + domain + '" placeholder="domain"><input type="text" id="modal-login" placeholder="username"><input type="password" id="modal-password-cred" placeholder="password"><div style="margin-top:16px;"><button onclick="saveCredential()">Save</button><button onclick="hideModal()" class="secondary">Cancel</button></div>')
 }
 
@@ -411,7 +525,7 @@ window.saveCredential = async function() {
 
 window.loadCredentials = async function() {
   var masterKey = vault.session.getMasterKey()
-  var domain = document.getElementById('domain-input').value
+  var de2 = document.getElementById('vault-domain'); var domain = de2 ? de2.value : ''
   var listEl = document.getElementById('credentials-list')
   if (!masterKey) { listEl.innerHTML = '<p style="color:#666;">Login required</p>'; return }
   if (!domain) { listEl.innerHTML = '<p style="color:#666;">Enter domain</p>'; return }
@@ -425,7 +539,7 @@ window.loadCredentials = async function() {
 
 window.lockAll = async function() {
   var status = await vault.auth.initAuth()
-  if (status.hasPIN) {
+  if (status.hasFingerprint) {
     await vault.session.softLock()
   } else {
     await vault.session.lockAll()
@@ -440,21 +554,28 @@ window.clearAll = function() {
 
 window.confirmClearAll = async function() {
   await vault.store.clearAll()
-  vault.session.lockAll()
+  try { var bv = nativeBiometric(); if (bv) await bv.remove() } catch (e) {}
+  await vault.session.lockAll()
   hideModal()
-  log('All data cleared', 'success')
-  updateStatus()
+  // return to the main screen; with no vault, routeView lands on the setup/enroll screen
+  var menuPage = document.getElementById('page-menu')
+  var mainPage = document.getElementById('page-main')
+  if (menuPage) menuPage.classList.remove('active')
+  if (mainPage) mainPage.classList.add('active')
+  await updateStatus()
+  await routeView()
 }
 
 window.toggleMenu = function() {
   document.getElementById('menu-dropdown').classList.toggle('hidden')
 }
 
-window.openMenu = function() {
+window.openMenu = async function() {
   document.getElementById('menu-dropdown').classList.add('hidden')
   document.getElementById('page-main').classList.remove('active')
   document.getElementById('page-menu').classList.add('active')
   window.showMenuTab('manage', document.querySelector('.menu-tab'))
+  try { refreshSetupButtons(await getPhoneStatus()) } catch (e) {}
 }
 
 window.closeMenu = function() {

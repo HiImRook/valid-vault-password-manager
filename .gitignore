@@ -7,3 +7,5 @@ app-debug.apk
 
 android/.idea/
 .idea/
+
+android/keystore.properties
