@@ -22,6 +22,8 @@ const session = stripImportsAndExports(fs.readFileSync(path.join(dir, 'session.j
 const passwords = stripImportsAndExports(fs.readFileSync(path.join(dir, 'passwords.js'), 'utf8'))
 const auth = stripImportsAndExports(fs.readFileSync(path.join(dir, 'auth.js'), 'utf8'))
 const pairing = stripImportsAndExports(fs.readFileSync(path.join(dir, 'pairing.js'), 'utf8'))
+const fountain = stripImportsAndExports(fs.readFileSync(path.join(dir, 'fountain.js'), 'utf8'))
+const qrcode = stripImportsAndExports(fs.readFileSync(path.join(dir, 'qrcode.js'), 'utf8'))
 
 const bundledJS = `
 const cryptoModule = (function() {
@@ -161,11 +163,23 @@ return {
 }
 })();
 
+const fountainModule = (function() {
+${fountain}
+return { createEncoder, createDecoder, CHUNK_BYTES }
+})();
+
+const qrcodeModule = (function() {
+${qrcode}
+return QRCode
+})();
+
 const vault = {
   crypto: cryptoModule,
   store: storeModule,
   session: sessionModule,
   passwords: passwordsModule,
+  fountain: fountainModule,
+  qrcode: qrcodeModule,
   auth: authModule,
   pairing: pairingModule
 }
@@ -313,6 +327,77 @@ function showModal(html) {
 
 function hideModal() {
   document.getElementById('modal-container').classList.add('hidden')
+}
+
+
+window.submitRenameKey = async function() {
+  var el = document.getElementById('key-nickname-input')
+  var msg = document.getElementById('key-nickname-msg')
+  var name = el ? el.value : ''
+  var result = await window.renameKey(name)
+  if (result.success) { if (msg) { msg.textContent = 'Key renamed.'; msg.style.color = 'var(--green)' } }
+  else { if (msg) { msg.textContent = result.error; msg.style.color = 'var(--danger)' } }
+}
+async function loadKeyNickname() {
+  var el = document.getElementById('key-nickname-input')
+  if (!el) return
+  try { el.value = await window.getKeyNickname() } catch (e) {}
+}
+
+// ---- Export/Import key modals ----
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') }
+
+function questionFieldsHtml(qIdx) {
+  var html = ''
+  for (var i = 0; i < qIdx.length; i++) {
+    html += '<div style="margin-top:10px;"><div style="font-size:12px;color:var(--text-dim);margin-bottom:4px;">' + esc(SECURITY_QUESTIONS[qIdx[i]]) + '</div>'
+    html += '<input type="text" id="sq-' + i + '" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="one word" style="width:100%;"></div>'
+  }
+  return html
+}
+
+window._exportQIdx = null
+function showExportKeyModal(qIdx) {
+  window._exportQIdx = qIdx
+  var html = '<h3>Export Master Key</h3>'
+  html += '<p style="color:var(--danger);font-size:12px;line-height:1.5;">Write down your passphrase and answers and keep them safe. They are never stored. If you lose them, this file can never be opened.</p>'
+  html += '<div style="margin-top:12px;"><div style="font-size:12px;color:var(--text-dim);margin-bottom:4px;">Passphrase (12+ characters, spaces allowed, capitalization matters)</div>'
+  html += '<input type="password" id="exp-pass" autocomplete="off" style="width:100%;"></div>'
+  html += '<div style="font-size:11px;color:var(--text-dim);margin-top:8px;">Answer all three. Capitalization matters. Use a single word for each.</div>'
+  html += questionFieldsHtml(qIdx)
+  html += '<div id="exp-msg" style="font-size:12px;color:var(--danger);margin-top:10px;min-height:8px;"></div>'
+  html += '<div class="row" style="margin-top:14px;"><button onclick="submitExportKey()">Export</button><button onclick="hideExportKeyModal()" class="secondary">Cancel</button></div>'
+  showModal(html)
+}
+function hideExportKeyModal() { hideModal(); window._exportQIdx = null }
+function setExportMsg(t) { var e = document.getElementById('exp-msg'); if (e) e.textContent = t }
+window.submitExportKey = async function() {
+  var pass = document.getElementById('exp-pass').value
+  var answers = []
+  for (var i = 0; i < window._exportQIdx.length; i++) { answers.push(document.getElementById('sq-'+i).value) }
+  await doExportKey(window._exportQIdx, pass, answers)
+}
+
+window._importFileObj = null
+function showImportKeyModal(fileObj) {
+  window._importFileObj = fileObj
+  var html = '<h3>Import Master Key</h3>'
+  html += '<p style="color:var(--text-dim);font-size:12px;">Key file: ' + esc(fileObj.nickname || 'Master Key') + '</p>'
+  html += '<div style="margin-top:12px;"><div style="font-size:12px;color:var(--text-dim);margin-bottom:4px;">Passphrase (capitalization matters)</div>'
+  html += '<input type="password" id="imp-pass" autocomplete="off" style="width:100%;"></div>'
+  html += '<div style="font-size:11px;color:var(--text-dim);margin-top:8px;">Answer the security questions. Capitalization matters.</div>'
+  html += questionFieldsHtml(fileObj.questions)
+  html += '<div id="imp-msg" style="font-size:12px;color:var(--danger);margin-top:10px;min-height:8px;"></div>'
+  html += '<div class="row" style="margin-top:14px;"><button onclick="submitImportKey()">Import</button><button onclick="hideImportKeyModal()" class="secondary">Cancel</button></div>'
+  showModal(html)
+}
+function hideImportKeyModal() { hideModal(); window._importFileObj = null }
+function setImportMsg(t) { var e = document.getElementById('imp-msg'); if (e) e.textContent = t }
+window.submitImportKey = async function() {
+  var pass = document.getElementById('imp-pass').value
+  var answers = []
+  for (var i = 0; i < window._importFileObj.questions.length; i++) { answers.push(document.getElementById('sq-'+i).value) }
+  await doImportKey(window._importFileObj, pass, answers)
 }
 
 // ---- View routing ----
@@ -584,6 +669,7 @@ window.closeMenu = function() {
 }
 
 window.showMenuTab = function(name, el) {
+  if (name === 'settings') { loadKeyNickname() }
   var panels = document.querySelectorAll('.menu-panel')
   for (var i = 0; i < panels.length; i++) panels[i].classList.remove('active')
   var tabs = document.querySelectorAll('.menu-tab')
@@ -592,9 +678,331 @@ window.showMenuTab = function(name, el) {
   if (el) el.classList.add('active')
 }
 
-window.syncVault = function() { log('Sync Vault coming in the next build', 'error') }
-window.getSyncKey = function() { log('Get Sync Key coming in the next build', 'error') }
-window.importSync = function() { log('Import coming in the next build', 'error') }
+var phoneFountainTimer = null
+
+function stopPhoneFountain() {
+  if (phoneFountainTimer) { clearInterval(phoneFountainTimer); phoneFountainTimer = null }
+  var container = document.getElementById('phone-qr')
+  if (container) container.innerHTML = ''
+  var stopBtn = document.getElementById('phone-qr-stop')
+  if (stopBtn) stopBtn.classList.add('hidden')
+}
+
+function streamPhoneFountain(payload, label) {
+  stopPhoneFountain()
+  var container = document.getElementById('phone-qr')
+  var labelEl = document.getElementById('phone-qr-label')
+  var stopBtn = document.getElementById('phone-qr-stop')
+  if (!container) return
+  if (labelEl) { labelEl.textContent = label; labelEl.classList.remove('hidden') }
+  var encoder = vault.fountain.createEncoder(payload)
+  function renderNext() {
+    var frame = encoder.nextFrame()
+    var qr = new vault.qrcode({ content: frame, width: 240, height: 240, padding: 2, color: '#000000', background: '#ffffff' })
+    container.innerHTML = qr.svg()
+  }
+  renderNext()
+  phoneFountainTimer = setInterval(renderNext, 300)
+  if (stopBtn) stopBtn.classList.remove('hidden')
+}
+
+window.stopPhoneStream = function() {
+  stopPhoneFountain()
+  var labelEl = document.getElementById('phone-qr-label')
+  if (labelEl) labelEl.classList.add('hidden')
+  log('Stopped')
+}
+
+async function ensurePhoneUnlocked() {
+  if (vault.session.hasMasterKey()) return vault.session.getMasterKey()
+  log('Unlock your vault before syncing', 'error')
+  return null
+}
+
+window.syncVault = async function() {
+  var masterKey = await ensurePhoneUnlocked()
+  if (!masterKey) return
+  var vaultData = await vault.store.getPasswordVault()
+  if (!vaultData) { log('Nothing to sync yet', 'error'); return }
+  var payload = JSON.stringify({ kind: 'vault', vault: vaultData })
+  streamPhoneFountain(payload, 'Scan this with your other device to send your logins')
+  log('Streaming vault. Keep it visible until the other device finishes.', 'success')
+}
+
+window.getSyncKey = async function() {
+  var masterKey = await ensurePhoneUnlocked()
+  if (!masterKey) return
+  var raw = new Uint8Array(await crypto.subtle.exportKey('raw', masterKey))
+  var payload = JSON.stringify({ kind: 'key', key: Array.from(raw) })
+  streamPhoneFountain(payload, 'Scan this with your new device to give it the sync key')
+  log('Streaming key. Do this somewhere private.', 'success')
+}
+
+window.importSync = async function() {
+  if (typeof Capacitor === 'undefined' || !Capacitor.isNativePlatform || !Capacitor.isNativePlatform()) {
+    log('Import scanning works in the installed app on your phone.', 'error')
+    return
+  }
+  var scanner = Capacitor.Plugins.BarcodeScanner
+  try {
+    var granted = await scanner.requestPermissions()
+    if (granted.camera !== 'granted' && granted.camera !== 'limited') {
+      log('Camera permission is required to import', 'error')
+      return
+    }
+    var decoder = vault.fountain.createDecoder()
+    var settled = false
+    document.querySelector('body').classList.add('barcode-scanner-active')
+    var scannerUi = document.getElementById('scanner-ui')
+    if (scannerUi) scannerUi.style.display = 'block'
+    var listener = await scanner.addListener('barcodeScanned', async function(result) {
+      if (settled) return
+      var raw = result.barcode ? result.barcode.rawValue : (result.barcodes && result.barcodes[0] && result.barcodes[0].rawValue)
+      if (!raw) return
+      var outcome = decoder.addFrame(raw)
+      if (outcome.success) {
+        log('Receiving: ' + outcome.solved + ' of ' + outcome.total + ' blocks', 'success')
+        if (outcome.complete) {
+          settled = true
+          var assembled = decoder.assemble()
+          await listener.remove()
+          await scanner.stopScan()
+          document.querySelector('body').classList.remove('barcode-scanner-active')
+          if (scannerUi) scannerUi.style.display = 'none'
+          await handlePhoneImported(assembled.payload)
+        }
+      }
+    })
+    window.cancelPhoneScan = async function() {
+      settled = true
+      try { await listener.remove(); await scanner.stopScan() } catch (e) {}
+      document.querySelector('body').classList.remove('barcode-scanner-active')
+      if (scannerUi) scannerUi.style.display = 'none'
+      log('Scan cancelled')
+    }
+    await scanner.startScan()
+    log('Point your camera at the other device...')
+  } catch (error) {
+    document.querySelector('body').classList.remove('barcode-scanner-active')
+    log('Import failed: ' + error.message, 'error')
+  }
+}
+
+async function handlePhoneImported(payloadText) {
+  var data = JSON.parse(payloadText)
+  if (data.kind === 'key') {
+    var keyBytes = new Uint8Array(data.key)
+    var importedKey = await vault.crypto.masterKeyToCryptoKey(keyBytes)
+    vault.session.setMasterKey(importedKey)
+    log('Sync key imported. This device can now sync.', 'success')
+    updateStatus()
+    return
+  }
+  if (data.kind === 'vault') {
+    if (!vault.session.hasMasterKey()) { log('QR sync not enabled. Import master key first', 'error'); return }
+    var masterKey = vault.session.getMasterKey()
+    var localVault = await vault.store.getPasswordVault()
+    var incoming = data.vault
+    if (!localVault) {
+      await vault.store.setPasswordVault(incoming)
+      log('Vault imported.', 'success')
+      return
+    }
+    var merged = await vault.passwords.mergeVaults(localVault, incoming, masterKey)
+    merged.meta.createdAt = Math.min(localVault.meta.createdAt, incoming.meta.createdAt)
+    merged.meta.lastAccess = Date.now()
+    await vault.store.setPasswordVault(merged)
+    var count = Object.values(merged.credentials || {}).flat().filter(function(c) { return !c.deleted }).length
+    log('Sync complete. ' + count + ' logins.', 'success')
+    return
+  }
+  log('Unrecognized code', 'error')
+}
+
+// ============ Offline Export / Import (encrypted files, no new dependency) ============
+
+var EXPORT_ITERATIONS = 1000000  // high, offline file guard
+
+var SECURITY_QUESTIONS = [
+  'Name of your first pet',
+  'City where you were born',
+  'Name of your first street',
+  'Your mothers maiden name',
+  'Name of your first school',
+  'Your childhood best friend first name',
+  'Make of your first car',
+  'Name of your first employer',
+  'Your favorite childhood teacher last name',
+  'The street you grew up on'
+]
+
+function pickThreeQuestions() {
+  var idx = []
+  var pool = SECURITY_QUESTIONS.slice()
+  for (var i = 0; i < 3; i++) {
+    var r = Math.floor(Math.random() * pool.length)
+    idx.push(SECURITY_QUESTIONS.indexOf(pool[r]))
+    pool.splice(r, 1)
+  }
+  return idx  // array of 3 indices into SECURITY_QUESTIONS
+}
+
+// combine passphrase + the three answers into one secret (order fixed by question index).
+// capitalization + spaces preserved (no normalization) so they matter, as designed.
+function combineSecret(passphrase, questionIdx, answers) {
+  var parts = [passphrase]
+  for (var i = 0; i < questionIdx.length; i++) {
+    parts.push(String(questionIdx[i]) + ':' + answers[i])
+  }
+  return parts.join('\u0000')  // null-join, unlikely to collide
+}
+
+function downloadFile(filename, text) {
+  try {
+    var blob = new Blob([text], { type: 'application/json' })
+    var url = URL.createObjectURL(blob)
+    var a = document.createElement('a')
+    a.href = url; a.download = filename
+    document.body.appendChild(a); a.click()
+    document.body.removeChild(a)
+    setTimeout(function(){ URL.revokeObjectURL(url) }, 1000)
+    return true
+  } catch (e) { return false }
+}
+
+function readFileText(cb) {
+  var input = document.createElement('input')
+  input.type = 'file'
+  input.accept = '.vaultkey,.vault,application/json'
+  input.onchange = function() {
+    var f = input.files && input.files[0]
+    if (!f) { cb(null); return }
+    var reader = new FileReader()
+    reader.onload = function() { cb(reader.result) }
+    reader.onerror = function() { cb(null) }
+    reader.readAsText(f)
+  }
+  input.click()
+}
+
+// ---- Export Key ----
+window.exportKey = async function() {
+  var masterKey = await ensurePhoneUnlocked()
+  if (!masterKey) return
+  var qIdx = pickThreeQuestions()
+  showExportKeyModal(qIdx)
+}
+
+async function doExportKey(qIdx, passphrase, answers) {
+  var masterKey = vault.session.getMasterKey()
+  if (!masterKey) { log('Unlock first', 'error'); return }
+  if (passphrase.length < 12) { setExportMsg('Passphrase must be at least 12 characters'); return }
+  for (var i = 0; i < answers.length; i++) { if (!answers[i]) { setExportMsg('Answer all three questions'); return } }
+  try {
+    var secret = combineSecret(passphrase, qIdx, answers)
+    var salt = await vault.crypto.generateSalt()
+    var wrapKey = await vault.crypto.deriveKeyFromSecret(secret, salt, EXPORT_ITERATIONS)
+    var rawMaster = new Uint8Array(await crypto.subtle.exportKey('raw', masterKey))
+    var wrapped = await vault.crypto.wrapMasterKey(rawMaster, wrapKey)
+    var auth = await vault.store.getAuth() || {}
+    var nickname = auth.keyNickname || 'My Master Key'
+    var fileObj = {
+      format: 'valid-vault-key',
+      version: 1,
+      nickname: nickname,
+      questions: qIdx,
+      salt: Array.from(salt),
+      iterations: EXPORT_ITERATIONS,
+      wrapped: wrapped
+    }
+    var fname = nickname.replace(/[^a-z0-9]+/gi, '-').toLowerCase() + '.vaultkey'
+    if (downloadFile(fname, JSON.stringify(fileObj))) {
+      hideExportKeyModal()
+      log('Key exported. Store the file, passphrase, and answers safely.', 'success')
+    } else { setExportMsg('Could not save the file') }
+  } catch (e) { setExportMsg('Export failed: ' + (e && e.message ? e.message : e)) }
+}
+
+// ---- Import Key ----
+window.importKey = function() {
+  readFileText(function(text) {
+    if (!text) { log('No file selected', 'error'); return }
+    try {
+      var fileObj = JSON.parse(text)
+      if (fileObj.format !== 'valid-vault-key') { log('Not a Valid Vault key file', 'error'); return }
+      showImportKeyModal(fileObj)
+    } catch (e) { log('Could not read the file', 'error') }
+  })
+}
+
+async function doImportKey(fileObj, passphrase, answers) {
+  try {
+    var secret = combineSecret(passphrase, fileObj.questions, answers)
+    var salt = new Uint8Array(fileObj.salt)
+    var wrapKey = await vault.crypto.deriveKeyFromSecret(secret, salt, fileObj.iterations || EXPORT_ITERATIONS)
+    var rawMaster = await vault.crypto.unwrapMasterKey(fileObj.wrapped, wrapKey)
+    var importedKey = await vault.crypto.masterKeyToCryptoKey(rawMaster)
+    vault.session.setMasterKey(importedKey)
+    hideImportKeyModal()
+    log('Master key imported. This device can now sync and decrypt vaults.', 'success')
+    updateStatus()
+  } catch (e) {
+    setImportMsg('Wrong passphrase or answers.')
+  }
+}
+
+// ---- Export Vault (already-encrypted vault to a file) ----
+window.exportVault = async function() {
+  var masterKey = await ensurePhoneUnlocked()
+  if (!masterKey) return
+  var vaultData = await vault.store.getPasswordVault()
+  if (!vaultData) { log('Nothing to export yet', 'error'); return }
+  var fileObj = { format: 'valid-vault-vault', version: 1, vault: vaultData }
+  if (downloadFile('valid-vault-backup.vault', JSON.stringify(fileObj))) {
+    log('Vault exported. It stays encrypted, useless without your master key.', 'success')
+  } else { log('Could not save the file', 'error') }
+}
+
+// ---- Import Vault (restore/merge from a file) ----
+window.importVault = function() {
+  readFileText(async function(text) {
+    if (!text) { log('No file selected', 'error'); return }
+    try {
+      var fileObj = JSON.parse(text)
+      if (fileObj.format !== 'valid-vault-vault') { log('Not a Valid Vault backup file', 'error'); return }
+      var masterKey = await ensurePhoneUnlocked()
+      if (!masterKey) return
+      var localVault = await vault.store.getPasswordVault()
+      var incoming = fileObj.vault
+      if (!localVault) {
+        await vault.store.setPasswordVault(incoming)
+        log('Vault restored.', 'success')
+        return
+      }
+      var merged = await vault.passwords.mergeVaults(localVault, incoming, masterKey)
+      merged.meta.createdAt = Math.min(localVault.meta.createdAt, incoming.meta.createdAt)
+      merged.meta.lastAccess = Date.now()
+      await vault.store.setPasswordVault(merged)
+      var count = Object.values(merged.credentials || {}).flat().filter(function(c){ return !c.deleted }).length
+      log('Vault merged. ' + count + ' logins.', 'success')
+    } catch (e) { log('Import failed: ' + (e && e.message ? e.message : e), 'error') }
+  })
+}
+
+// ---- Key nickname ----
+window.getKeyNickname = async function() {
+  var auth = await vault.store.getAuth() || {}
+  return auth.keyNickname || 'My Master Key'
+}
+window.renameKey = async function(newName) {
+  if (!newName || !newName.trim()) return { success: false, error: 'Name cannot be empty' }
+  var mk = vault.session.getMasterKey()
+  if (!mk) return { success: false, error: 'Unlock first' }
+  var auth = await vault.store.getAuth() || {}
+  auth.keyNickname = newName.trim()
+  await vault.store.setAuth(auth)
+  return { success: true }
+}
 </script>${afterScript}`
 
 fs.writeFileSync(testHtmlPath, bundledHtml)
