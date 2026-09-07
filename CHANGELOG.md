@@ -5,6 +5,28 @@ All notable changes to Local Vault will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.1] - 2026-09-07
+
+This release wires phone sync end to end and adds encrypted offline backup and key naming.
+
+### Added
+- Phone QR sync. Sync Vault and Get Sync Key display one-way fountain QR streams, and a QR scanner reads a key or vault streamed from another device. The fountain codec and QR generator are now bundled into the phone build.
+- Encrypted offline backup. Export Vault saves the already-encrypted vault to a file, and Import Vault restores or merges it. The file stays encrypted and is inert without the matching master key.
+- Master key export and import as an encrypted file. The key is wrapped under a passphrase of at least 12 characters plus three security questions drawn at random from a pool of ten. The passphrase and answers are combined into one secret and stretched with PBKDF2 at 1,000,000 iterations. Nothing is stored, and a lost passphrase or answers means the file cannot be opened.
+- Nameable master key. The key reads as "My Master Key" by default and can be renamed in Settings. The nickname is stored only in file metadata and is never required to import.
+
+### Changed
+- Settings no longer offers to re-enroll fingerprint or PIN, since those are managed by the device. The auth section is now titled "Password".
+- Scanning a vault on a device without the matching key shows "QR sync not enabled. Import master key first."
+
+### Security model
+- Master key transport is deliberate. A live QR stream is the primary path, and the security is the ceremony: do it somewhere private, since anyone who sees the code can capture it. The offline key file adds a second path for disaster recovery, protected by a passphrase and security questions that are never stored, so a stolen file is useless without what is in the owner's head. Vault backups stay encrypted under the master key, so a stolen vault file is inert on any device that did not receive the key.
+- Capitalization and spaces matter in the passphrase and answers, and this is stated in the interface. Re-exporting at any time while the app is open produces a fresh file with a new passphrase.
+
+### Notes
+- Offline file save uses a standard in-page download rather than a native file plugin, keeping the dependency footprint unchanged.
+- Version numbers across the app and extension are aligned to 0.5.1.
+
 ## [0.5.0] - 2026-09-06
 
 This release is a hardening and feature-completion pass driven by internal Play Store testing. Most changes are bug fixes and feature fixes surfaced by running the app on real devices.
