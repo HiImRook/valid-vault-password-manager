@@ -24,6 +24,7 @@ const auth = stripImportsAndExports(fs.readFileSync(path.join(dir, 'auth.js'), '
 const pairing = stripImportsAndExports(fs.readFileSync(path.join(dir, 'pairing.js'), 'utf8'))
 const fountain = stripImportsAndExports(fs.readFileSync(path.join(dir, 'fountain.js'), 'utf8'))
 const qrcode = stripImportsAndExports(fs.readFileSync(path.join(dir, 'qrcode.js'), 'utf8'))
+const jsqr = fs.readFileSync(path.join(dir, 'jsqr.js'), 'utf8')
 
 const bundledJS = `
 const cryptoModule = (function() {
@@ -163,6 +164,8 @@ return {
 }
 })();
 
+${jsqr}
+
 const fountainModule = (function() {
 ${fountain}
 return { createEncoder, createDecoder, CHUNK_BYTES }
@@ -218,6 +221,7 @@ window.onerror = function(msg, url, line) {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
+  startActivityTracking()
   updateStatus()
   initGlobe()
   routeView()
@@ -329,6 +333,61 @@ function hideModal() {
   document.getElementById('modal-container').classList.add('hidden')
 }
 
+
+window.saveAutoLock = async function() {
+  var el = document.getElementById('setting-timeout')
+  if (!el) return
+  var v = parseInt(el.value, 10)
+  if (isNaN(v) || v < 10) v = 10
+  if (v > 3600) v = 3600
+  el.value = v
+  try { var auth = await vault.store.getAuth() || {}; auth.autoLockTimeout = v; await vault.store.setAuth(auth) } catch (e) {}
+  restartInactivityTimer()
+}
+async function getAutoLockSeconds() {
+  try { var auth = await vault.store.getAuth() || {}; if (auth.autoLockTimeout) return auth.autoLockTimeout } catch (e) {}
+  return 60
+}
+async function loadAutoLock() {
+  var el = document.getElementById('setting-timeout')
+  if (!el) return
+  try { el.value = await getAutoLockSeconds() } catch (e) {}
+}
+
+// ---- Inactivity auto-lock timer ----
+var inactivityTimer = null
+async function restartInactivityTimer() {
+  if (inactivityTimer) { clearTimeout(inactivityTimer); inactivityTimer = null }
+  if (!vault.session.hasMasterKey()) return  // only run while unlocked
+  var seconds = await getAutoLockSeconds()
+  inactivityTimer = setTimeout(async function() {
+    if (vault.session.hasMasterKey()) { await window.lockAll() }
+  }, seconds * 1000)
+}
+function noteActivity() {
+  // only reset if unlocked and a timer is meant to run
+  if (vault.session.hasMasterKey()) restartInactivityTimer()
+}
+function startActivityTracking() {
+  ['touchstart','click','keydown','scroll'].forEach(function(ev){
+    document.addEventListener(ev, noteActivity, { passive: true })
+  })
+}
+
+window.saveQrTimeout = async function() {
+  var el = document.getElementById('setting-qr-timeout')
+  if (!el) return
+  var v = parseInt(el.value, 10)
+  if (isNaN(v) || v < 5) v = 5
+  if (v > 600) v = 600
+  el.value = v
+  try { var auth = await vault.store.getAuth() || {}; auth.qrStreamTimeout = v; await vault.store.setAuth(auth) } catch (e) {}
+}
+async function loadQrTimeout() {
+  var el = document.getElementById('setting-qr-timeout')
+  if (!el) return
+  try { el.value = await getQrTimeoutSeconds() } catch (e) {}
+}
 
 window.submitRenameKey = async function() {
   var el = document.getElementById('key-nickname-input')
@@ -669,7 +728,7 @@ window.closeMenu = function() {
 }
 
 window.showMenuTab = function(name, el) {
-  if (name === 'settings') { loadKeyNickname() }
+  if (name === 'settings') { loadKeyNickname(); loadQrTimeout(); loadAutoLock() }
   var panels = document.querySelectorAll('.menu-panel')
   for (var i = 0; i < panels.length; i++) panels[i].classList.remove('active')
   var tabs = document.querySelectorAll('.menu-tab')
@@ -682,19 +741,29 @@ var phoneFountainTimer = null
 
 function stopPhoneFountain() {
   if (phoneFountainTimer) { clearInterval(phoneFountainTimer); phoneFountainTimer = null }
+  if (phoneQrCountdownTimer) { clearInterval(phoneQrCountdownTimer); phoneQrCountdownTimer = null }
+  if (phoneQrShutoffTimer) { clearTimeout(phoneQrShutoffTimer); phoneQrShutoffTimer = null }
   var container = document.getElementById('phone-qr')
   if (container) container.innerHTML = ''
-  var stopBtn = document.getElementById('phone-qr-stop')
-  if (stopBtn) stopBtn.classList.add('hidden')
 }
 
-function streamPhoneFountain(payload, label) {
+var phoneQrCountdownTimer = null
+var phoneQrShutoffTimer = null
+
+async function getQrTimeoutSeconds() {
+  try { var auth = await vault.store.getAuth() || {}; if (auth.qrStreamTimeout) return auth.qrStreamTimeout } catch (e) {}
+  return 30
+}
+
+async function streamPhoneFountain(payload, label) {
   stopPhoneFountain()
+  var wrap = document.getElementById('phone-qr-wrap')
   var container = document.getElementById('phone-qr')
   var labelEl = document.getElementById('phone-qr-label')
-  var stopBtn = document.getElementById('phone-qr-stop')
+  var timerEl = document.getElementById('phone-qr-timer')
   if (!container) return
-  if (labelEl) { labelEl.textContent = label; labelEl.classList.remove('hidden') }
+  if (labelEl) labelEl.textContent = label
+  if (wrap) wrap.classList.remove('hidden')
   var encoder = vault.fountain.createEncoder(payload)
   function renderNext() {
     var frame = encoder.nextFrame()
@@ -703,14 +772,22 @@ function streamPhoneFountain(payload, label) {
   }
   renderNext()
   phoneFountainTimer = setInterval(renderNext, 300)
-  if (stopBtn) stopBtn.classList.remove('hidden')
+
+  // auto-shutoff timeout + visible countdown
+  var seconds = await getQrTimeoutSeconds()
+  var remaining = seconds
+  if (timerEl) timerEl.textContent = 'Auto-closes in ' + remaining + 's'
+  phoneQrCountdownTimer = setInterval(function() {
+    remaining -= 1
+    if (timerEl) timerEl.textContent = remaining > 0 ? ('Auto-closes in ' + remaining + 's') : 'Closing…'
+  }, 1000)
+  phoneQrShutoffTimer = setTimeout(function() { window.stopPhoneStream() }, seconds * 1000)
 }
 
 window.stopPhoneStream = function() {
   stopPhoneFountain()
-  var labelEl = document.getElementById('phone-qr-label')
-  if (labelEl) labelEl.classList.add('hidden')
-  log('Stopped')
+  var wrap = document.getElementById('phone-qr-wrap')
+  if (wrap) wrap.classList.add('hidden')
 }
 
 async function ensurePhoneUnlocked() {
@@ -719,72 +796,109 @@ async function ensurePhoneUnlocked() {
   return null
 }
 
-window.syncVault = async function() {
+window.shareVault = async function() {
   var masterKey = await ensurePhoneUnlocked()
   if (!masterKey) return
   var vaultData = await vault.store.getPasswordVault()
   if (!vaultData) { log('Nothing to sync yet', 'error'); return }
   var payload = JSON.stringify({ kind: 'vault', vault: vaultData })
-  streamPhoneFountain(payload, 'Scan this with your other device to send your logins')
-  log('Streaming vault. Keep it visible until the other device finishes.', 'success')
+  streamPhoneFountain(payload, 'Scan this with your other device to receive your logins')
+  
 }
 
-window.getSyncKey = async function() {
+window.shareMasterKey = async function() {
   var masterKey = await ensurePhoneUnlocked()
   if (!masterKey) return
   var raw = new Uint8Array(await crypto.subtle.exportKey('raw', masterKey))
   var payload = JSON.stringify({ kind: 'key', key: Array.from(raw) })
-  streamPhoneFountain(payload, 'Scan this with your new device to give it the sync key')
-  log('Streaming key. Do this somewhere private.', 'success')
+  streamPhoneFountain(payload, 'Scan this with your new device to give it the master key')
+  
 }
 
+var scanActive = false
 window.importSync = async function() {
-  if (typeof Capacitor === 'undefined' || !Capacitor.isNativePlatform || !Capacitor.isNativePlatform()) {
-    log('Import scanning works in the installed app on your phone.', 'error')
+  if (scanActive) return
+  var box = document.getElementById('qr-scan-box')
+  if (!box) return
+  scanActive = true
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    log('Camera not available on this device.', 'error')
     return
   }
-  var scanner = Capacitor.Plugins.BarcodeScanner
+  var decoder = vault.fountain.createDecoder()
+  var settled = false
+  var stream = null
+  var raf = null
+
+  // build the in-box camera view
+  var origHtml = box.innerHTML
+  box.innerHTML = ''
+  box.style.padding = '0'
+  box.style.overflow = 'hidden'
+  box.style.position = 'relative'
+  var video = document.createElement('video')
+  video.setAttribute('playsinline', 'true')
+  video.setAttribute('muted', 'true')
+  video.style.width = '100%'
+  video.style.height = '100%'
+  video.style.objectFit = 'cover'
+  var canvas = document.createElement('canvas')
+  var ctx = canvas.getContext('2d', { willReadFrequently: true })
+  var cancelBtn = document.createElement('button')
+  cancelBtn.textContent = 'Cancel'
+  cancelBtn.style.cssText = 'position:absolute;top:8px;left:8px;z-index:3;background:var(--danger);color:#fff;border:none;border-radius:6px;padding:6px 14px;font-weight:700;font-family:inherit;'
+  var status = document.createElement('div')
+  status.style.cssText = 'position:absolute;bottom:8px;left:0;right:0;text-align:center;color:#33ff66;font-family:monospace;font-size:12px;text-shadow:0 0 6px rgba(0,0,0,0.9);z-index:3;'
+  status.textContent = 'Point at the other device'
+  box.appendChild(video)
+  box.appendChild(cancelBtn)
+  box.appendChild(status)
+
+  function cleanup() {
+    settled = true
+    setTimeout(function(){ scanActive = false }, 400)
+    if (raf) { cancelAnimationFrame(raf); raf = null }
+    try { if (stream) { stream.getTracks().forEach(function(t){ t.stop() }); stream = null } } catch (e) {}
+    try { video.pause(); video.srcObject = null } catch (e) {}
+    box.style.padding = ''
+    box.style.overflow = ''
+    box.style.position = ''
+    box.innerHTML = origHtml
+  }
+  cancelBtn.onclick = function(e) { if (e) { e.stopPropagation(); e.preventDefault() } cleanup(); log('Scan cancelled') }
+  window.cancelPhoneScan = function() { cleanup() }
+
   try {
-    var granted = await scanner.requestPermissions()
-    if (granted.camera !== 'granted' && granted.camera !== 'limited') {
-      log('Camera permission is required to import', 'error')
-      return
-    }
-    var decoder = vault.fountain.createDecoder()
-    var settled = false
-    document.querySelector('body').classList.add('barcode-scanner-active')
-    var scannerUi = document.getElementById('scanner-ui')
-    if (scannerUi) scannerUi.style.display = 'block'
-    var listener = await scanner.addListener('barcodeScanned', async function(result) {
+    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+    video.srcObject = stream
+    await video.play()
+    function tick() {
       if (settled) return
-      var raw = result.barcode ? result.barcode.rawValue : (result.barcodes && result.barcodes[0] && result.barcodes[0].rawValue)
-      if (!raw) return
-      var outcome = decoder.addFrame(raw)
-      if (outcome.success) {
-        log('Receiving: ' + outcome.solved + ' of ' + outcome.total + ' blocks', 'success')
-        if (outcome.complete) {
-          settled = true
-          var assembled = decoder.assemble()
-          await listener.remove()
-          await scanner.stopScan()
-          document.querySelector('body').classList.remove('barcode-scanner-active')
-          if (scannerUi) scannerUi.style.display = 'none'
-          await handlePhoneImported(assembled.payload)
+      if (video.readyState === video.HAVE_ENOUGH_DATA) {
+        canvas.width = video.videoWidth
+        canvas.height = video.videoHeight
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+        var img = ctx.getImageData(0, 0, canvas.width, canvas.height)
+        var code = window.jsQR(img.data, img.width, img.height, { inversionAttempts: 'dontInvert' })
+        if (code && code.data) {
+          var outcome = decoder.addFrame(code.data)
+          if (outcome.success) {
+            status.textContent = 'Receiving: ' + outcome.solved + ' of ' + outcome.total
+            if (outcome.complete) {
+              var assembled = decoder.assemble()
+              cleanup()
+              handlePhoneImported(assembled.payload)
+              return
+            }
+          }
         }
       }
-    })
-    window.cancelPhoneScan = async function() {
-      settled = true
-      try { await listener.remove(); await scanner.stopScan() } catch (e) {}
-      document.querySelector('body').classList.remove('barcode-scanner-active')
-      if (scannerUi) scannerUi.style.display = 'none'
-      log('Scan cancelled')
+      if (!settled) raf = requestAnimationFrame(tick)
     }
-    await scanner.startScan()
-    log('Point your camera at the other device...')
+    if (!settled) raf = requestAnimationFrame(tick)
   } catch (error) {
-    document.querySelector('body').classList.remove('barcode-scanner-active')
-    log('Import failed: ' + error.message, 'error')
+    cleanup()
+    log('Camera failed: ' + (error && error.message ? error.message : error), 'error')
   }
 }
 
