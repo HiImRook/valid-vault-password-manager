@@ -4,17 +4,17 @@ A local, encrypted, QR code portable password manager. No cloud, no accounts, no
 
 ---
 
+> ✅ **Sovereign Scanner and Settings Notice - v0.5.2**
+>
+> The QR scanner no longer uses a Google ML Kit plugin. Scanning is now the standard web camera plus a vendored jsQR decoder that runs entirely on device, with the camera rendered inside the scan square. Settings persist across app restart, and auto-lock is a real inactivity timer in seconds that locks the vault and returns to the lock screen. See [CHANGELOG.md](CHANGELOG.md) for full details.
+
 > ✅ **Sync and Backup Notice - v0.5.1**
 >
-> Phone sync is wired end to end. Sync Vault and Get Sync Key display one-way fountain QR streams, and a scanner reads a key or vault streamed from another device. Encrypted offline backup is added: Export Vault saves the encrypted vault to a file, and Export Key saves the master key wrapped under a passphrase plus three security questions, stretched with a high-iteration KDF and never stored. A stolen file is useless without the master key or, for the key file, the passphrase and answers. See [CHANGELOG.md](CHANGELOG.md) for full details.
+> Phone sync is wired end to end, and encrypted offline backup is available: Export Vault saves the encrypted vault, and Export Key saves the master key wrapped under a passphrase plus three security questions, never stored. See [CHANGELOG.md](CHANGELOG.md) for full details.
 
 > ✅ **Native Biometric Auth Notice - v0.5.0**
 >
-> On Android, unlocking uses the device's own authentication through BiometricPrompt and a hardware-backed Keystore. Fingerprint and the system PIN both unlock the vault. On the browser extension, fingerprint unlock is Windows Hello. Password remains available everywhere and is used for syncing. See [CHANGELOG.md](CHANGELOG.md) for full details.
-
-> ✅ **Rebrand and Lock Model Notice - v0.4.0**
->
-> The extension and phone share a terminal-green identity with an Orbitron wordmark and the Valid globe logo. See [CHANGELOG.md](CHANGELOG.md) for full details.
+> On Android, unlocking uses the device's own authentication through BiometricPrompt and a hardware-backed Keystore. Fingerprint and the system PIN both unlock the vault. On the extension, fingerprint unlock is Windows Hello. See [CHANGELOG.md](CHANGELOG.md) for full details.
 
 ---
 
@@ -41,29 +41,31 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 - Extension: WebAuthn (Windows Hello) fingerprint binding
 - Fresh salt on every credential change
 
-**Unlock Methods:**
+**Unlock and Locking:**
 - Fingerprint, system PIN, and password all fully unlock the vault
 - On Android, fingerprint and the system PIN run through the native BiometricPrompt
 - On the extension, fingerprint unlock is Windows Hello
-- Password is the universal fallback
+- Auto-lock inactivity timer in seconds, locks the vault and returns to the lock screen
 
 **Sync and Backup:**
 - Live QR sync - stream your vault or your key as a one-way fountain QR, scan it on the other device
+- Sovereign scanner - the standard web camera plus a vendored jsQR decoder, rendered inside the scan square, no Google dependency
+- QR stream timeout - shares auto-close after a set number of seconds, with a countdown and manual close
 - Encrypted vault backup - export the encrypted vault to a file, inert without the matching master key
 - Encrypted key backup - export the master key wrapped under a passphrase and three security questions, high-iteration KDF, never stored
-- Nameable master key - a nickname for reference, stored only in file metadata
+- Nameable master key
 
 **Vault:**
 - Per-credential AES-GCM encryption of usernames and passwords
-- IndexedDB persistence - no external database or server
+- IndexedDB persistence - no external database or server, settings persist here too
 - Session timeout with automatic lock
 
 **Platform:**
 - Single-file web bundle - modules assembled by build.js into one self-contained HTML file
 - Android via Capacitor, with a native biometric plugin (BiometricPrompt + Keystore)
-- Zero runtime dependencies beyond WebCrypto, IndexedDB, the native biometric bridge, and the barcode scanner
+- Vendored, self-contained code only, no Google SDKs in the scan path
 
-## Current Status: v0.5.1
+## Current Status: v0.5.2
 
 **Completed:**
 * ✅ Master key wrap architecture - one random 256-bit key, wrapped per method
@@ -73,20 +75,22 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 * ✅ WebAuthn (Windows Hello) fingerprint on the extension
 * ✅ Masked secret fields with show/hide eye toggle everywhere
 * ✅ Phone QR sync - stream and scan a key or vault
+* ✅ Sovereign in-square QR scanner via getUserMedia + vendored jsQR, no ML Kit
 * ✅ Encrypted vault backup and restore to a file
 * ✅ Encrypted master key backup - passphrase plus security questions, high-iteration KDF
 * ✅ Nameable master key
+* ✅ Auto-lock inactivity timer and QR stream timeout, both persisted in IndexedDB
 * ✅ Credential merge engine - username-keyed, newest password wins
 * ✅ Terminal-green rebrand and Valid globe logo
 
 **In Development:**
-* 📋 On-device field testing of sync and backup across Android versions
+* 📋 On-device field testing of sync, backup, scanner, and lock across Android versions
 * 📋 Per-method auth edit and delete on the phone Manage tab
 * 📋 Vault blob encryption - domain names currently plaintext object keys
 
 ## Sync and Backup Model
 
-Master key transport is deliberate. The primary path is a live QR stream: one device shows its key or vault as a fountain QR, the other scans it. The security is the ceremony, do it somewhere private, since anyone who sees the code can capture it, the same trust as typing a password in the open.
+Master key transport is deliberate. The primary path is a live QR stream: one device shows its key or vault as a fountain QR, the other scans it with the in-square camera. The security is the ceremony, do it somewhere private, since anyone who sees the code can capture it, the same trust as typing a password in the open. Shares auto-close after the QR stream timeout.
 
 For disaster recovery there is an offline path. Export Vault writes the already-encrypted vault to a file, which stays useless on any device without the matching master key. Export Key writes the master key wrapped under a passphrase of at least twelve characters plus three security questions, combined into one secret and stretched with a high-iteration KDF. Nothing is stored, so a stolen file cannot be opened without the passphrase and answers, and a lost passphrase means the file is gone by design.
 
@@ -100,11 +104,14 @@ Credential merge uses the newest update time. Within a site the username is the 
 - Exported key files are wrapped at a higher iteration count, gated by a passphrase and security questions that are never stored
 - No verification hashes are stored; the AES-GCM auth tag is the only verifier
 
-**Unlock methods stay local.** Fingerprint, system PIN, and password open the vault on one specific device. They never enter a sync. Only stored website credentials move between devices.
+**No Google in the scan path.** The scanner uses the web camera and a vendored jsQR decoder, which runs entirely on device. There is no ML Kit and no Play Services model fetch.
+
+**Unlock methods stay local.** Fingerprint, system PIN, and password open the vault on one specific device. They never enter a sync.
 
 **Design boundaries:**
 - Domain names are currently stored as plaintext object keys. Single-blob vault encryption is planned.
-- Physical access to an unlocked device is outside the threat model, as it is for any password manager.
+- Physical access to an unlocked device is outside the threat model.
+- Auto-lock is a foreground inactivity timer; exact timing while the app is backgrounded is subject to OS suspension.
 - Live QR transport is protected by physical privacy, not by a handshake.
 
 ## Quick Start - Forks and Experimentation Highly Encouraged!
@@ -136,11 +143,14 @@ There are no stored password hashes. Authentication is the act of deriving a wra
 **Native Biometric (Android):**
 A custom Capacitor plugin bridges JavaScript to Android's BiometricPrompt. It creates a hardware-backed Keystore key that requires user authentication, then uses it to wrap the master key.
 
+**Sovereign QR Scanner:**
+Scanning uses the web camera through getUserMedia, drawing frames to a canvas that a vendored jsQR decoder reads. The camera renders inside the scan square. No native scanning plugin, no Google SDK.
+
 **Fountain QR Sync:**
-A vault or key of any size streams as an endless loop of coded fountain frames. The receiver collects across loops and reconstructs the exact payload, then merges or restores it.
+A vault or key streams as an endless loop of coded fountain frames. The receiver collects across loops and reconstructs the exact payload, then merges or restores it.
 
 **Encrypted Backup Files:**
-Export writes an encrypted file. The vault file stays under the master key. The key file is wrapped by a passphrase and security questions, combined and stretched with a high-iteration KDF, so the file is worthless without the owner's secrets.
+Export writes an encrypted file. The vault file stays under the master key. The key file is wrapped by a passphrase and security questions, combined and stretched with a high-iteration KDF.
 
 **Single-File Bundle:**
 build.js assembles the source modules into one self-contained HTML file. No module loader, no CDN, no external requests at runtime.

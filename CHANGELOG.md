@@ -5,6 +5,26 @@ All notable changes to Local Vault will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.2] - 2026-09-08
+
+This release replaces the barcode-scanning scaffolding with a sovereign implementation, fixes settings persistence, and makes auto-lock a real inactivity timer.
+
+### Changed
+- The QR scanner moved off the ML Kit plugin, which was scaffolding meant to prove the flow and always intended for replacement. Scanning now uses the standard web camera (getUserMedia) with a vendored jsQR decoder. The camera renders inside the scan square rather than taking over the screen, and there is no Google or Play Services dependency in the scan path. The ML Kit plugin has been removed from the project.
+- Auto-lock is now a real inactivity timer measured in seconds, defaulting to 60. Any activity resets it, and when it expires the vault locks and returns to the lock screen. Previously the field existed but was not wired to anything.
+- The QR stream timeout is measured in seconds, defaulting to 30, and governs every QR share. The QR display shows a live countdown and a manual close button.
+
+### Fixed
+- The scanner Cancel button now fully stops the camera. It was re-triggering because the tap bubbled up to the scan box and reopened the scanner. Cancel now stops propagation, a re-entry guard prevents a second scan from starting, and the camera track and video element are released cleanly.
+- Settings now persist across app restart. The QR stream timeout and auto-lock value are stored in IndexedDB, since browser local storage does not survive an app restart in the Android WebView.
+
+### Security model
+- Dropping ML Kit removes the one part of the scan path that relied on a Google-owned SDK and could fetch a model from Play Services. The vendored jsQR decoder runs entirely on device, in the same local, self-contained spirit as the bundled QR generator and fountain codec.
+
+### Notes
+- jsQR is vendored as a single MIT-licensed file with no native code and no network calls.
+- Version numbers across the app and extension are aligned to 0.5.2.
+
 ## [0.5.1] - 2026-09-07
 
 This release wires phone sync end to end and adds encrypted offline backup and key naming.
