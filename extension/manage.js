@@ -8,7 +8,6 @@ import { splitIntoFrames, createFrameCollector } from './frames.js'
 import { createEncoder, createDecoder } from './fountain.js'
 import { generateSalt, deriveKeyFromSecret, masterKeyToCryptoKey, wrapMasterKey, unwrapMasterKey } from './crypto.js'
 import { getPasswordVault, setPasswordVault } from './store.js'
-import jsQR from './jsqr.js'
 
 const tabs = document.querySelectorAll('.sidebar-tab')
 const tabManage = document.getElementById('tab-manage')
@@ -343,6 +342,7 @@ btnClearVault.onclick = async () => {
 
 tabs.forEach(tab => {
   tab.onclick = () => showTab(tab.dataset.tab)
+})
 
 inputAutolockTimeout.onchange = () => {
   let v = parseInt(inputAutolockTimeout.value) || 60
@@ -359,7 +359,6 @@ inputQrTimeout.onchange = async () => {
 
 const btnBackupSync = document.getElementById('btn-backup-sync')
 if (btnBackupSync) btnBackupSync.onclick = () => showTab('sync')
-})
 
 async function init() {
   await loadAuthStatus()
@@ -605,7 +604,7 @@ document.getElementById('qr-scan-box').onclick = async function () {
         canvas.width = video.videoWidth; canvas.height = video.videoHeight
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
         const img = ctx.getImageData(0, 0, canvas.width, canvas.height)
-        const code = jsQR(img.data, img.width, img.height, { inversionAttempts: 'dontInvert' })
+        const code = window.jsQR(img.data, img.width, img.height, { inversionAttempts: 'dontInvert' })
         if (code && code.data) {
           const outcome = decoder.addFrame(code.data)
           if (outcome.success) {
@@ -643,15 +642,5 @@ async function handleImported(payloadText) {
   }
   syncMsg('Unrecognized code', 'error')
 }
-
-init() {
-  await loadAuthStatus()
-  await loadAllCredentials()
-  
-  const settings = await chrome.storage.local.get(['autoLockTimeout'])
-  inputAutolockTimeout.value = settings.autoLockTimeout || 60
-  try { const a = await store.getAuth() || {}; inputQrTimeout.value = a.qrStreamTimeout || 30 } catch (e) { inputQrTimeout.value = 30 }
-}
-
 
 init()
