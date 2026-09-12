@@ -6,6 +6,9 @@ import * as pairing from './pairing.js'
 import QRCode from './qrcode.js'
 import { splitIntoFrames, createFrameCollector } from './frames.js'
 import { createEncoder, createDecoder } from './fountain.js'
+import { generateSalt, deriveKeyFromSecret, masterKeyToCryptoKey, wrapMasterKey, unwrapMasterKey } from './crypto.js'
+import { getPasswordVault, setPasswordVault } from './store.js'
+import jsQR from './jsqr.js'
 
 const tabs = document.querySelectorAll('.sidebar-tab')
 const tabManage = document.getElementById('tab-manage')
@@ -14,16 +17,12 @@ const tabSettings = document.getElementById('tab-settings')
 const tabAbout = document.getElementById('tab-about')
 
 const cardFp = document.getElementById('card-fp')
-const cardPin = document.getElementById('card-pin')
 const cardPw = document.getElementById('card-pw')
 const statusFp = document.getElementById('status-fp')
-const statusPin = document.getElementById('status-pin')
 const statusPw = document.getElementById('status-pw')
 
 const btnEditFp = document.getElementById('btn-edit-fp')
 const btnDelFp = document.getElementById('btn-del-fp')
-const btnEditPin = document.getElementById('btn-edit-pin')
-const btnDelPin = document.getElementById('btn-del-pin')
 const btnEditPw = document.getElementById('btn-edit-pw')
 const btnDelPw = document.getElementById('btn-del-pw')
 
@@ -31,8 +30,8 @@ const credentialsList = document.getElementById('credentials-list')
 const msgManage = document.getElementById('msg-manage')
 const msgSettings = document.getElementById('msg-settings')
 
-const inputSoftTimeout = document.getElementById('input-soft-timeout')
-const inputHardTimeout = document.getElementById('input-hard-timeout')
+const inputAutolockTimeout = document.getElementById('input-autolock-timeout')
+const inputQrTimeout = document.getElementById('input-qr-timeout')
 const btnClearVault = document.getElementById('btn-clear-vault')
 
 function showTab(tabName) {
@@ -76,11 +75,8 @@ async function loadAuthStatus() {
   applyEnrollBtn(btnEditFp, status.hasFingerprint)
 
   if (status.hasPIN) {
-    cardPin.classList.add('active'); statusPin.textContent = 'Enrolled'
   } else {
-    cardPin.classList.remove('active'); statusPin.textContent = 'Not enrolled'
   }
-  applyEnrollBtn(btnEditPin, status.hasPIN)
 
   if (status.hasPassword) {
     cardPw.classList.add('active'); statusPw.textContent = 'Enrolled'
@@ -281,23 +277,6 @@ btnEditFp.onclick = async () => {
   }
 }
 
-btnEditPin.onclick = async () => {
-  const mk = await ensureUnlocked()
-  if (!mk) { showMsg(msgManage, 'Authentication required', 'error'); return }
-  const pin = prompt('Enter a 4-6 digit PIN:')
-  if (!pin) return
-  if (pin.length < 4 || pin.length > 6 || !/^\d+$/.test(pin)) {
-    showMsg(msgManage, 'PIN must be 4-6 digits', 'error'); return
-  }
-  auth.startPINCreation()
-  const result = await auth.setPIN(pin, mk)
-  if (result.success) {
-    showMsg(msgManage, 'PIN enrolled', 'success')
-    loadAuthStatus()
-  } else {
-    showMsg(msgManage, result.error, 'error')
-  }
-}
 
 btnEditPw.onclick = async () => {
   const mk = await ensureUnlocked()
@@ -327,17 +306,6 @@ btnDelFp.onclick = async () => {
   }
 }
 
-btnDelPin.onclick = async () => {
-  if (confirm('Remove the PIN?')) {
-    const result = await auth.removePIN()
-    if (result.success) {
-      showMsg(msgManage, 'PIN removed', 'success')
-      loadAuthStatus()
-    } else {
-      showMsg(msgManage, result.error, 'error')
-    }
-  }
-}
 
 btnDelPw.onclick = async () => {
   if (confirm('Delete password authentication?')) {
@@ -351,19 +319,7 @@ btnDelPw.onclick = async () => {
   }
 }
 
-inputSoftTimeout.onchange = () => {
-  let m = parseInt(inputSoftTimeout.value) || 5
-  if (m < 1) m = 1
-  chrome.storage.local.set({ softLockTimeout: m })
-  showMsg(msgSettings, 'Soft-lock set to ' + m + ' minutes', 'success')
-}
 
-inputHardTimeout.onchange = () => {
-  let m = parseInt(inputHardTimeout.value) || 20
-  if (m < 1) m = 1
-  chrome.storage.local.set({ hardLockTimeout: m })
-  showMsg(msgSettings, 'Hard-lock set to ' + m + ' minutes', 'success')
-}
 
 btnClearVault.onclick = async () => {
   const confirm1 = confirm(
@@ -388,6 +344,19 @@ btnClearVault.onclick = async () => {
 tabs.forEach(tab => {
   tab.onclick = () => showTab(tab.dataset.tab)
 
+inputAutolockTimeout.onchange = () => {
+  let v = parseInt(inputAutolockTimeout.value) || 60
+  if (v < 10) v = 10; if (v > 3600) v = 3600
+  inputAutolockTimeout.value = v
+  chrome.storage.local.set({ autoLockTimeout: v })
+}
+inputQrTimeout.onchange = async () => {
+  let v = parseInt(inputQrTimeout.value) || 30
+  if (v < 5) v = 5; if (v > 600) v = 600
+  inputQrTimeout.value = v
+  try { const a = await store.getAuth() || {}; a.qrStreamTimeout = v; await store.setAuth(a) } catch (e) {}
+}
+
 const btnBackupSync = document.getElementById('btn-backup-sync')
 if (btnBackupSync) btnBackupSync.onclick = () => showTab('sync')
 })
@@ -396,179 +365,293 @@ async function init() {
   await loadAuthStatus()
   await loadAllCredentials()
   
-  const settings = await chrome.storage.local.get(['softLockTimeout', 'hardLockTimeout'])
-  inputSoftTimeout.value = settings.softLockTimeout || 5
-  inputHardTimeout.value = settings.hardLockTimeout || 20
+  const settings = await chrome.storage.local.get(['autoLockTimeout'])
+  inputAutolockTimeout.value = settings.autoLockTimeout || 60
+  try { const a = await store.getAuth() || {}; inputQrTimeout.value = a.qrStreamTimeout || 30 } catch (e) { inputQrTimeout.value = 30 }
 }
 
 
-const btnStartSync = document.getElementById('btn-start-sync')
-const btnStopSync = document.getElementById('btn-stop-sync')
-const syncQr = document.getElementById('sync-qr')
-const syncQrLabel = document.getElementById('sync-qr-label')
-const syncVideo = document.getElementById('sync-video')
-const syncCamLabel = document.getElementById('sync-cam-label')
+// ===================== SYNC (phone-parity) =====================
 const msgSync = document.getElementById('msg-sync')
+const EXPORT_ITERATIONS = 1000000
 
-let syncState = null
+function syncMsg(t, kind) { showMsg(msgSync, t, kind || 'success') }
 
-let frameAnimationTimer = null
-
-function displayFramedQR(container, payload) {
-  const frames = splitIntoFrames(payload)
-  let current = 0
-
-  if (frameAnimationTimer) {
-    clearInterval(frameAnimationTimer)
-    frameAnimationTimer = null
-  }
-
-  function renderFrame() {
-    const qr = new QRCode({ content: frames[current], width: 256, height: 256, padding: 2, color: '#000000', background: '#ffffff' })
-    const label = frames.length > 1 ? '<div style="text-align:center;color:#888;font-size:12px;margin-top:8px;">Frame ' + (current + 1) + ' of ' + frames.length + '</div>' : ''
-    container.innerHTML = qr.svg() + label
-    current = (current + 1) % frames.length
-  }
-
-  renderFrame()
-  if (frames.length > 1) {
-    frameAnimationTimer = setInterval(renderFrame, 600)
-  }
+// ---- QR stream timeout (persisted in auth record) ----
+async function getQrTimeoutSeconds() {
+  try { const a = await store.getAuth() || {}; if (a.qrStreamTimeout) return a.qrStreamTimeout } catch (e) {}
+  return 30
 }
 
-function stopFramedQR() {
-  if (frameAnimationTimer) {
-    clearInterval(frameAnimationTimer)
-    frameAnimationTimer = null
-  }
+// ---- Fountain streaming (Share) ----
+let shareFountainTimer = null, shareCountdownTimer = null, shareShutoffTimer = null
+function stopShareFountain() {
+  if (shareFountainTimer) { clearInterval(shareFountainTimer); shareFountainTimer = null }
+  if (shareCountdownTimer) { clearInterval(shareCountdownTimer); shareCountdownTimer = null }
+  if (shareShutoffTimer) { clearTimeout(shareShutoffTimer); shareShutoffTimer = null }
+  const c = document.getElementById('share-qr'); if (c) c.innerHTML = ''
 }
-
-let fountainTimer = null
-
-function streamFountainQR(container, payload) {
-  stopFountainQR()
+async function streamShare(payload, label) {
+  stopShareFountain()
+  const wrap = document.getElementById('share-qr-wrap')
+  const container = document.getElementById('share-qr')
+  const labelEl = document.getElementById('share-qr-label')
+  const timerEl = document.getElementById('share-qr-timer')
+  if (!container) return
+  if (labelEl) labelEl.textContent = label
+  if (wrap) wrap.classList.remove('hidden')
   const encoder = createEncoder(payload)
-
   function renderNext() {
     const frame = encoder.nextFrame()
     const qr = new QRCode({ content: frame, width: 256, height: 256, padding: 2, color: '#000000', background: '#ffffff' })
-    container.innerHTML = qr.svg() + '<div style="text-align:center;color:#888;font-size:12px;margin-top:8px;">Streaming ' + encoder.chunkCount + ' blocks - keep scanning until the other device completes</div>'
+    container.innerHTML = qr.svg()
   }
-
   renderNext()
-  fountainTimer = setInterval(renderNext, 300)
+  shareFountainTimer = setInterval(renderNext, 300)
+  const seconds = await getQrTimeoutSeconds()
+  let remaining = seconds
+  if (timerEl) timerEl.textContent = 'Auto-closes in ' + remaining + 's'
+  shareCountdownTimer = setInterval(function () {
+    remaining -= 1
+    if (timerEl) timerEl.textContent = remaining > 0 ? ('Auto-closes in ' + remaining + 's') : 'Closing...'
+  }, 1000)
+  shareShutoffTimer = setTimeout(stopShare, seconds * 1000)
+}
+function stopShare() {
+  stopShareFountain()
+  const wrap = document.getElementById('share-qr-wrap')
+  if (wrap) wrap.classList.add('hidden')
 }
 
-function stopFountainQR() {
-  if (fountainTimer) {
-    clearInterval(fountainTimer)
-    fountainTimer = null
+document.getElementById('btn-share-vault').onclick = async function () {
+  const mk = session.getMasterKey()
+  if (!mk) { syncMsg('Unlock your vault first', 'error'); return }
+  const vaultData = await getPasswordVault()
+  if (!vaultData) { syncMsg('Nothing to sync yet', 'error'); return }
+  streamShare(JSON.stringify({ kind: 'vault', vault: vaultData }), 'Scan this with your other device to receive your logins')
+}
+document.getElementById('btn-share-key').onclick = async function () {
+  const mk = session.getMasterKey()
+  if (!mk) { syncMsg('Unlock your vault first', 'error'); return }
+  const raw = new Uint8Array(await crypto.subtle.exportKey('raw', mk))
+  streamShare(JSON.stringify({ kind: 'key', key: Array.from(raw) }), 'Scan this with your new device to give it the master key')
+}
+document.getElementById('btn-stop-share').onclick = stopShare
+
+// ---- Backup files ----
+function downloadFile(filename, text) {
+  try {
+    const blob = new Blob([text], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a'); a.href = url; a.download = filename
+    document.body.appendChild(a); a.click(); document.body.removeChild(a)
+    setTimeout(function () { URL.revokeObjectURL(url) }, 1000)
+    return true
+  } catch (e) { return false }
+}
+function readFileText(cb) {
+  const input = document.createElement('input')
+  input.type = 'file'; input.accept = '.vaultkey,.vault,application/json'
+  input.onchange = function () {
+    const f = input.files && input.files[0]
+    if (!f) { cb(null); return }
+    const r = new FileReader()
+    r.onload = function () { cb(r.result) }
+    r.onerror = function () { cb(null) }
+    r.readAsText(f)
   }
+  input.click()
 }
 
-let syncActive = false
-let scanLoopRunning = false
-
-function stopSync() {
-  syncActive = false
-  scanLoopRunning = false
-  stopFountainQR()
-  if (syncVideo.srcObject) {
-    syncVideo.srcObject.getTracks().forEach(function (t) { t.stop() })
-    syncVideo.srcObject = null
-  }
-  syncVideo.classList.add('hidden')
-  syncCamLabel.classList.add('hidden')
-  btnStopSync.classList.add('hidden')
+const SECURITY_QUESTIONS = [
+  'Name of your first pet', 'City where you were born', 'Name of your first street',
+  'Your mothers maiden name', 'Name of your first school', 'Your childhood best friend first name',
+  'Make of your first car', 'Name of your first employer', 'Your favorite childhood teacher last name',
+  'The street you grew up on'
+]
+function pickThreeQuestions() {
+  const idx = []; const pool = SECURITY_QUESTIONS.slice()
+  for (let i = 0; i < 3; i++) { const r = Math.floor(Math.random() * pool.length); idx.push(SECURITY_QUESTIONS.indexOf(pool[r])); pool.splice(r, 1) }
+  return idx
+}
+function combineSecret(passphrase, qIdx, answers) {
+  const parts = [passphrase]
+  for (let i = 0; i < qIdx.length; i++) parts.push(String(qIdx[i]) + ':' + answers[i])
+  return parts.join('\u0000')
 }
 
-async function scanLoop(detector, myPrivateKey) {
-  const seenKeys = new Set()
-  const decoder = createDecoder()
-  let sharedKey = null
-  let receiving = false
-
-  scanLoopRunning = true
-  while (scanLoopRunning) {
+document.getElementById('btn-export-vault').onclick = async function () {
+  const mk = session.getMasterKey()
+  if (!mk) { syncMsg('Unlock first', 'error'); return }
+  const vaultData = await getPasswordVault()
+  if (!vaultData) { syncMsg('Nothing to export yet', 'error'); return }
+  if (downloadFile('valid-vault-backup.vault', JSON.stringify({ format: 'valid-vault-vault', version: 1, vault: vaultData })))
+    syncMsg('Vault exported. It stays encrypted, useless without your master key.', 'success')
+  else syncMsg('Could not save the file', 'error')
+}
+document.getElementById('btn-import-vault').onclick = function () {
+  readFileText(async function (text) {
+    if (!text) { syncMsg('No file selected', 'error'); return }
     try {
-      const found = await detector.detect(syncVideo)
-      for (const code of found) {
-        const raw = code.rawValue
-        if (!receiving) {
-          const parsed = pairing.parseQR(raw)
-          if (parsed.success && !seenKeys.has(raw)) {
-            seenKeys.add(raw)
-            sharedKey = await pairing.deriveSharedKey(myPrivateKey, parsed.publicKey)
-            receiving = true
-            const masterKey = session.getMasterKey()
-            const transfer = await pairing.prepareTransfer(masterKey, sharedKey)
-            if (transfer.success) {
-              streamFountainQR(syncQr, transfer.data.payload)
-            }
-            showMsg(msgSync, 'Phone key received, streaming vault and reading theirs...', 'success')
-          }
-        } else {
-          const outcome = decoder.addFrame(raw)
+      const fileObj = JSON.parse(text)
+      if (fileObj.format !== 'valid-vault-vault') { syncMsg('Not a Valid Vault backup file', 'error'); return }
+      const mk = session.getMasterKey()
+      if (!mk) { syncMsg('Unlock first', 'error'); return }
+      const local = await getPasswordVault()
+      const incoming = fileObj.vault
+      if (!local) { await setPasswordVault(incoming); syncMsg('Vault restored.', 'success'); return }
+      const merged = await passwords.mergeVaults(local, incoming, mk)
+      merged.meta.createdAt = Math.min(local.meta.createdAt, incoming.meta.createdAt)
+      merged.meta.lastAccess = Date.now()
+      await setPasswordVault(merged)
+      syncMsg('Vault merged.', 'success')
+    } catch (e) { syncMsg('Import failed: ' + (e && e.message ? e.message : e), 'error') }
+  })
+}
+document.getElementById('btn-export-key').onclick = async function () {
+  const mk = session.getMasterKey()
+  if (!mk) { syncMsg('Unlock first', 'error'); return }
+  const qIdx = pickThreeQuestions()
+  showExportKeyModal(qIdx)
+}
+document.getElementById('btn-import-key').onclick = function () {
+  readFileText(function (text) {
+    if (!text) { syncMsg('No file selected', 'error'); return }
+    try { const fileObj = JSON.parse(text); if (fileObj.format !== 'valid-vault-key') { syncMsg('Not a key file', 'error'); return } showImportKeyModal(fileObj) }
+    catch (e) { syncMsg('Could not read the file', 'error') }
+  })
+}
+
+// export/import key modals (simple prompt-based to keep it lean)
+async function showExportKeyModal(qIdx) {
+  const pass = window.prompt('Set an export passphrase (12+ chars, letter/number/symbol, capitalization matters):')
+  if (!pass) return
+  if (pass.length < 12 || !/[a-zA-Z]/.test(pass) || !/[0-9]/.test(pass) || !/[^a-zA-Z0-9]/.test(pass)) { syncMsg('Passphrase must be 12+ chars with a letter, number, and symbol', 'error'); return }
+  const answers = []
+  for (let i = 0; i < qIdx.length; i++) {
+    const a = window.prompt(SECURITY_QUESTIONS[qIdx[i]] + ' (one word, capitalization matters):')
+    if (!a) { syncMsg('All three answers are required', 'error'); return }
+    answers.push(a)
+  }
+  try {
+    const mk = session.getMasterKey()
+    const secret = combineSecret(pass, qIdx, answers)
+    const salt = await generateSalt()
+    const wrapKey = await deriveKeyFromSecret(secret, salt, EXPORT_ITERATIONS)
+    const rawMaster = new Uint8Array(await crypto.subtle.exportKey('raw', mk))
+    const wrapped = await wrapMasterKey(rawMaster, wrapKey)
+    const authRec = await store.getAuth() || {}
+    const nickname = authRec.keyNickname || 'My Master Key'
+    const fileObj = { format: 'valid-vault-key', version: 1, nickname: nickname, questions: qIdx, salt: Array.from(salt), iterations: EXPORT_ITERATIONS, wrapped: wrapped }
+    const fname = nickname.replace(/[^a-z0-9]+/gi, '-').toLowerCase() + '.vaultkey'
+    if (downloadFile(fname, JSON.stringify(fileObj))) syncMsg('Key exported. Store the file, passphrase, and answers safely.', 'success')
+    else syncMsg('Could not save the file', 'error')
+  } catch (e) { syncMsg('Export failed: ' + (e && e.message ? e.message : e), 'error') }
+}
+async function showImportKeyModal(fileObj) {
+  const pass = window.prompt('Key file: ' + (fileObj.nickname || 'Master Key') + '\nEnter passphrase:')
+  if (!pass) return
+  const answers = []
+  for (let i = 0; i < fileObj.questions.length; i++) {
+    const a = window.prompt(SECURITY_QUESTIONS[fileObj.questions[i]] + ' (capitalization matters):')
+    if (a == null) return
+    answers.push(a)
+  }
+  try {
+    const secret = combineSecret(pass, fileObj.questions, answers)
+    const salt = new Uint8Array(fileObj.salt)
+    const wrapKey = await deriveKeyFromSecret(secret, salt, fileObj.iterations || EXPORT_ITERATIONS)
+    const rawMaster = await unwrapMasterKey(fileObj.wrapped, wrapKey)
+    const importedKey = await masterKeyToCryptoKey(rawMaster)
+    session.setMasterKey(importedKey)
+    syncMsg('Master key imported. This device can now sync and decrypt vaults.', 'success')
+  } catch (e) { syncMsg('Wrong passphrase or answers.', 'error') }
+}
+
+// ---- Scan (getUserMedia + jsQR, in-box) ----
+let scanActive = false
+document.getElementById('qr-scan-box').onclick = async function () {
+  if (scanActive) return
+  const box = document.getElementById('qr-scan-box')
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { syncMsg('Camera not available', 'error'); return }
+  scanActive = true
+  const decoder = createDecoder()
+  let settled = false, stream = null, raf = null
+  const origHtml = box.innerHTML
+  box.innerHTML = ''
+  const video = document.createElement('video'); video.setAttribute('playsinline', 'true'); video.muted = true
+  video.style.cssText = 'width:100%;height:100%;object-fit:cover;'
+  const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d', { willReadFrequently: true })
+  const cancel = document.createElement('button'); cancel.textContent = 'Cancel'
+  cancel.style.cssText = 'position:absolute;top:8px;left:8px;z-index:3;background:var(--danger);color:#fff;border:none;border-radius:6px;padding:6px 14px;font-weight:700;'
+  const status = document.createElement('div'); status.style.cssText = 'position:absolute;bottom:8px;left:0;right:0;text-align:center;color:#33ff66;font-family:monospace;font-size:12px;z-index:3;'
+  status.textContent = 'Point at the other device'
+  box.appendChild(video); box.appendChild(cancel); box.appendChild(status)
+  function cleanup() {
+    settled = true
+    setTimeout(function () { scanActive = false }, 400)
+    if (raf) { cancelAnimationFrame(raf); raf = null }
+    try { if (stream) { stream.getTracks().forEach(function (t) { t.stop() }); stream = null } } catch (e) {}
+    try { video.pause(); video.srcObject = null } catch (e) {}
+    box.innerHTML = origHtml
+  }
+  cancel.onclick = function (e) { if (e) { e.stopPropagation(); e.preventDefault() } cleanup(); syncMsg('Scan cancelled', 'success') }
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+    video.srcObject = stream; await video.play()
+    function tick() {
+      if (settled) return
+      if (video.readyState === video.HAVE_ENOUGH_DATA) {
+        canvas.width = video.videoWidth; canvas.height = video.videoHeight
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+        const img = ctx.getImageData(0, 0, canvas.width, canvas.height)
+        const code = jsQR(img.data, img.width, img.height, { inversionAttempts: 'dontInvert' })
+        if (code && code.data) {
+          const outcome = decoder.addFrame(code.data)
           if (outcome.success) {
-            showMsg(msgSync, 'Receiving vault: ' + outcome.solved + ' of ' + outcome.total + ' blocks', 'success')
-            if (outcome.complete) {
-              const assembled = decoder.assemble()
-              const localMasterKey = session.getMasterKey()
-              const merged = await pairing.applyIncomingVault(assembled.payload, sharedKey, localMasterKey)
-              if (merged.success) {
-                showMsg(msgSync, 'Sync complete. ' + merged.count + ' credentials.', 'success')
-              } else {
-                showMsg(msgSync, 'Merge failed: ' + merged.error, 'error')
-              }
-              stopSync()
-              return
-            }
+            status.textContent = 'Receiving: ' + outcome.solved + ' of ' + outcome.total
+            if (outcome.complete) { const assembled = decoder.assemble(); cleanup(); handleImported(assembled.payload); return }
           }
         }
       }
-    } catch (error) {
+      if (!settled) raf = requestAnimationFrame(tick)
     }
-    await new Promise(function (r) { setTimeout(r, 100) })
-  }
+    if (!settled) raf = requestAnimationFrame(tick)
+  } catch (e) { cleanup(); syncMsg('Camera failed: ' + (e && e.message ? e.message : e), 'error') }
 }
 
-btnStartSync.onclick = async function() {
-  const masterKey = session.getMasterKey()
-  if (!masterKey) {
-    showMsg(msgSync, 'Unlock your vault before syncing', 'error')
+async function handleImported(payloadText) {
+  const data = JSON.parse(payloadText)
+  if (data.kind === 'key') {
+    const importedKey = await masterKeyToCryptoKey(new Uint8Array(data.key))
+    session.setMasterKey(importedKey)
+    syncMsg('Sync key imported. This device can now sync.', 'success')
     return
   }
-
-  syncActive = true
-  btnStopSync.classList.remove('hidden')
-
-  const keyPair = await pairing.generateKeyPair()
-  const myQrData = JSON.stringify({ type: 'valid-vault-pair', publicKey: keyPair.publicKey })
-
-  syncQrLabel.classList.remove('hidden')
-  const keyQr = new QRCode({ content: myQrData, width: 256, height: 256, padding: 2, color: '#000000', background: '#ffffff' })
-  syncQr.innerHTML = keyQr.svg()
-
-  if (!('BarcodeDetector' in window)) {
-    showMsg(msgSync, 'This browser cannot scan. Sending only - your phone will receive.', 'success')
+  if (data.kind === 'vault') {
+    const mk = session.getMasterKey()
+    if (!mk) { syncMsg('QR sync not enabled. Import master key first', 'error'); return }
+    const local = await getPasswordVault()
+    const incoming = data.vault
+    if (!local) { await setPasswordVault(incoming); syncMsg('Vault imported.', 'success'); return }
+    const merged = await passwords.mergeVaults(local, incoming, mk)
+    merged.meta.createdAt = Math.min(local.meta.createdAt, incoming.meta.createdAt)
+    merged.meta.lastAccess = Date.now()
+    await setPasswordVault(merged)
+    syncMsg('Sync complete.', 'success')
     return
   }
-
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
-    syncVideo.srcObject = stream
-    syncVideo.classList.remove('hidden')
-    syncCamLabel.classList.remove('hidden')
-    await syncVideo.play()
-    const detector = new BarcodeDetector({ formats: ['qr_code'] })
-    scanLoop(detector, keyPair.privateKey)
-  } catch (error) {
-    showMsg(msgSync, 'Camera unavailable, sending only: ' + error.message, 'success')
-  }
+  syncMsg('Unrecognized code', 'error')
 }
 
-btnStopSync.onclick = function() {
-  stopSync()
-  showMsg(msgSync, 'Sync stopped', 'success')
+init() {
+  await loadAuthStatus()
+  await loadAllCredentials()
+  
+  const settings = await chrome.storage.local.get(['autoLockTimeout'])
+  inputAutolockTimeout.value = settings.autoLockTimeout || 60
+  try { const a = await store.getAuth() || {}; inputQrTimeout.value = a.qrStreamTimeout || 30 } catch (e) { inputQrTimeout.value = 30 }
 }
+
+
 init()

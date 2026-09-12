@@ -10,9 +10,7 @@ const viewAdd = document.getElementById('view-add')
 
 const setupStateFp = document.getElementById('setup-state-fp')
 const btnSetupFp = document.getElementById('btn-setup-fp')
-const btnSetupPin = document.getElementById('btn-setup-pin')
 const btnSetupPw = document.getElementById('btn-setup-pw')
-const setupPin = document.getElementById('setup-pin')
 const setupPassword = document.getElementById('setup-password')
 const btnSetupDone = document.getElementById('btn-setup-done')
 const msgSetup = document.getElementById('msg-setup')
@@ -89,7 +87,6 @@ function setEnrollButton(btn, enrolled) {
 function updateSetupStatus() {
   if (setupStateFp) setupStateFp.textContent = setupState.hasFp ? 'Enrolled' : ''
   setEnrollButton(btnSetupFp, setupState.hasFp)
-  setEnrollButton(btnSetupPin, setupState.hasPin)
   setEnrollButton(btnSetupPw, setupState.hasPw)
   // Finish is available once at least one HARD unlock (fingerprint or password) exists.
   const canFinish = setupState.hasFp || setupState.hasPw
@@ -203,35 +200,14 @@ btnSetupFp.onclick = async () => {
   }
 }
 
-btnSetupPin.onclick = async () => {
-  const pin = setupPin.value
-  if (pin.length < 4 || pin.length > 6) {
-    showMsg(msgSetup, 'PIN must be 4-6 digits', 'error')
-    return
-  }
-  if (!/^\d+$/.test(pin)) {
-    showMsg(msgSetup, 'PIN must be numbers only', 'error')
-    return
-  }
-  auth.startPINCreation()
-  const result = await auth.setPIN(pin, masterKey)
-  if (result.success) {
-    masterKey = result.masterKey
-    session.setMasterKey(masterKey)
-    await persistKey()
-    setupState.hasPin = true
-    setupPin.value = ''
-    updateSetupStatus()
-    showMsg(msgSetup, 'PIN enrolled', 'success')
-  } else {
-    showMsg(msgSetup, result.error, 'error')
-  }
-}
-
 btnSetupPw.onclick = async () => {
   const pw = setupPassword.value
-  if (pw.length < 8) {
-    showMsg(msgSetup, 'Password must be 8+ characters', 'error')
+  if (pw.length < 12) {
+    showMsg(msgSetup, 'Password must be at least 12 characters', 'error')
+    return
+  }
+  if (!/[a-zA-Z]/.test(pw) || !/[0-9]/.test(pw) || !/[^a-zA-Z0-9]/.test(pw)) {
+    showMsg(msgSetup, 'Password needs a letter, a number, and a symbol', 'error')
     return
   }
   auth.startPasswordCreation()
@@ -375,18 +351,18 @@ document.addEventListener('click', (e) => {
   }
 })
 
-btnAdd.onclick = async () => {
+if (btnAdd) btnAdd.onclick = async () => {
   addDomain.value = activeDomain
   addUsername.value = ''
   addPassword.value = ''
   showView(viewAdd)
 }
 
-btnCancel.onclick = () => {
+if (btnCancel) btnCancel.onclick = () => {
   showView(viewUnlocked)
 }
 
-btnSave.onclick = async () => {
+if (btnSave) btnSave.onclick = async () => {
   const domain = addDomain.value
   const username = addUsername.value
   const password = addPassword.value
@@ -410,7 +386,6 @@ btnSave.onclick = async () => {
 inputPassword.onkeydown = (e) => { if (e.key === 'Enter') btnPassword.click() }
 inputSoftpin.onkeydown = (e) => { if (e.key === 'Enter') btnSoftpin.click() }
 inputSoftpassword.onkeydown = (e) => { if (e.key === 'Enter') btnSoftPassword.click() }
-setupPin.onkeydown = (e) => { if (e.key === 'Enter') btnSetupPin.click() }
 setupPassword.onkeydown = (e) => { if (e.key === 'Enter') btnSetupPw.click() }
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {

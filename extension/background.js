@@ -48,7 +48,73 @@ async function credentialsForDomain(domain) {
   return { success: true, credentials: out }
 }
 
+async function encryptField(text, key) {
+  const iv = crypto.getRandomValues(new Uint8Array(12))
+  const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv }, key, new TextEncoder().encode(text))
+  return { iv: Array.from(iv), ciphertext: Array.from(new Uint8Array(ct)) }
+}
+
+function genId() {
+  return 'c_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10)
+}
+
+async function writeVault(vault) {
+  return new Promise(function (resolve) {
+    const req = indexedDB.open('ValidVault', 1)
+    req.onsuccess = function () {
+      try {
+        const tx = req.result.transaction('passwords', 'readwrite')
+        tx.objectStore('passwords').put(vault)
+        tx.oncomplete = function () { resolve(true) }
+        tx.onerror = function () { resolve(false) }
+      } catch (e) { resolve(false) }
+    }
+    req.onerror = function () { resolve(false) }
+  })
+}
+
+async function saveCredential(domain, username, password) {
+  const bytes = await getSessionKeyBytes()
+  if (!bytes) return { success: false, locked: true }
+  const key = await crypto.subtle.importKey('raw', new Uint8Array(bytes), { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt'])
+  let vault = await getVault()
+  if (!vault) vault = { id: 'vault', meta: { createdAt: Date.now(), lastAccess: Date.now() }, credentials: {} }
+  if (!vault.credentials) vault.credentials = {}
+  if (!vault.credentials[domain]) vault.credentials[domain] = []
+
+  // if a live credential with the same username exists, update it (dedup), else add
+  let existingId = null
+  for (const cred of vault.credentials[domain]) {
+    if (cred.deleted) continue
+    try {
+      const u = await decryptField(cred.username, key)
+      if (u === username) { existingId = cred.id; break }
+    } catch (e) {}
+  }
+  const encUser = await encryptField(username, key)
+  const encPass = await encryptField(password, key)
+  const now = Date.now()
+  if (existingId) {
+    for (let i = 0; i < vault.credentials[domain].length; i++) {
+      if (vault.credentials[domain][i].id === existingId) {
+        vault.credentials[domain][i] = { id: existingId, username: encUser, password: encPass, createdAt: vault.credentials[domain][i].createdAt || now, updatedAt: now }
+        break
+      }
+    }
+  } else {
+    vault.credentials[domain].push({ id: genId(), username: encUser, password: encPass, createdAt: now, updatedAt: now })
+  }
+  vault.meta = vault.meta || {}
+  vault.meta.lastAccess = now
+  const ok = await writeVault(vault)
+  return { success: ok }
+}
+
 chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
+  if (request.action === 'saveCredential') {
+    saveCredential(request.domain, request.username, request.password).then(sendResponse)
+    return true
+  }
   if (request.action === 'getCredentialsForDomain') {
     credentialsForDomain(request.domain).then(sendResponse)
     return true

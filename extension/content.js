@@ -155,6 +155,87 @@
     return div.innerHTML
   }
 
+  let savePrompt = null
+
+  function createSavePrompt() {
+    const host = document.createElement('div')
+    host.id = 'local-vault-save-host'
+    host.style.cssText = 'position:fixed;inset:0;z-index:2147483647;display:none;'
+    document.body.appendChild(host)
+    const shadow = host.attachShadow({ mode: 'closed' })
+    shadow.innerHTML = `
+      <style>
+        .backdrop { position:fixed; inset:0; background:rgba(0,0,0,0.6); display:flex; align-items:center; justify-content:center; }
+        .card { background:#0d130d; border:1px solid #1f9e40; border-radius:10px; padding:20px; width:300px; max-width:90vw;
+          font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; box-shadow:0 8px 30px rgba(0,0,0,0.6); }
+        .title { color:#33ff66; font-size:15px; font-weight:700; margin-bottom:6px; }
+        .sub { color:#6fae7f; font-size:12px; margin-bottom:4px; word-break:break-all; }
+        .user { color:#b8f0c4; font-size:13px; margin:8px 0 16px; word-break:break-all; }
+        .row { display:flex; gap:10px; }
+        button { flex:1; padding:11px; border-radius:6px; border:none; font-size:13px; font-weight:700; cursor:pointer; }
+        .save { background:#33ff66; color:#05140a; }
+        .cancel { background:transparent; color:#33ff66; border:1px solid #1f9e40; font-weight:400; }
+      </style>
+      <div class="backdrop" id="backdrop">
+        <div class="card">
+          <div class="title">Save to Valid Vault?</div>
+          <div class="sub" id="sp-domain"></div>
+          <div class="user" id="sp-user"></div>
+          <div class="row">
+            <button class="save" id="sp-save">Save</button>
+            <button class="cancel" id="sp-cancel">Not now</button>
+          </div>
+        </div>
+      </div>
+    `
+    return { host, shadow }
+  }
+
+  function showSavePrompt(domain, username, password) {
+    if (!savePrompt) savePrompt = createSavePrompt()
+    savePrompt.shadow.getElementById('sp-domain').textContent = domain
+    savePrompt.shadow.getElementById('sp-user').textContent = username || '(no username)'
+    savePrompt.host.style.display = 'block'
+    const close = () => { savePrompt.host.style.display = 'none' }
+    savePrompt.shadow.getElementById('sp-cancel').onclick = close
+    savePrompt.shadow.getElementById('sp-save').onclick = async () => {
+      await chrome.runtime.sendMessage({ action: 'saveCredential', domain, username, password })
+      close()
+    }
+    savePrompt.shadow.getElementById('backdrop').onclick = (e) => {
+      if (e.target === savePrompt.shadow.getElementById('backdrop')) close()
+    }
+  }
+
+  function captureAndPrompt() {
+    if (!usernameField && !passwordField) return
+    const u = usernameField ? usernameField.value : ''
+    const p = passwordField ? passwordField.value : ''
+    if (!p) return  // no password, nothing to save
+    showSavePrompt(currentDomain, u, p)
+  }
+
+  function wireSubmitCapture() {
+    if (!passwordField) return
+    const form = passwordField.closest('form')
+    if (form) {
+      form.addEventListener('submit', function () { captureAndPrompt() }, true)
+    }
+    // also capture Enter in password field and clicks on likely submit buttons
+    passwordField.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') setTimeout(captureAndPrompt, 0)
+    })
+    // button clicks near the form (submit buttons that are not type=submit in a form)
+    document.addEventListener('click', function (e) {
+      const t = e.target
+      if (!t) return
+      const isBtn = (t.tagName === 'BUTTON') || (t.tagName === 'INPUT' && (t.type === 'submit' || t.type === 'button'))
+      if (isBtn && passwordField && passwordField.value) {
+        setTimeout(captureAndPrompt, 50)
+      }
+    }, true)
+  }
+
   function init() {
     const fields = detectLoginForm()
     if (!fields) return
@@ -163,7 +244,8 @@
     passwordField = fields.password
 
     usernameField.addEventListener('focus', () => showDropdown(usernameField))
-    passwordField.addEventListener('focus', hideDropdown)
+    passwordField.addEventListener('focus', () => showDropdown(passwordField))
+    wireSubmitCapture()
 
     document.addEventListener('click', (e) => {
       if (!dropdown) return

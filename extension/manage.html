@@ -77,7 +77,7 @@
       <div id="tab-manage">
         <h1>Manage Vault</h1>
 
-        <h2>Auth Methods</h2>
+        <h2>Unlock Methods</h2>
         <div class="auth-methods">
           <div class="auth-card" id="card-fp">
             <div class="auth-title">Fingerprint</div>
@@ -85,14 +85,6 @@
             <div class="auth-actions">
               <button class="small secondary" id="btn-edit-fp">Edit</button>
               <button class="small danger" id="btn-del-fp">Delete</button>
-            </div>
-          </div>
-          <div class="auth-card" id="card-pin">
-            <div class="auth-title">PIN</div>
-            <div class="auth-status" id="status-pin">Not set</div>
-            <div class="auth-actions">
-              <button class="small secondary" id="btn-edit-pin">Edit</button>
-              <button class="small danger" id="btn-del-pin">Delete</button>
             </div>
           </div>
           <div class="auth-card" id="card-pw">
@@ -117,19 +109,35 @@
 
       <div id="tab-sync" class="hidden">
         <h1>Sync</h1>
-        <p style="color:#666;font-size:14px;">Sync your credentials to another device. Show this code on this device, then scan it with your phone.</p>
-        <button id="btn-start-sync" style="padding:12px 20px;background:#00d9a0;color:#000;border:none;border-radius:8px;font-weight:600;cursor:pointer;">Start Sync</button>
-        <button id="btn-stop-sync" class="hidden" style="padding:12px 20px;background:#ff5555;color:#fff;border:none;border-radius:8px;font-weight:600;cursor:pointer;margin-left:8px;">Stop</button>
-        <div style="display:flex;gap:20px;flex-wrap:wrap;margin-top:20px;">
-          <div style="flex:1;min-width:240px;">
-            <div id="sync-qr-label" class="hidden" style="color:#888;font-size:13px;margin-bottom:8px;">Show this to your phone</div>
-            <div id="sync-qr" style="max-width:280px;"></div>
-          </div>
-          <div style="flex:1;min-width:240px;">
-            <div id="sync-cam-label" class="hidden" style="color:#888;font-size:13px;margin-bottom:8px;">Point your webcam at your phone</div>
-            <video id="sync-video" class="hidden" style="max-width:280px;border-radius:8px;" playsinline></video>
-          </div>
+
+        <h2>Share</h2>
+        <p style="color:var(--text-dim);font-size:13px;margin-bottom:10px;">Show a QR for another device to scan. Do this somewhere private, anyone who sees it can capture it.</p>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;">
+          <button id="btn-share-vault">Share Vault</button>
+          <button id="btn-share-key" class="secondary">Share Master Key</button>
         </div>
+        <div id="share-qr-wrap" class="hidden" style="position:relative;margin-top:14px;max-width:300px;">
+          <button id="btn-stop-share" style="position:absolute;top:0;right:0;background:none;border:1px solid var(--green-dim);color:var(--green);border-radius:6px;padding:4px 10px;font-size:12px;z-index:2;">Close</button>
+          <div id="share-qr-label" style="color:var(--text-dim);font-size:12px;margin-bottom:8px;"></div>
+          <div id="share-qr"></div>
+          <div id="share-qr-timer" style="color:var(--text-dim);font-size:11px;margin-top:6px;"></div>
+        </div>
+
+        <h2 style="margin-top:28px;">Backup Files</h2>
+        <p style="color:var(--text-dim);font-size:13px;margin-bottom:10px;">Save an encrypted copy offline, or restore one. Files stay useless without your master key.</p>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
+          <button id="btn-export-vault">Export Vault</button>
+          <button id="btn-import-vault" class="secondary">Import Vault</button>
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;">
+          <button id="btn-export-key">Export Key</button>
+          <button id="btn-import-key" class="secondary">Import Key</button>
+        </div>
+
+        <h2 style="margin-top:28px;">Scan a Device</h2>
+        <p style="color:var(--text-dim);font-size:13px;margin-bottom:10px;">Read a key or vault streamed from another device.</p>
+        <div id="qr-scan-box" style="border:1px dashed var(--green-dim);border-radius:8px;width:280px;max-width:100%;aspect-ratio:1/1;display:flex;align-items:center;justify-content:center;text-align:center;color:var(--green);cursor:pointer;position:relative;overflow:hidden;">Tap to open scanner</div>
+
         <div id="msg-sync" class="msg hidden" style="margin-top:16px;"></div>
       </div>
 
@@ -138,25 +146,25 @@
 
         <div class="setting-row">
           <div>
-            <div class="setting-label">Soft-lock timer</div>
-            <div class="setting-desc">Idle minutes before the session soft-locks. Resume with your PIN.</div>
+            <div class="setting-label">Auto-lock timeout (seconds)</div>
+            <div class="setting-desc">Idle seconds before the vault locks.</div>
           </div>
-          <input type="number" min="1" max="120" value="5" id="input-soft-timeout" style="width:80px;">
+          <input type="number" min="10" max="3600" value="60" id="input-autolock-timeout" style="width:80px;">
         </div>
 
         <div class="setting-row">
           <div>
-            <div class="setting-label">Hard-lock timer</div>
-            <div class="setting-desc">Idle minutes before the vault hard-locks. Requires fingerprint or password.</div>
+            <div class="setting-label">QR stream timeout (seconds)</div>
+            <div class="setting-desc">Seconds a shared QR stays visible before it auto-closes.</div>
           </div>
-          <input type="number" min="1" max="240" value="20" id="input-hard-timeout" style="width:80px;">
+          <input type="number" min="5" max="600" value="30" id="input-qr-timeout" style="width:80px;">
         </div>
 
         <div class="clear-vault-section">
-          <h2 style="color:#e74c3c;margin-top:0;">Clear Vault</h2>
-          <p style="color:#888;font-size:13px;line-height:1.6;margin-bottom:16px;">
+          <h2 style="color:var(--danger);margin-top:0;">Clear Vault</h2>
+          <p style="color:var(--text-dim);font-size:13px;line-height:1.6;margin-bottom:16px;">
             This will permanently delete all stored credentials, auth methods, and settings. 
-            <strong style="color:#e74c3c;">This cannot be undone.</strong><br><br>
+            <strong style="color:var(--danger);">This cannot be undone.</strong><br><br>
             <strong>Recommendation:</strong> Back up your vault to another device using Secure Sync before clearing.
           </p>
           <div style="display:flex;gap:12px;">
@@ -170,11 +178,12 @@
 
       <div id="tab-about" class="hidden">
         <h1>About Valid Vault</h1>
-        <p style="color:#888;font-size:14px;line-height:1.8;max-width:600px;">
-          <strong style="color:var(--green);">Valid Vault Password Manager v0.3.6</strong><br><br>
-          A decentralized password manager with fingerprint authentication. All data stored locally with zero server communication.<br><br>
-          Built by Rook<br>
-          <a href="https://github.com/HiImRook/valid-vault-password-manager" style="color:var(--green);">GitHub Repository</a>
+        <p style="color:var(--text-dim);font-size:14px;line-height:1.8;max-width:600px;">
+          <strong style="color:var(--green);">Valid Vault Password Manager v0.6.0</strong><br><br>
+          A local, encrypted password manager. Your credentials live on your device, encrypted under keys only you can produce. No cloud, no accounts, no sync servers. Unlock with your device fingerprint or PIN, or your password. Move credentials between devices over a local QR stream or an encrypted backup file.<br><br>
+          Built by Rook<br><br>
+          <a href="https://github.com/HiImRook/valid-vault-password-manager" style="color:var(--green);">GitHub Repository</a><br>
+          <a href="https://hiimrook.github.io/valid-vault-password-manager/" style="color:var(--green);">Website</a>
         </p>
       </div>
     </div>

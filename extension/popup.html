@@ -100,21 +100,16 @@
       <div class="wordmark solo">VALID VAULT</div>
       <div class="section">
         <div class="section-title">Set Up Your Vault</div>
-        <p>Enroll at least one unlock method to create your vault. Fingerprint or password can unlock the vault; a PIN quickly resumes an idle session.</p>
+        <p>Set up how you unlock your vault. Fingerprint, your device PIN, or your password can unlock it. Enroll at least one.</p>
 
         <div class="enroll-row">
-          <span class="label">Fingerprint</span>
+          <span class="label">Fingerprint / PIN</span>
           <span class="state" id="setup-state-fp"></span>
           <button class="small enroll" id="btn-setup-fp">Enroll</button>
         </div>
 
         <div class="enroll-row">
-          <input type="password" id="setup-pin" placeholder="PIN (4-6 digits)" maxlength="6">
-          <button class="small enroll" id="btn-setup-pin">Enroll</button>
-        </div>
-
-        <div class="enroll-row">
-          <input type="password" id="setup-password" placeholder="Password (8+ chars)">
+          <input type="password" id="setup-password" placeholder="Password (12+ chars, letter, number, symbol)">
           <button class="small enroll" id="btn-setup-pw">Enroll</button>
         </div>
 
@@ -175,10 +170,7 @@
         <span class="status active" id="status-session">Session</span>
       </div>
       <div class="section">
-        <div class="section-title">Current Site</div>
-        <div id="current-domain">-</div>
-        <div id="credentials-list"></div>
-        <button class="secondary" id="btn-add">Add Credential</button>
+        <p style="color:var(--text-dim);font-size:13px;line-height:1.5;">Vault unlocked. Autofill is active on websites. Open the menu to manage credentials, sync, and settings.</p>
       </div>
       <div id="msg-unlocked" class="msg"></div>
     </div>
