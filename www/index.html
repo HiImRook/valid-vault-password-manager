@@ -124,7 +124,7 @@
           <button id="setup-fp-btn" class="small enroll" onclick="enrollFp()">Enroll</button>
         </div>
         <div class="row">
-          <div class="pw-wrap"><input type="password" id="setup-pw" placeholder="Password (8+ chars)"><button type="button" class="pw-eye" data-target="setup-pw" onclick="togglePw(this)" aria-label="Show/hide"><svg viewBox="0 0 24 24"><path d="M12 4.5C7 4.5 2.7 7.6 1 12c1.7 4.4 6 7.5 11 7.5s9.3-3.1 11-7.5c-1.7-4.4-6-7.5-11-7.5zm0 12.5a5 5 0 110-10 5 5 0 010 10zm0-8a3 3 0 100 6 3 3 0 000-6z"/></svg></button></div>
+          <div class="pw-wrap"><input type="password" id="setup-pw" placeholder="Password (12+ chars, letter/number/symbol)"><button type="button" class="pw-eye" data-target="setup-pw" onclick="togglePw(this)" aria-label="Show/hide"><svg viewBox="0 0 24 24"><path d="M12 4.5C7 4.5 2.7 7.6 1 12c1.7 4.4 6 7.5 11 7.5s9.3-3.1 11-7.5c-1.7-4.4-6-7.5-11-7.5zm0 12.5a5 5 0 110-10 5 5 0 010 10zm0-8a3 3 0 100 6 3 3 0 000-6z"/></svg></button></div>
           <button id="setup-pw-btn" class="small enroll" onclick="enrollPw()">Enroll</button>
         </div>
         <button onclick="finishSetup()" style="margin-top:10px;">Finish &amp; Unlock</button>
@@ -167,6 +167,16 @@
     </div>
 
     <div id="page-menu" class="page">
+      <div id="menu-lock-overlay" class="hidden" style="position:absolute;inset:0;background:var(--bg);align-items:center;justify-content:center;z-index:50;">
+        <div style="text-align:center;padding:40px 24px;max-width:340px;">
+          <div style="font-family:'Orbitron',sans-serif;font-size:22px;color:var(--green);margin-bottom:28px;text-shadow:0 0 8px rgba(51,255,102,0.4);">UNLOCK VAULT</div>
+          <div style="color:var(--text-dim);margin-bottom:20px;font-size:13px;">Session timed out. Unlock to continue.</div>
+          <button id="menu-unlock-fp" onclick="menuUnlockFp()" style="background:var(--green);color:#05140a;border:none;padding:12px 24px;border-radius:6px;font-weight:700;width:100%;margin-bottom:12px;">Unlock with Fingerprint</button>
+          <div class="pw-wrap" style="margin-bottom:14px;"><input type="password" id="menu-unlock-pw" placeholder="Password" onkeydown="if(event.key==='Enter')menuUnlockPw()" style="width:100%;"></div>
+          <button id="menu-unlock-go" onclick="menuUnlockPw()" style="background:var(--green);color:#05140a;border:none;padding:10px 16px;border-radius:6px;font-weight:700;width:100%;">Go</button>
+          <div id="menu-unlock-msg" style="color:var(--danger);font-size:12px;margin-top:10px;min-height:16px;"></div>
+        </div>
+      </div>
       <div class="page-header">
         <button class="back-arrow" onclick="closeMenu()">&#8592;</button>
         <h1 style="margin:0;">Menu</h1>
@@ -188,18 +198,13 @@
             <button id="manage-fp-btn" class="small enroll" onclick="enrollFp()">Enroll</button>
           </div>
           <div class="row">
-            <div class="pw-wrap"><input type="password" id="manage-pw" placeholder="Password (8+ chars)"><button type="button" class="pw-eye" data-target="manage-pw" onclick="togglePw(this)" aria-label="Show/hide"><svg viewBox="0 0 24 24"><path d="M12 4.5C7 4.5 2.7 7.6 1 12c1.7 4.4 6 7.5 11 7.5s9.3-3.1 11-7.5c-1.7-4.4-6-7.5-11-7.5zm0 12.5a5 5 0 110-10 5 5 0 010 10zm0-8a3 3 0 100 6 3 3 0 000-6z"/></svg></button></div>
+            <div class="pw-wrap"><input type="password" id="manage-pw" placeholder="Password (12+ chars, letter/number/symbol)"><button type="button" class="pw-eye" data-target="manage-pw" onclick="togglePw(this)" aria-label="Show/hide"><svg viewBox="0 0 24 24"><path d="M12 4.5C7 4.5 2.7 7.6 1 12c1.7 4.4 6 7.5 11 7.5s9.3-3.1 11-7.5c-1.7-4.4-6-7.5-11-7.5zm0 12.5a5 5 0 110-10 5 5 0 010 10zm0-8a3 3 0 100 6 3 3 0 000-6z"/></svg></button></div>
             <button id="manage-pw-btn" class="small enroll" onclick="enrollPw()">Enroll</button>
           </div>
           <div id="manage-msg" style="font-size:12px;color:var(--text-dim);margin-top:8px;min-height:8px;"></div>
         </div>
         <h2>Website Credentials</h2>
         <div class="section">
-          <div class="row">
-            <input type="text" id="vault-domain" placeholder="website.com">
-            <button onclick="showSaveCredential()">Add</button>
-            <button onclick="loadCredentials()" class="secondary">Load</button>
-          </div>
           <div id="credentials-list"></div>
         </div>
       </div>
@@ -275,11 +280,12 @@
 
       <div id="menu-about" class="menu-panel">
         <div class="section">
-          <p style="color:var(--text-dim);font-size:14px;line-height:1.8;">
-            <strong style="color:var(--green);">Valid Vault Password Manager v0.3.6</strong><br><br>
-            A decentralized password manager with fingerprint authentication. All data stored locally with zero server communication.<br><br>
-            Built by Rook<br>
-            <a href="https://github.com/HiImRook/valid-vault-password-manager" style="color:var(--green);">GitHub Repository</a>
+          <p style="color:var(--text-dim);font-size:14px;line-height:1.8;max-width:600px;">
+            <strong style="color:var(--green);">Valid Vault Password Manager v0.6.0</strong><br><br>
+            A local, encrypted password manager. Your credentials live on your device, encrypted under keys only you can produce. No cloud, no accounts, no sync servers. Unlock with your device fingerprint or PIN, or your password. Move credentials between devices over a local QR stream or an encrypted backup file.<br><br>
+            Built by Rook<br><br>
+            <a href="https://github.com/HiImRook/valid-vault-password-manager" style="color:var(--green);">GitHub Repository</a><br>
+            <a href="https://hiimrook.github.io/valid-vault-password-manager/" style="color:var(--green);">Website</a>
           </p>
         </div>
       </div>
@@ -784,6 +790,7 @@ async function lockAll() {
   session.lastActivity = 0
   session.softLocked = false
   await writeSoftFlag(false)
+  await clearStorageSession()
   stopTimeout()
 }
 
@@ -1508,8 +1515,11 @@ async function setPassword(password, existingMasterKey) {
     return { success: false, error: timerCheck.error }
   }
 
-  if (password.length < 8) {
-    return { success: false, error: 'Password must be at least 8 characters' }
+  if (password.length < 12) {
+    return { success: false, error: 'Password must be at least 12 characters' }
+  }
+  if (!/[a-zA-Z]/.test(password) || !/[0-9]/.test(password) || !/[^a-zA-Z0-9]/.test(password)) {
+    return { success: false, error: 'Password needs a letter, a number, and a symbol' }
   }
 
   const auth = await getAuth() || {}
@@ -12819,7 +12829,74 @@ document.addEventListener('DOMContentLoaded', function() {
   updateStatus()
   initGlobe()
   routeView()
+  startLockMonitor()
 })
+
+// ---- Global lock monitor: catches a timeout no matter which page/tab is open ----
+function showMenuLockOverlay() {
+  var el = document.getElementById('menu-lock-overlay')
+  if (el) { el.classList.remove('hidden'); el.style.display = 'flex' }
+}
+function hideMenuLockOverlay() {
+  var el = document.getElementById('menu-lock-overlay')
+  if (el) { el.classList.add('hidden'); el.style.display = 'none' }
+  var pw = document.getElementById('menu-unlock-pw'); if (pw) pw.value = ''
+  var msg = document.getElementById('menu-unlock-msg'); if (msg) msg.textContent = ''
+}
+function menuUnlockMsg(t) {
+  var msg = document.getElementById('menu-unlock-msg'); if (msg) msg.textContent = t
+}
+
+window.menuUnlockFp = async function() {
+  var bv = nativeBiometric()
+  var auth = await vault.store.getAuth() || {}
+  if (bv && auth.fingerprintNative) {
+    try {
+      var res = await bv.unlock({ wrapped: auth.fingerprintNative.wrapped, iv: auth.fingerprintNative.iv })
+      var bytes = b64ToBytes(res.masterKey)
+      var ck = await crypto.subtle.importKey('raw', bytes, { name: 'AES-GCM', length: 256 }, true, ['encrypt','decrypt'])
+      vault.session.setMasterKey(ck)
+      hideMenuLockOverlay()
+      await updateStatus()
+      return
+    } catch (e) {
+      menuUnlockMsg('Fingerprint unlock failed. Use password.')
+      return
+    }
+  }
+  var result = await vault.auth.authenticateFingerprint()
+  if (result.success) {
+    vault.session.setMasterKey(result.masterKey)
+    noteActivity()
+    hideMenuLockOverlay()
+    await updateStatus()
+  } else { menuUnlockMsg(result.error) }
+}
+
+window.menuUnlockPw = async function() {
+  var el = document.getElementById('menu-unlock-pw')
+  var pw = el ? el.value : ''
+  var result = await vault.auth.authenticatePassword(pw)
+  if (result.success) {
+    vault.session.setMasterKey(result.masterKey)
+    noteActivity()
+    hideMenuLockOverlay()
+    await updateStatus()
+  } else { menuUnlockMsg(result.error) }
+}
+
+function startLockMonitor() {
+  setInterval(async function () {
+    if (!inMenuContext) return
+    var unlocked = vault.session.hasMasterKey()
+    var soft = await vault.session.isSoftLocked()
+    if (!unlocked && !soft) {
+      showMenuLockOverlay()
+    } else {
+      hideMenuLockOverlay()
+    }
+  }, 5000)
+}
 
 
 window.togglePw = function(btn) {
@@ -12914,6 +12991,8 @@ async function updateStatus() {
     if (ham) ham.style.display = unlocked ? '' : 'none'
     var menu = document.getElementById('menu-dropdown')
     if (menu && !unlocked) menu.classList.add('hidden')
+    if (unlocked) { await restartInactivityTimer() }
+    else if (pollTimer) { clearInterval(pollTimer); pollTimer = null }
   } catch (e) {}
 }
 
@@ -12949,23 +13028,46 @@ async function loadAutoLock() {
 }
 
 // ---- Inactivity auto-lock timer ----
-var inactivityTimer = null
-async function restartInactivityTimer() {
-  if (inactivityTimer) { clearTimeout(inactivityTimer); inactivityTimer = null }
-  if (!vault.session.hasMasterKey()) return  // only run while unlocked
-  var seconds = await getAutoLockSeconds()
-  inactivityTimer = setTimeout(async function() {
-    if (vault.session.hasMasterKey()) { await window.lockAll() }
-  }, seconds * 1000)
-}
+// Design: high-frequency events (touchmove/mousemove/scroll) must NOT each
+// trigger an async IndexedDB read + timer rebuild — that races and produces
+// exactly the "spazzy"/ignores-activity symptom. Instead, every event just
+// bumps a cheap synchronous timestamp; a single poller checks it.
+var lastActivityAt = Date.now()
+var cachedAutoLockMs = 60000
+var pollTimer = null
+
 function noteActivity() {
-  // only reset if unlocked and a timer is meant to run
-  if (vault.session.hasMasterKey()) restartInactivityTimer()
+  lastActivityAt = Date.now()
 }
+
 function startActivityTracking() {
-  ['touchstart','click','keydown','scroll'].forEach(function(ev){
+  ['touchstart','touchmove','click','input','keydown','scroll','mousemove'].forEach(function(ev){
     document.addEventListener(ev, noteActivity, { passive: true })
   })
+}
+
+async function refreshAutoLockCache() {
+  var seconds = await getAutoLockSeconds()
+  cachedAutoLockMs = seconds * 1000
+}
+
+function startInactivityPoll() {
+  if (pollTimer) clearInterval(pollTimer)
+  pollTimer = setInterval(function () {
+    if (!vault.session.hasMasterKey()) return
+    if (Date.now() - lastActivityAt >= cachedAutoLockMs) {
+      window.lockAll()
+    }
+  }, 1000)
+}
+
+// Called once on unlock and whenever the setting changes — refreshes the
+// cached timeout and resets the activity clock, but does NOT touch storage
+// on every tap/scroll the way the old per-event version did.
+async function restartInactivityTimer() {
+  noteActivity()
+  await refreshAutoLockCache()
+  startInactivityPoll()
 }
 
 window.saveQrTimeout = async function() {
@@ -13182,7 +13284,8 @@ window.enrollPw = async function() {
   if (!(await requireVaultOrError())) return
   var fp = fieldVal('setup-pw','manage-pw')
   var pw = fp.val || ''
-  if (pw.length < 8) { anyMsg('Password must be 8+ characters'); return }
+  if (pw.length < 12) { anyMsg('Password must be 12+ characters'); return }
+  if (!/[a-zA-Z]/.test(pw) || !/[0-9]/.test(pw) || !/[^a-zA-Z0-9]/.test(pw)) { anyMsg('Password needs a letter, a number, and a symbol'); return }
   var mk = vault.session.getMasterKey()
   vault.auth.startPasswordCreation()
   var result = await vault.auth.setPassword(pw, mk)
@@ -13245,34 +13348,107 @@ window.showSaveCredential = function() {
   showModal('<h3>Add Credential</h3><input type="text" id="modal-domain" value="' + domain + '" placeholder="domain"><input type="text" id="modal-login" placeholder="username"><input type="password" id="modal-password-cred" placeholder="password"><div style="margin-top:16px;"><button onclick="saveCredential()">Save</button><button onclick="hideModal()" class="secondary">Cancel</button></div>')
 }
 
-window.saveCredential = async function() {
+function credEsc(s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') }
+
+window.loadCredentials = function() { return renderCredentials() }
+
+window.renderCredentials = async function() {
   var masterKey = vault.session.getMasterKey()
-  if (!masterKey) { log('Not authenticated', 'error'); hideModal(); return }
-  var domain = document.getElementById('modal-domain').value
-  var login = document.getElementById('modal-login').value
-  var password = document.getElementById('modal-password-cred').value
-  var result = await vault.passwords.saveCredential(domain, login, password, masterKey)
-  if (result.success) {
-    log('Credential saved for ' + domain, 'success')
-    loadCredentials()
-  } else {
-    log('Save failed: ' + result.error, 'error')
+  var listEl = document.getElementById('credentials-list')
+  if (!listEl) return
+  if (!masterKey) { listEl.innerHTML = '<p style="color:var(--text-dim);font-size:13px;">Unlock to view credentials.</p>'; return }
+  var domRes = await vault.passwords.getAllDomains()
+  if (!domRes.success || !domRes.domains.length) { listEl.innerHTML = '<p style="color:var(--text-dim);font-size:13px;">No credentials saved yet.</p>'; return }
+  var domains = domRes.domains.slice().sort()
+  var html = ''
+  for (var i = 0; i < domains.length; i++) {
+    var domain = domains[i]
+    var res = await vault.passwords.getCredentials(domain, masterKey)
+    if (!res.success) continue
+    var dom = credEsc(domain)
+    html += '<div class="credential-domain" data-domain-toggle="' + dom + '" style="border-bottom:1px solid var(--green-faint);">'
+    html += '<div data-act="toggle-domain" data-domain="' + dom + '" style="display:flex;align-items:center;padding:14px 0;cursor:pointer;">'
+    html += '<span class="domain-caret" data-caret="' + dom + '" style="color:var(--text-dim);margin-right:8px;">&#9654;</span>'
+    html += '<span style="color:var(--green);font-size:14px;font-weight:700;flex:1;">' + dom + '</span>'
+    html += '<span style="color:var(--text-dim);font-size:12px;">' + res.credentials.length + ' account' + (res.credentials.length !== 1 ? 's' : '') + '</span>'
+    html += '</div>'
+    html += '<div data-domain-body="' + dom + '" class="hidden">'
+    for (var j = 0; j < res.credentials.length; j++) {
+      var c = res.credentials[j]
+      var cid = credEsc(c.id)
+      html += '<div style="padding:10px 0 14px 20px;">'
+      html += '<div style="color:var(--text);font-size:13px;margin-bottom:6px;word-break:break-all;">' + credEsc(c.username) + '</div>'
+      html += '<div style="display:flex;align-items:center;gap:8px;">'
+      html += '<span id="pw-' + cid + '" data-shown="0" style="color:var(--text-dim);font-size:13px;font-family:monospace;flex:1;word-break:break-all;">' + '&#8226;'.repeat(8) + '</span>'
+      html += '<button class="small secondary" data-act="toggle-pw" data-cid="' + cid + '">Show</button>'
+      html += '<button class="small danger" data-act="delete" data-cid="' + cid + '" data-dom="' + dom + '">Delete</button>'
+      html += '</div></div>'
+    }
+    html += '</div></div>'
   }
-  hideModal()
+  listEl.innerHTML = html
+  if (!listEl._delegated) {
+    listEl._delegated = true
+    listEl.addEventListener('click', function(e) {
+      var btn = e.target.closest ? e.target.closest('[data-act]') : null
+      if (!btn) return
+      var act = btn.getAttribute('data-act')
+      if (act === 'toggle-domain') {
+        var dom = btn.getAttribute('data-domain')
+        var body = listEl.querySelector('[data-domain-body="' + dom + '"]')
+        var caret = listEl.querySelector('[data-caret="' + dom + '"]')
+        if (body) body.classList.toggle('hidden')
+        if (caret) caret.innerHTML = (body && !body.classList.contains('hidden')) ? '&#9660;' : '&#9654;'
+      } else if (act === 'toggle-pw') {
+        window.toggleCred(btn, btn.getAttribute('data-cid'))
+      } else if (act === 'delete') {
+        window.deleteCred(btn.getAttribute('data-cid'), btn.getAttribute('data-dom'))
+      }
+    })
+  }
 }
 
-window.loadCredentials = async function() {
+var credCache = {}
+async function getCredById(cid) {
+  if (credCache[cid]) return credCache[cid]
   var masterKey = vault.session.getMasterKey()
-  var de2 = document.getElementById('vault-domain'); var domain = de2 ? de2.value : ''
-  var listEl = document.getElementById('credentials-list')
-  if (!masterKey) { listEl.innerHTML = '<p style="color:#666;">Login required</p>'; return }
-  if (!domain) { listEl.innerHTML = '<p style="color:#666;">Enter domain</p>'; return }
-  var result = await vault.passwords.getCredentials(domain, masterKey)
-  if (!result.success) { listEl.innerHTML = '<p style="color:#e74c3c;">' + result.error + '</p>'; return }
-  if (result.credentials.length === 0) { listEl.innerHTML = '<p style="color:#666;">No credentials</p>'; return }
-  listEl.innerHTML = result.credentials.map(function(c) {
-    return '<div class="credential-row"><span class="credential-login">' + c.username + '</span><span class="credential-pass">••••••••</span></div>'
-  }).join('')
+  if (!masterKey) return null
+  var domRes = await vault.passwords.getAllDomains()
+  if (!domRes.success) return null
+  for (var i = 0; i < domRes.domains.length; i++) {
+    var res = await vault.passwords.getCredentials(domRes.domains[i], masterKey)
+    if (!res.success) continue
+    for (var j = 0; j < res.credentials.length; j++) {
+      if (res.credentials[j].id === cid) { credCache[cid] = res.credentials[j]; return res.credentials[j] }
+    }
+  }
+  return null
+}
+
+window.toggleCred = async function(btn, cid) {
+  var span = document.getElementById('pw-' + cid)
+  if (!span) return
+  if (span.getAttribute('data-shown') === '1') {
+    span.textContent = '•'.repeat(8); span.setAttribute('data-shown', '0'); btn.textContent = 'Show'
+  } else {
+    var c = await getCredById(cid)
+    if (!c) { log('Unlock required', 'error'); return }
+    span.textContent = c.password; span.setAttribute('data-shown', '1'); btn.textContent = 'Hide'
+  }
+}
+
+window._pendingDeleteCid = null
+window.deleteCred = function(cid, domain) {
+  window._pendingDeleteCid = cid
+  showModal('<h3>Delete Credential</h3><p style="color:var(--text-dim);font-size:13px;">Remove this login for ' + credEsc(domain) + '? This cannot be undone.</p><div style="margin-top:16px;"><button class="danger" onclick="confirmDeleteCred()">Delete</button><button onclick="hideModal()" class="secondary">Cancel</button></div>')
+}
+window.confirmDeleteCred = async function() {
+  var cid = window._pendingDeleteCid
+  if (!cid) { hideModal(); return }
+  var result = await vault.passwords.deleteCredential(cid)
+  hideModal()
+  if (result && result.success) { delete credCache[cid]; log('Credential deleted', 'success'); credCache = {}; renderCredentials() }
+  else { log('Delete failed', 'error') }
 }
 
 window.lockAll = async function() {
@@ -13308,7 +13484,10 @@ window.toggleMenu = function() {
   document.getElementById('menu-dropdown').classList.toggle('hidden')
 }
 
+var inMenuContext = false
+
 window.openMenu = async function() {
+  inMenuContext = true
   document.getElementById('menu-dropdown').classList.add('hidden')
   document.getElementById('page-main').classList.remove('active')
   document.getElementById('page-menu').classList.add('active')
@@ -13317,12 +13496,14 @@ window.openMenu = async function() {
 }
 
 window.closeMenu = function() {
+  inMenuContext = false
   document.getElementById('page-menu').classList.remove('active')
   document.getElementById('page-main').classList.add('active')
 }
 
 window.showMenuTab = function(name, el) {
   if (name === 'settings') { loadKeyNickname(); loadQrTimeout(); loadAutoLock() }
+  if (name === 'manage') { credCache = {}; renderCredentials() }
   var panels = document.querySelectorAll('.menu-panel')
   for (var i = 0; i < panels.length; i++) panels[i].classList.remove('active')
   var tabs = document.querySelectorAll('.menu-tab')

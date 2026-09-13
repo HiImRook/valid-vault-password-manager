@@ -167,7 +167,7 @@
     </div>
 
     <div id="page-menu" class="page">
-      <div id="menu-lock-overlay" class="hidden" style="position:absolute;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:50;">
+      <div id="menu-lock-overlay" class="hidden" style="position:absolute;inset:0;background:var(--bg);align-items:center;justify-content:center;z-index:50;">
         <div style="text-align:center;padding:40px 24px;max-width:340px;">
           <div style="font-family:'Orbitron',sans-serif;font-size:22px;color:var(--green);margin-bottom:28px;text-shadow:0 0 8px rgba(51,255,102,0.4);">UNLOCK VAULT</div>
           <div style="color:var(--text-dim);margin-bottom:20px;font-size:13px;">Session timed out. Unlock to continue.</div>
@@ -12835,11 +12835,11 @@ document.addEventListener('DOMContentLoaded', function() {
 // ---- Global lock monitor: catches a timeout no matter which page/tab is open ----
 function showMenuLockOverlay() {
   var el = document.getElementById('menu-lock-overlay')
-  if (el) el.classList.remove('hidden')
+  if (el) { el.classList.remove('hidden'); el.style.display = 'flex' }
 }
 function hideMenuLockOverlay() {
   var el = document.getElementById('menu-lock-overlay')
-  if (el) el.classList.add('hidden')
+  if (el) { el.classList.add('hidden'); el.style.display = 'none' }
   var pw = document.getElementById('menu-unlock-pw'); if (pw) pw.value = ''
   var msg = document.getElementById('menu-unlock-msg'); if (msg) msg.textContent = ''
 }
@@ -12867,6 +12867,7 @@ window.menuUnlockFp = async function() {
   var result = await vault.auth.authenticateFingerprint()
   if (result.success) {
     vault.session.setMasterKey(result.masterKey)
+    noteActivity()
     hideMenuLockOverlay()
     await updateStatus()
   } else { menuUnlockMsg(result.error) }
@@ -12878,6 +12879,7 @@ window.menuUnlockPw = async function() {
   var result = await vault.auth.authenticatePassword(pw)
   if (result.success) {
     vault.session.setMasterKey(result.masterKey)
+    noteActivity()
     hideMenuLockOverlay()
     await updateStatus()
   } else { menuUnlockMsg(result.error) }
@@ -12885,9 +12887,7 @@ window.menuUnlockPw = async function() {
 
 function startLockMonitor() {
   setInterval(async function () {
-    var menuPage = document.getElementById('page-menu')
-    var inMenu = menuPage && menuPage.classList.contains('active')
-    if (!inMenu) return
+    if (!inMenuContext) return
     var unlocked = vault.session.hasMasterKey()
     var soft = await vault.session.isSoftLocked()
     if (!unlocked && !soft) {
@@ -13484,7 +13484,10 @@ window.toggleMenu = function() {
   document.getElementById('menu-dropdown').classList.toggle('hidden')
 }
 
+var inMenuContext = false
+
 window.openMenu = async function() {
+  inMenuContext = true
   document.getElementById('menu-dropdown').classList.add('hidden')
   document.getElementById('page-main').classList.remove('active')
   document.getElementById('page-menu').classList.add('active')
@@ -13493,6 +13496,7 @@ window.openMenu = async function() {
 }
 
 window.closeMenu = function() {
+  inMenuContext = false
   document.getElementById('page-menu').classList.remove('active')
   document.getElementById('page-main').classList.add('active')
 }

@@ -231,11 +231,11 @@ document.addEventListener('DOMContentLoaded', function() {
 // ---- Global lock monitor: catches a timeout no matter which page/tab is open ----
 function showMenuLockOverlay() {
   var el = document.getElementById('menu-lock-overlay')
-  if (el) el.classList.remove('hidden')
+  if (el) { el.classList.remove('hidden'); el.style.display = 'flex' }
 }
 function hideMenuLockOverlay() {
   var el = document.getElementById('menu-lock-overlay')
-  if (el) el.classList.add('hidden')
+  if (el) { el.classList.add('hidden'); el.style.display = 'none' }
   var pw = document.getElementById('menu-unlock-pw'); if (pw) pw.value = ''
   var msg = document.getElementById('menu-unlock-msg'); if (msg) msg.textContent = ''
 }
@@ -263,6 +263,7 @@ window.menuUnlockFp = async function() {
   var result = await vault.auth.authenticateFingerprint()
   if (result.success) {
     vault.session.setMasterKey(result.masterKey)
+    noteActivity()
     hideMenuLockOverlay()
     await updateStatus()
   } else { menuUnlockMsg(result.error) }
@@ -274,6 +275,7 @@ window.menuUnlockPw = async function() {
   var result = await vault.auth.authenticatePassword(pw)
   if (result.success) {
     vault.session.setMasterKey(result.masterKey)
+    noteActivity()
     hideMenuLockOverlay()
     await updateStatus()
   } else { menuUnlockMsg(result.error) }
