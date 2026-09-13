@@ -23,6 +23,57 @@ async function restoreMasterKeyFromSession() {
   return false
 }
 
+
+// ---- Manage page inline unlock overlay ----
+const lockOverlay = document.getElementById('manage-lock-overlay')
+const btnManageUnlockFp = document.getElementById('btn-manage-unlock-fp')
+const btnManageUnlockPw = document.getElementById('btn-manage-unlock-pw')
+const inputManagePassword = document.getElementById('input-manage-password')
+const msgManageLock = document.getElementById('msg-manage-lock')
+
+function showLockOverlay() { if (lockOverlay) lockOverlay.classList.remove('hidden') }
+function hideLockOverlay() { if (lockOverlay) lockOverlay.classList.add('hidden') }
+
+async function unlockManagePage() {
+  const mk = session.getMasterKey()
+  if (mk) { hideLockOverlay(); return true }
+  showLockOverlay()
+  return false
+}
+
+if (btnManageUnlockFp) {
+  btnManageUnlockFp.onclick = async () => {
+    const result = await auth.authenticateFingerprint()
+    if (result.success) {
+      session.setMasterKey(result.masterKey)
+      const bytes = new Uint8Array(await crypto.subtle.exportKey('raw', result.masterKey))
+      await chrome.storage.session.set({ masterKeyBytes: Array.from(bytes) })
+      hideLockOverlay()
+      location.reload()
+    } else if (msgManageLock) { showMsg(msgManageLock, result.error, 'error') }
+  }
+}
+
+if (btnManageUnlockPw) {
+  btnManageUnlockPw.onclick = async () => {
+    const pw = inputManagePassword.value
+    if (!pw) { if (msgManageLock) showMsg(msgManageLock, 'Enter password', 'error'); return }
+    const result = await auth.authenticatePassword(pw)
+    if (result.success) {
+      session.setMasterKey(result.masterKey)
+      const bytes = new Uint8Array(await crypto.subtle.exportKey('raw', result.masterKey))
+      await chrome.storage.session.set({ masterKeyBytes: Array.from(bytes) })
+      inputManagePassword.value = ''
+      hideLockOverlay()
+      location.reload()
+    } else if (msgManageLock) { showMsg(msgManageLock, result.error, 'error') }
+  }
+}
+
+if (inputManagePassword) {
+  inputManagePassword.onkeydown = (e) => { if (e.key === 'Enter' && btnManageUnlockPw) btnManageUnlockPw.click() }
+}
+
 const tabs = document.querySelectorAll('.sidebar-tab')
 const tabManage = document.getElementById('tab-manage')
 const tabPersonal = document.getElementById('tab-personal')
@@ -376,6 +427,7 @@ if (btnBackupSync) btnBackupSync.onclick = () => showTab('sync')
 
 async function init() {
   await restoreMasterKeyFromSession()
+  if (!(await unlockManagePage())) return
   await loadAuthStatus()
   await loadAllCredentials()
   

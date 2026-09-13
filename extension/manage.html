@@ -202,5 +202,20 @@
   </div>
   <script src="jsqr.js"></script>
   <script src="manage.js" type="module"></script>
+<div id="manage-lock-overlay" class="hidden" style="position:fixed;top:0;left:0;right:0;bottom:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:1000;">
+  <div style="text-align:center;padding:40px;max-width:400px;">
+    <div style="font-family:'Orbitron',sans-serif;font-size:24px;color:var(--green);margin-bottom:32px;text-shadow:0 0 8px rgba(51,255,102,0.4);">UNLOCK VAULT</div>
+    <div style="color:var(--text-dim);margin-bottom:24px;font-size:14px;">Session timed out. Unlock to continue.</div>
+
+    <button id="btn-manage-unlock-fp" style="background:var(--green);color:#05140a;border:none;padding:12px 24px;border-radius:6px;font-weight:700;cursor:pointer;width:100%;margin-bottom:12px;">Unlock with Fingerprint</button>
+
+    <div style="display:flex;gap:8px;margin-bottom:16px;">
+      <input type="password" id="input-manage-password" placeholder="Password" style="flex:1;background:var(--bg);border:1px solid var(--green-faint);color:var(--text);padding:10px;border-radius:6px;font-family:inherit;font-size:13px;">
+      <button id="btn-manage-unlock-pw" style="background:var(--green);color:#05140a;border:none;padding:10px 16px;border-radius:6px;font-weight:700;cursor:pointer;">Go</button>
+    </div>
+
+    <div id="msg-manage-lock" style="color:var(--danger);font-size:12px;min-height:16px;"></div>
+  </div>
+</div>
 </body>
 </html>
