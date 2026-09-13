@@ -19,19 +19,19 @@ const session = {
   softLocked: false
 }
 
-const DEFAULT_SOFT_MIN = 5
-const DEFAULT_HARD_MIN = 20
+const DEFAULT_AUTOLOCK_SEC = 60
 
 async function getTimeouts() {
-  let soft = DEFAULT_SOFT_MIN, hard = DEFAULT_HARD_MIN
+  let seconds = DEFAULT_AUTOLOCK_SEC
   try {
     if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
-      const r = await chrome.storage.local.get(['softLockTimeout', 'hardLockTimeout'])
-      if (r.softLockTimeout) soft = r.softLockTimeout
-      if (r.hardLockTimeout) hard = r.hardLockTimeout
+      const r = await chrome.storage.local.get(['autoLockTimeout'])
+      if (r.autoLockTimeout) seconds = r.autoLockTimeout
     }
   } catch (e) {}
-  return { softMs: soft * 60000, hardMs: hard * 60000 }
+  // single auto-lock tier: hard lock at the configured seconds; soft threshold set
+  // just above it so the hard path is always the one that fires (no app PIN anymore)
+  return { softMs: seconds * 1000 + 1, hardMs: seconds * 1000 }
 }
 const PIN_KEY = 'sessionPin'   // chrome.storage.session: { salt:[], wrapped:{iv,wrapped} }
 const SOFT_KEY = 'softLocked'  // chrome.storage.session: true when idle/manual soft-locked
@@ -145,7 +145,7 @@ async function getAuthPinPresent() {
 
 function startTimeout() {
   stopTimeout()
-  session.timeoutId = setInterval(() => { checkTimeout() }, 10000)
+  session.timeoutId = setInterval(() => { checkTimeout() }, 2000)
 }
 
 function stopTimeout() {

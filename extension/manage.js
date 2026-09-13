@@ -74,6 +74,16 @@ if (inputManagePassword) {
   inputManagePassword.onkeydown = (e) => { if (e.key === 'Enter' && btnManageUnlockPw) btnManageUnlockPw.click() }
 }
 
+// ---- Activity tracking to reset the inactivity timeout ----
+function attachActivityListeners() {
+  const mainContainer = document.querySelector('.content')
+  if (!mainContainer) return
+  const bump = () => { session.resetActivity() }
+  mainContainer.addEventListener('click', bump)
+  mainContainer.addEventListener('input', bump)
+  mainContainer.addEventListener('keydown', bump)
+}
+
 const tabs = document.querySelectorAll('.sidebar-tab')
 const tabManage = document.getElementById('tab-manage')
 const tabPersonal = document.getElementById('tab-personal')
@@ -455,6 +465,8 @@ async function init() {
       if (msgEl) { msgEl.textContent = 'Rename failed'; msgEl.style.color = 'var(--danger)' }
     }
   }
+
+  attachActivityListeners()
 }
 
 
