@@ -281,9 +281,7 @@ window.menuUnlockPw = async function() {
 
 function startLockMonitor() {
   setInterval(async function () {
-    var menuPage = document.getElementById('page-menu')
-    var inMenu = menuPage && menuPage.classList.contains('active')
-    if (!inMenu) return
+    if (!inMenuContext) return
     var unlocked = vault.session.hasMasterKey()
     var soft = await vault.session.isSoftLocked()
     if (!unlocked && !soft) {
@@ -880,7 +878,10 @@ window.toggleMenu = function() {
   document.getElementById('menu-dropdown').classList.toggle('hidden')
 }
 
+var inMenuContext = false
+
 window.openMenu = async function() {
+  inMenuContext = true
   document.getElementById('menu-dropdown').classList.add('hidden')
   document.getElementById('page-main').classList.remove('active')
   document.getElementById('page-menu').classList.add('active')
@@ -889,6 +890,7 @@ window.openMenu = async function() {
 }
 
 window.closeMenu = function() {
+  inMenuContext = false
   document.getElementById('page-menu').classList.remove('active')
   document.getElementById('page-main').classList.add('active')
 }
