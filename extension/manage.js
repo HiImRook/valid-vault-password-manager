@@ -76,12 +76,17 @@ if (inputManagePassword) {
 
 // ---- Activity tracking to reset the inactivity timeout ----
 function attachActivityListeners() {
-  const mainContainer = document.querySelector('.content')
-  if (!mainContainer) return
+  // Attach to the whole page, not just .content, so the sidebar tabs
+  // (a sibling of .content) also count as activity, not just the panel body.
   const bump = () => { session.resetActivity() }
-  mainContainer.addEventListener('click', bump)
-  mainContainer.addEventListener('input', bump)
-  mainContainer.addEventListener('keydown', bump)
+  document.body.addEventListener('click', bump, true)
+  document.body.addEventListener('input', bump, true)
+  document.body.addEventListener('keydown', bump, true)
+  // Desktop: mouse movement also counts (browser-throttled, negligible cost).
+  document.body.addEventListener('mousemove', bump, true)
+  // Phone/touch scope: tap/scroll stands in for mouse movement on touch devices.
+  document.body.addEventListener('touchstart', bump, true)
+  document.body.addEventListener('touchmove', bump, true)
 }
 
 // ---- Global lock monitor: catches a timeout no matter which tab is open ----
