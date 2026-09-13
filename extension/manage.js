@@ -9,6 +9,20 @@ import { createEncoder, createDecoder } from './fountain.js'
 import { generateSalt, deriveKeyFromSecret, masterKeyToCryptoKey, wrapMasterKey, unwrapMasterKey } from './crypto.js'
 import { getPasswordVault, setPasswordVault } from './store.js'
 
+// ---- Restore master key from shared session storage (popup <-> manage page) ----
+async function restoreMasterKeyFromSession() {
+  try {
+    const r = await chrome.storage.session.get('masterKeyBytes')
+    if (r && r.masterKeyBytes && r.masterKeyBytes.length === 32) {
+      const bytes = new Uint8Array(r.masterKeyBytes)
+      const mk = await masterKeyToCryptoKey(bytes)
+      session.setMasterKey(mk)
+      return true
+    }
+  } catch (e) {}
+  return false
+}
+
 const tabs = document.querySelectorAll('.sidebar-tab')
 const tabManage = document.getElementById('tab-manage')
 const tabPersonal = document.getElementById('tab-personal')
@@ -361,6 +375,7 @@ const btnBackupSync = document.getElementById('btn-backup-sync')
 if (btnBackupSync) btnBackupSync.onclick = () => showTab('sync')
 
 async function init() {
+  await restoreMasterKeyFromSession()
   await loadAuthStatus()
   await loadAllCredentials()
   
