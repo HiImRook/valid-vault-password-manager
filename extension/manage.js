@@ -84,6 +84,14 @@ function attachActivityListeners() {
   mainContainer.addEventListener('keydown', bump)
 }
 
+// ---- Global lock monitor: catches a timeout no matter which tab is open ----
+async function checkAndShowLockOverlay() {
+  if (session.hasMasterKey()) { hideLockOverlay(); return }
+  const restored = await restoreMasterKeyFromSession()
+  if (restored) { hideLockOverlay() } else { showLockOverlay() }
+}
+setInterval(checkAndShowLockOverlay, 5000)
+
 const tabs = document.querySelectorAll('.sidebar-tab')
 const tabManage = document.getElementById('tab-manage')
 const tabPersonal = document.getElementById('tab-personal')

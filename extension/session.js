@@ -173,6 +173,7 @@ async function lockAll() {
   session.lastActivity = 0
   session.softLocked = false
   await writeSoftFlag(false)
+  await clearStorageSession()
   stopTimeout()
 }
 
