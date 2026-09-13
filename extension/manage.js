@@ -381,7 +381,28 @@ async function init() {
   
   const settings = await chrome.storage.local.get(['autoLockTimeout'])
   inputAutolockTimeout.value = settings.autoLockTimeout || 60
-  try { const a = await store.getAuth() || {}; inputQrTimeout.value = a.qrStreamTimeout || 30 } catch (e) { inputQrTimeout.value = 30 }
+  try {
+    const a = await store.getAuth() || {}
+    inputQrTimeout.value = a.qrStreamTimeout || 30
+    const nickInput = document.getElementById('key-nickname-input')
+    if (nickInput) nickInput.value = a.keyNickname || 'My Master Key'
+  } catch (e) { inputQrTimeout.value = 30 }
+
+  const btnRenameKey = document.getElementById('btn-rename-key')
+  if (btnRenameKey) btnRenameKey.onclick = async () => {
+    const nickInput = document.getElementById('key-nickname-input')
+    const msgEl = document.getElementById('key-nickname-msg')
+    const name = nickInput ? nickInput.value.trim() : ''
+    if (!name) { if (msgEl) { msgEl.textContent = 'Name cannot be empty'; msgEl.style.color = 'var(--danger)' } return }
+    try {
+      const a = await store.getAuth() || {}
+      a.keyNickname = name
+      await store.setAuth(a)
+      if (msgEl) { msgEl.textContent = 'Key renamed.'; msgEl.style.color = 'var(--green)' }
+    } catch (e) {
+      if (msgEl) { msgEl.textContent = 'Rename failed'; msgEl.style.color = 'var(--danger)' }
+    }
+  }
 }
 
 
@@ -499,7 +520,12 @@ const _btnExportVault = document.getElementById('btn-export-vault'); if (_btnExp
   if (!mk) { syncMsg('Unlock first', 'error'); return }
   const vaultData = await getPasswordVault()
   if (!vaultData) { syncMsg('Nothing to export yet', 'error'); return }
-  if (downloadFile('valid-vault-backup.vault', JSON.stringify({ format: 'valid-vault-vault', version: 1, vault: vaultData })))
+  let nickname = ''
+  try { const a = await store.getAuth() || {}; nickname = (a.keyNickname || '').trim() } catch (e) {}
+  // filesystem-safe, but preserve the user's exact capitalization
+  const safeName = nickname ? '-' + nickname.replace(/[\\/:*?"<>|]+/g, '').replace(/\s+/g, '-') : ''
+  const fname = 'valid-vault-backup' + safeName + '.vault'
+  if (downloadFile(fname, JSON.stringify({ format: 'valid-vault-vault', version: 1, vault: vaultData })))
     syncMsg('Vault exported. It stays encrypted, useless without your master key.', 'success')
   else syncMsg('Could not save the file', 'error')
 }

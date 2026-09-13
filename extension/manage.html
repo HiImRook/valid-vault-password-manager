@@ -146,6 +146,18 @@
 
         <div class="setting-row">
           <div>
+            <div class="setting-label">Master Key Name</div>
+            <div class="setting-desc">A label for reference. Used in exported filenames.</div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <input type="text" id="key-nickname-input" placeholder="My Master Key" autocomplete="off" style="width:160px;">
+            <button class="small" id="btn-rename-key">Rename</button>
+          </div>
+        </div>
+        <div id="key-nickname-msg" style="font-size:12px;color:var(--text-dim);margin:-4px 0 12px;min-height:8px;"></div>
+
+        <div class="setting-row">
+          <div>
             <div class="setting-label">Auto-lock timeout (seconds)</div>
             <div class="setting-desc">Idle seconds before the vault locks.</div>
           </div>
@@ -188,6 +200,7 @@
       </div>
     </div>
   </div>
+  <script src="jsqr.js"></script>
   <script src="manage.js" type="module"></script>
 </body>
 </html>
