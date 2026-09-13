@@ -5,6 +5,23 @@ All notable changes to Local Vault will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.4] - 2026-09-13
+
+This release brings the phone app back into parity with the browser extension's v0.5.3 auth and interface work, and fixes a real bug in the process.
+
+### Changed
+- The About section on the phone now matches the extension exactly, including the current version and a website link alongside the repository link.
+- Website credentials on the phone were rebuilt to match the extension: a collapsible list grouped by domain, with a show/hide toggle for the password and delete only. The old Add and Load-by-domain flow is gone; credentials are added through normal browsing and autofill, not typed in here.
+- When a session times out while inside the settings menu, the phone now shows an inline unlock overlay in place, with fingerprint and password options, instead of booting all the way back to the root lock screen. Whether the overlay should show is tracked by an explicit flag set when the menu opens and closes, rather than inferred from page state, which could get stranded across a backgrounded app.
+- Password requirements are now enforced consistently at 12 or more characters with a letter, a number, and a symbol, on both the phone and the extension. The extension's underlying validation and its manage-page re-enroll path had quietly kept the old 8-character floor even after the setup screen was tightened; both are now closed.
+- Locking now clears the shared session key on the phone the same way it does on the extension, so a completed lock cannot be silently bypassed by state left over from before it.
+
+### Fixed
+- The new unlock overlay could become permanently stuck open with no way to dismiss it. The cause was a CSS conflict: the overlay's inline style set it visible, and an inline style always overrides a class-based rule, so hiding it by toggling a class had no effect. The overlay's visibility is now controlled directly rather than through a class that inline styles could override.
+
+### Notes
+- Version bumped to 0.5.4 for the phone app; the extension remains at 0.5.3 pending its own next release.
+
 ## [0.5.3] - 2026-09-12
 
 This release brings the browser extension into parity with the phone app's auth and sync model. Extension-only; the phone app is unchanged in this release.

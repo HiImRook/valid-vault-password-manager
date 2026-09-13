@@ -2,9 +2,9 @@
 
 
 
-\*\*Current Version:\*\* v0.5.3 (extension) / v0.5.2 (phone)
+\*\*Current Version:\*\* v0.5.4 (phone) / v0.5.3 (extension)
 
-\*\*Status:\*\* v0.5.3 released, extension-only (Pre-1.0 development, phone in Play closed testing)
+\*\*Status:\*\* Both surfaces in de-drift parity (Pre-1.0 development, phone in Play closed testing)
 
 
 
@@ -16,45 +16,41 @@
 
 
 
+\### v0.5.4 - Phone De-Drift to Extension Parity (Sep 2026)
+
+\- ✅ About section synced to match the extension exactly, version and website link included
+
+\- ✅ Website credentials rebuilt: collapsible domain list, show/hide password, delete only — matches the extension, old Add/Load flow removed
+
+\- ✅ Inline unlock overlay inside the settings menu on session timeout, in place of booting to the root lock screen
+
+\- ✅ Overlay visibility tracked by an explicit in-menu flag rather than inferred page state
+
+\- ✅ Password rule unified to 12+ characters with letter, number, and symbol on both phone and extension, including a gap in the extension's re-enroll path
+
+\- ✅ Locking clears the shared session key on the phone, matching the extension
+
+\- ✅ Fixed a CSS bug where an inline style kept the new overlay permanently visible regardless of its class
+
+
+
 \### v0.5.3 - Extension De-Drift to Phone Parity (Sep 2026)
 
-\- ✅ Custom app PIN removed from the extension; device unlock is fingerprint or the device's own PIN
+\- ✅ Custom app PIN removed from the extension; device unlock via fingerprint or the device's own PIN
 
-\- ✅ Password strengthened to 12+ characters with a letter, number, and symbol
+\- ✅ Sync tab rebuilt to Share Vault/Key, Export/Import Vault/Key, in-box jsQR scan
 
-\- ✅ Sync tab rebuilt to match the phone: Share Vault/Share Master Key (one-way QR), Export/Import Vault/Key (encrypted files), and an in-box scan using getUserMedia + vendored jsQR
+\- ✅ Inline unlock overlay and background lock monitor introduced on the extension's manage page
 
-\- ✅ Front popup no longer manages credentials; that lives only in the manage page
-
-\- ✅ About section updated with current version, description, and a website link
-
-\- ✅ Settings moved to seconds-based auto-lock (default 60) and QR stream timeout (default 30)
-
-\- ✅ Master key rename in Settings; vault export filename includes the name, capitalization preserved
-
-\- ✅ Fixed a settings-menu-halting syntax error (unclosed loop, malformed duplicate init)
-
-\- ✅ Null-guarded all sync button handlers so a missing element can't halt the script
-
-\- ✅ Manage page restores the unlocked session from shared storage instead of showing falsely locked
-
-\- ✅ Inline "UNLOCK VAULT" overlay on session timeout, with a background monitor that shows or hides it on any tab
-
-\- ✅ Fixed `lockAll()` not clearing the shared session key (a real lock-bypass) and fixed activity tracking missing the sidebar tabs
-
-\- ⚠️ Phone app not yet updated with this release's unlock-overlay, lock-monitor, and timer fixes
+\- ✅ Fixed lockAll() not clearing the shared session key, a real lock-bypass
 
 
 
 \### v0.5.2 - Sovereign QR Scanner and Settings Persistence (Sep 2026)
 
-\- ✅ Replaced ML Kit (Google/Play Services) with getUserMedia + vendored jsQR on the phone
+\- ✅ Replaced ML Kit with getUserMedia + vendored jsQR on the phone
 
-\- ✅ Fixed the scanner Cancel button re-triggering via event bubbling
-
-\- ✅ Settings persist across app restart via IndexedDB
-
-\- ✅ Auto-lock as a real inactivity timer in seconds, default 60
+\- ✅ Settings persist across app restart; auto-lock as a real inactivity timer in seconds
 
 
 
@@ -62,65 +58,17 @@
 
 \- ✅ Phone QR sync wired end to end; encrypted vault and key backup/restore
 
-\- ✅ Master key export protected by a passphrase plus three security questions
-
-\- ✅ Nameable master key
-
 
 
 \### v0.5.0 - Native Biometric Auth and Internal-Testing Hardening (Sep 2026)
 
 \- ✅ Native Android biometric unlock via BiometricPrompt + hardware Keystore
 
-\- ✅ System PIN as a hard unlock via device credential; custom app PIN removed on phone
 
 
+\### v0.4.0 and earlier
 
-\### v0.4.0 - Terminal-Green Rebrand and Reworked Lock Model (Sep 2026)
-
-\- ✅ Terminal-green identity, Orbitron wordmark, Valid globe logo, reworked lock model
-
-
-
-\### v0.3.5 and earlier
-
-\- ✅ Stateless fountain-QR sync, credential merge engine, WebAuthn PRF fingerprint binding, vault foundation — see CHANGELOG.md for full detail
-
-
-
-\---
-
-
-
-\## Upcoming Releases
-
-
-
-\### v0.5.4 - Phone De-Drift (Target: Q4 2026)
-
-
-
-\*\*Primary goal:\*\* Port the v0.5.3 extension fixes to the phone app so both surfaces share the same corrected auth/lock logic.
-
-
-
-\*\*In scope:\*\*
-
-\- Inline unlock overlay and background lock monitor on the phone, matching the extension
-
-\- Confirm the phone's `lockAll()` clears any shared session key the same way
-
-\- Confirm the phone's activity tracking covers every interactive surface, using touchstart/touchmove as the phone's activity signal in place of mouse movement
-
-\- Auto-lock timer reading the real persisted seconds setting, no stale defaults
-
-
-
-\*\*Completion criteria:\*\*
-
-\- A timed-out phone session shows an inline unlock path with no dead end
-
-\- Auto-lock only fires on genuine inactivity, verified by active use across every tab and screen
+\- ✅ Terminal-green rebrand, stateless fountain-QR sync, credential merge engine, WebAuthn PRF fingerprint binding, vault foundation — see CHANGELOG.md for full detail
 
 
 
@@ -134,7 +82,7 @@
 
 \### v0.6.x - Web Credentials
 
-\- Extend the vault to store and sync general web credentials, building on the same local encryption and sync model already in place for logins.
+Extend the vault to store and sync general web credentials, building on the same local encryption and sync model already in place for logins.
 
 
 
@@ -162,6 +110,10 @@
 
 \- Native background-lifecycle lock guarantees on Android
 
+\- Styled Export/Import Key modals on the extension (currently plain browser prompts)
+
+\- Floating-button autofill fallback for login pages without a traditional form
+
 
 
 \---
@@ -172,7 +124,7 @@
 
 
 
-⚠️ \*\*Phone app has not received the v0.5.3 extension fixes yet\*\* — tracked for v0.5.4
+⚠️ \*\*The v0.5.4 unlock-overlay fix needs on-device confirmation\*\*
 
 ⚠️ \*\*Sync, backup, and scanner still need on-device field testing\*\* across Android versions
 
@@ -222,5 +174,5 @@ MIT License - See LICENSE file for details
 
 
 
-\*\*Last Updated:\*\* Sep 12, 2026
+\*\*Last Updated:\*\* Sep 13, 2026
 

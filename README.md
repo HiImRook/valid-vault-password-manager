@@ -4,21 +4,21 @@ A local, encrypted, QR code portable password manager. No cloud, no accounts, no
 
 ---
 
+> ✅ **Phone De-Drift Notice - v0.5.4**
+>
+> The phone app now matches the browser extension: the same About text, a collapsible credentials list with show/hide and delete only, a 12+ character password rule with a letter, number, and symbol, and an inline unlock overlay inside the settings menu on session timeout instead of booting back to the root lock screen. See [CHANGELOG.md](CHANGELOG.md) for full details.
+
 > ✅ **Extension De-Drift Notice - v0.5.3**
 >
-> The browser extension now matches the phone app's auth and sync model: no custom app PIN, a 12+ character password with a letter, number, and symbol, and the same Share/Backup/Scan sync flow with a vendored jsQR scanner. A session timeout now shows an inline unlock overlay instead of leaving the manage page unusable, and a background monitor keeps that overlay in sync on every tab. This release is extension-only; the phone app will receive the same fixes in a follow-up. See [CHANGELOG.md](CHANGELOG.md) for full details.
+> The browser extension matches the phone app's auth and sync model: no custom app PIN, the same Share/Backup/Scan sync flow, and a vendored jsQR scanner. See [CHANGELOG.md](CHANGELOG.md) for full details.
 
 > ✅ **Sovereign Scanner and Settings Notice - v0.5.2**
 >
-> The QR scanner no longer uses a Google ML Kit plugin. Scanning is the standard web camera plus a vendored jsQR decoder that runs entirely on device. Settings persist across app restart, and auto-lock is a real inactivity timer in seconds. See [CHANGELOG.md](CHANGELOG.md) for full details.
-
-> ✅ **Sync and Backup Notice - v0.5.1**
->
-> Phone sync is wired end to end, and encrypted offline backup is available for both the vault and the master key. See [CHANGELOG.md](CHANGELOG.md) for full details.
+> The QR scanner uses the standard web camera plus a vendored jsQR decoder that runs entirely on device, no Google dependency. See [CHANGELOG.md](CHANGELOG.md) for full details.
 
 > ✅ **Native Biometric Auth Notice - v0.5.0**
 >
-> On Android, unlocking uses the device's own authentication through BiometricPrompt and a hardware-backed Keystore. On the extension, fingerprint unlock is the device's platform authenticator. See [CHANGELOG.md](CHANGELOG.md) for full details.
+> On Android, unlocking uses the device's own authentication through BiometricPrompt and a hardware-backed Keystore. On the extension, fingerprint unlock is the platform authenticator. See [CHANGELOG.md](CHANGELOG.md) for full details.
 
 ---
 
@@ -48,7 +48,7 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 **Unlock and Locking:**
 - Fingerprint, device PIN, and password all fully unlock the vault
 - Auto-lock inactivity timer in seconds, locks the vault and returns to the lock screen
-- Extension: an inline unlock overlay appears on timeout instead of a dead end, on any tab
+- Both surfaces show an inline unlock overlay on session timeout instead of a dead end
 
 **Sync and Backup:**
 - Live QR sync - stream your vault or your key as a one-way fountain QR, scan it on the other device
@@ -61,31 +61,32 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 **Vault:**
 - Per-credential AES-GCM encryption of usernames and passwords
 - IndexedDB persistence - no external database or server, settings persist here too
-- Session timeout with automatic lock
+- Collapsible, view-and-delete-only credential list on both surfaces
 
 **Platform:**
 - Single-file web bundle - modules assembled by build.js into one self-contained HTML file
 - Android via Capacitor, with a native biometric plugin (BiometricPrompt + Keystore)
 - Vendored, self-contained code only, no Google SDKs in the scan path
 
-## Current Status: v0.5.3 (extension) / v0.5.2 (phone)
+## Current Status: v0.5.4 (phone) / v0.5.3 (extension)
 
 **Completed:**
 * ✅ Master key wrap architecture - one random 256-bit key, wrapped per method
 * ✅ Verify-by-unwrap - stored verification hashes removed entirely
 * ✅ Native Android biometric unlock via BiometricPrompt + hardware Keystore
-* ✅ Extension fingerprint/PIN via the platform authenticator; 12+ character password rule
+* ✅ Fingerprint/PIN via the platform authenticator on the extension
+* ✅ 12+ character password rule with letter, number, and symbol enforced everywhere
 * ✅ Phone QR sync and encrypted vault/key backup and restore
-* ✅ Extension Sync tab rebuilt to the same Share/Backup/Scan model as the phone
 * ✅ Sovereign in-square/in-box QR scanner via getUserMedia + vendored jsQR on both surfaces
 * ✅ Nameable master key, reflected in the exported backup filename
 * ✅ Auto-lock inactivity timer and QR stream timeout, both persisted
-* ✅ Extension inline unlock overlay and background lock monitor on session timeout
+* ✅ Inline unlock overlay on session timeout, on both the phone and the extension
+* ✅ Collapsible, view-and-delete-only credentials list on both surfaces
 * ✅ Credential merge engine - username-keyed, newest password wins
 * ✅ Terminal-green rebrand and Valid globe logo
 
 **In Development:**
-* 📋 Port the extension's unlock-overlay, lock-monitor, and corrected timer logic to the phone
+* 📋 On-device confirmation of the v0.5.4 unlock-overlay fix
 * 📋 On-device field testing of sync, backup, and scanner across Android versions
 * 📋 Per-method auth edit and delete on the phone Manage tab
 * 📋 Vault blob encryption - domain names currently plaintext object keys
