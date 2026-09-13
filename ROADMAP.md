@@ -2,9 +2,9 @@
 
 
 
-\*\*Current Version:\*\* v0.5.2
+\*\*Current Version:\*\* v0.5.3 (extension) / v0.5.2 (phone)
 
-\*\*Status:\*\* v0.5.2 released (Pre-1.0 development, in Play closed testing)
+\*\*Status:\*\* v0.5.3 released, extension-only (Pre-1.0 development, phone in Play closed testing)
 
 
 
@@ -16,29 +16,53 @@
 
 
 
+\### v0.5.3 - Extension De-Drift to Phone Parity (Sep 2026)
+
+\- ✅ Custom app PIN removed from the extension; device unlock is fingerprint or the device's own PIN
+
+\- ✅ Password strengthened to 12+ characters with a letter, number, and symbol
+
+\- ✅ Sync tab rebuilt to match the phone: Share Vault/Share Master Key (one-way QR), Export/Import Vault/Key (encrypted files), and an in-box scan using getUserMedia + vendored jsQR
+
+\- ✅ Front popup no longer manages credentials; that lives only in the manage page
+
+\- ✅ About section updated with current version, description, and a website link
+
+\- ✅ Settings moved to seconds-based auto-lock (default 60) and QR stream timeout (default 30)
+
+\- ✅ Master key rename in Settings; vault export filename includes the name, capitalization preserved
+
+\- ✅ Fixed a settings-menu-halting syntax error (unclosed loop, malformed duplicate init)
+
+\- ✅ Null-guarded all sync button handlers so a missing element can't halt the script
+
+\- ✅ Manage page restores the unlocked session from shared storage instead of showing falsely locked
+
+\- ✅ Inline "UNLOCK VAULT" overlay on session timeout, with a background monitor that shows or hides it on any tab
+
+\- ✅ Fixed `lockAll()` not clearing the shared session key (a real lock-bypass) and fixed activity tracking missing the sidebar tabs
+
+\- ⚠️ Phone app not yet updated with this release's unlock-overlay, lock-monitor, and timer fixes
+
+
+
 \### v0.5.2 - Sovereign QR Scanner and Settings Persistence (Sep 2026)
 
-\- ✅ Replaced the ML Kit barcode scanner (scaffolding) with getUserMedia plus a vendored jsQR decoder
+\- ✅ Replaced ML Kit (Google/Play Services) with getUserMedia + vendored jsQR on the phone
 
-\- ✅ Camera renders inside the scan square, no Google or Play Services dependency, ML Kit plugin removed
+\- ✅ Fixed the scanner Cancel button re-triggering via event bubbling
 
-\- ✅ Fixed the scanner Cancel button, which was re-triggering via event bubbling from the scan box
+\- ✅ Settings persist across app restart via IndexedDB
 
-\- ✅ Settings now persist across app restart via IndexedDB (QR stream timeout and auto-lock)
-
-\- ✅ Auto-lock is a real inactivity timer in seconds, default 60, locks the vault and returns to the lock screen
-
-\- ✅ QR stream timeout in seconds, default 30, with countdown and manual close, governs all QR shares
+\- ✅ Auto-lock as a real inactivity timer in seconds, default 60
 
 
 
 \### v0.5.1 - Phone Sync and Encrypted Offline Backup (Sep 2026)
 
-\- ✅ Phone QR sync wired end to end, fountain.js and qrcode.js bundled into the phone
+\- ✅ Phone QR sync wired end to end; encrypted vault and key backup/restore
 
-\- ✅ Encrypted offline vault backup and restore
-
-\- ✅ Master key export/import as an encrypted file, passphrase plus security questions, high-iteration KDF
+\- ✅ Master key export protected by a passphrase plus three security questions
 
 \- ✅ Nameable master key
 
@@ -48,9 +72,7 @@
 
 \- ✅ Native Android biometric unlock via BiometricPrompt + hardware Keystore
 
-\- ✅ System PIN as a hard unlock via device credential, custom app PIN removed
-
-\- ✅ Masked secret fields with eye toggle, Clear Vault fully wipes and returns to setup
+\- ✅ System PIN as a hard unlock via device credential; custom app PIN removed on phone
 
 
 
@@ -60,45 +82,9 @@
 
 
 
-\### v0.3.5 - Stateless Sync (Aug 2026)
+\### v0.3.5 and earlier
 
-\- ✅ Fountain-QR sync, phone Settings Menu
-
-
-
-\### v0.3.4 - Streaming Sync (Aug 2026)
-
-\- ✅ LT fountain codec for byte-exact streaming QR reconstruction
-
-
-
-\### v0.3.3 - Sync Transport (Aug 2026)
-
-\- ✅ Vendored local QR generator and frame batching
-
-
-
-\### v0.3.2 - Credential Sync Engine (Aug 2026)
-
-\- ✅ Deterministic merge, oldest-key-wins, tombstone deletes
-
-
-
-\### v0.3.1 - Extension Security Parity (Aug 2026)
-
-\- ✅ Extension security parity, autofill dropdown fixed
-
-
-
-\### v0.3.0 - Security Overhaul (Aug 2026)
-
-\- ✅ WebAuthn PRF fingerprint binding, verify-by-unwrap, PBKDF2 600k
-
-
-
-\### v0.2.0-alpha - Vault Foundation (Nov 2025)
-
-\- ✅ WebCrypto + IndexedDB local encrypted vault, local-only
+\- ✅ Stateless fountain-QR sync, credential merge engine, WebAuthn PRF fingerprint binding, vault foundation — see CHANGELOG.md for full detail
 
 
 
@@ -110,33 +96,31 @@
 
 
 
-\### v0.5.3 - Field Testing and Manage Parity (Target: Q4 2026)
+\### v0.5.4 - Phone De-Drift (Target: Q4 2026)
 
 
 
-\*\*Primary goal:\*\* Verify the sync, backup, scanner, and lock paths on real devices and close remaining phone gaps.
+\*\*Primary goal:\*\* Port the v0.5.3 extension fixes to the phone app so both surfaces share the same corrected auth/lock logic.
 
 
 
 \*\*In scope:\*\*
 
-\- On-device verification of the jsQR scanner across Android versions and lighting
+\- Inline unlock overlay and background lock monitor on the phone, matching the extension
 
-\- Confirm Export/Import Vault and Key round trips and file saving on target devices
+\- Confirm the phone's `lockAll()` clears any shared session key the same way
 
-\- Confirm auto-lock inactivity behavior, including background/resume edge cases
+\- Confirm the phone's activity tracking covers every interactive surface, using touchstart/touchmove as the phone's activity signal in place of mouse movement
 
-\- Per-method auth edit and delete on the phone Manage tab
+\- Auto-lock timer reading the real persisted seconds setting, no stale defaults
 
 
 
 \*\*Completion criteria:\*\*
 
-\- The in-square scanner reads a fountain stream reliably
+\- A timed-out phone session shows an inline unlock path with no dead end
 
-\- Backup files save and restore
-
-\- Auto-lock locks after the set inactivity period and returns to the lock screen
+\- Auto-lock only fires on genuine inactivity, verified by active use across every tab and screen
 
 
 
@@ -144,7 +128,17 @@
 
 
 
-\## Future Considerations (v0.6.0+)
+\## Upcoming After v0.5.4
+
+
+
+\### v0.6.x - Web Credentials
+
+\- Extend the vault to store and sync general web credentials, building on the same local encryption and sync model already in place for logins.
+
+
+
+\## Future Considerations (Post-1.0)
 
 
 
@@ -152,7 +146,7 @@
 
 \- Store addresses, cards, IDs under the same local encryption and sync model
 
-\- Currently a placeholder on both surfaces
+\- Deferred until after the v1.0 release and a security audit; currently a placeholder on both surfaces
 
 
 
@@ -164,9 +158,9 @@
 
 \### Platform Hardening
 
-\- Native background-lifecycle lock guarantees on Android
+\- Per-method auth edit and delete on the phone Manage tab
 
-\- PRF fallback strategy per device capability on the extension
+\- Native background-lifecycle lock guarantees on Android
 
 
 
@@ -178,9 +172,11 @@
 
 
 
-⚠️ \*\*Sync, backup, and scanner need on-device field testing\*\* across Android versions
+⚠️ \*\*Phone app has not received the v0.5.3 extension fixes yet\*\* — tracked for v0.5.4
 
-⚠️ \*\*Auto-lock is a foreground inactivity timer\*\* — exact timing while backgrounded is subject to OS suspension
+⚠️ \*\*Sync, backup, and scanner still need on-device field testing\*\* across Android versions
+
+⚠️ \*\*Auto-lock is a foreground inactivity timer\*\* on the phone — exact timing while backgrounded is subject to OS suspension
 
 ⚠️ \*\*Per-method auth edit and delete deferred on the phone\*\*
 
@@ -226,5 +222,5 @@ MIT License - See LICENSE file for details
 
 
 
-\*\*Last Updated:\*\* Sep 8, 2026
+\*\*Last Updated:\*\* Sep 12, 2026
 

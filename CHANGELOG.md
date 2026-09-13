@@ -5,6 +5,33 @@ All notable changes to Local Vault will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.3] - 2026-09-12
+
+This release brings the browser extension into parity with the phone app's auth and sync model. Extension-only; the phone app is unchanged in this release.
+
+### Changed
+- Removed the custom app PIN from the extension's setup and manage screens. Device unlock is now fingerprint or the device's own PIN, the same model as the phone.
+- Password requirements strengthened to at least 12 characters with a letter, a number, and a symbol.
+- The Sync tab was rebuilt to match the phone: Share Vault and Share Master Key display one-way fountain QR streams, Export/Import Vault and Export/Import Key handle encrypted file backup, and a dedicated scan box reads a streamed key or vault using getUserMedia and a vendored jsQR decoder. The old pairing-handshake sync and its webcam flow are gone.
+- The front popup no longer shows credential management. It confirms the vault is unlocked and points to the menu, where management now lives exclusively.
+- The About section was updated with the current version, a rewritten description, and a website link alongside the repository link.
+- Settings replaced the old minutes-based soft/hard lock timers with a single auto-lock timeout in seconds (default 60) and a QR stream timeout in seconds (default 30), matching the phone.
+- The master key can now be renamed from Settings, and the exported vault backup filename includes that name, with the user's capitalization preserved.
+
+### Fixed
+- The settings menu could go completely unresponsive after certain edits: a missing closing brace on a loop and a malformed duplicate `init()` were silently halting the whole script. Both are corrected.
+- Several sync button handlers were unguarded against a missing element, which could halt the rest of the script if one was absent. All are now null-guarded.
+- The manage page and the popup run in separate script contexts and were not sharing the unlocked session, so opening the manage page after unlocking in the popup could show it as locked. The manage page now restores the key from the shared session storage on load.
+- When a session timed out, the manage page had no way back in short of closing the tab. It now shows an inline unlock overlay with fingerprint and password options, and a background check shows or hides that overlay automatically on any tab if the lock state changes.
+- The auto-lock timer was firing on a fixed schedule rather than on true inactivity. Two causes: `lockAll()` was not clearing the shared session key, which could let a locked session quietly resume, and the activity listeners were attached to a container that did not include the sidebar tabs, so switching tabs never reset the idle clock. Activity tracking now covers the whole page, including mouse movement and, for a future touch interface, touch start and touch move.
+
+### Security model
+- Fixing `lockAll()` matters beyond convenience: without it, the shared session key could persist after a timeout was supposed to end it, which is a real lock-bypass, now closed.
+
+### Notes
+- This release is scoped to the browser extension. The phone app has not yet received the unlock-overlay, lock-monitor, or corrected timer logic from this release; that port is tracked for a future update.
+- Version bumped to 0.5.3 in the extension only.
+
 ## [0.5.2] - 2026-09-08
 
 This release replaces the barcode-scanning scaffolding with a sovereign implementation, fixes settings persistence, and makes auto-lock a real inactivity timer.
