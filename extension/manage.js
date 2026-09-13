@@ -422,20 +422,20 @@ function stopShare() {
   if (wrap) wrap.classList.add('hidden')
 }
 
-document.getElementById('btn-share-vault').onclick = async function () {
+const _btnShareVault = document.getElementById('btn-share-vault'); if (_btnShareVault) _btnShareVault.onclick = async function () {
   const mk = session.getMasterKey()
   if (!mk) { syncMsg('Unlock your vault first', 'error'); return }
   const vaultData = await getPasswordVault()
   if (!vaultData) { syncMsg('Nothing to sync yet', 'error'); return }
   streamShare(JSON.stringify({ kind: 'vault', vault: vaultData }), 'Scan this with your other device to receive your logins')
 }
-document.getElementById('btn-share-key').onclick = async function () {
+const _btnShareKey = document.getElementById('btn-share-key'); if (_btnShareKey) _btnShareKey.onclick = async function () {
   const mk = session.getMasterKey()
   if (!mk) { syncMsg('Unlock your vault first', 'error'); return }
   const raw = new Uint8Array(await crypto.subtle.exportKey('raw', mk))
   streamShare(JSON.stringify({ kind: 'key', key: Array.from(raw) }), 'Scan this with your new device to give it the master key')
 }
-document.getElementById('btn-stop-share').onclick = stopShare
+const _btnStopShare = document.getElementById('btn-stop-share'); if (_btnStopShare) _btnStopShare.onclick = stopShare
 
 // ---- Backup files ----
 function downloadFile(filename, text) {
@@ -479,7 +479,7 @@ function combineSecret(passphrase, qIdx, answers) {
   return parts.join('\u0000')
 }
 
-document.getElementById('btn-export-vault').onclick = async function () {
+const _btnExportVault = document.getElementById('btn-export-vault'); if (_btnExportVault) _btnExportVault.onclick = async function () {
   const mk = session.getMasterKey()
   if (!mk) { syncMsg('Unlock first', 'error'); return }
   const vaultData = await getPasswordVault()
@@ -488,7 +488,7 @@ document.getElementById('btn-export-vault').onclick = async function () {
     syncMsg('Vault exported. It stays encrypted, useless without your master key.', 'success')
   else syncMsg('Could not save the file', 'error')
 }
-document.getElementById('btn-import-vault').onclick = function () {
+const _btnImportVault = document.getElementById('btn-import-vault'); if (_btnImportVault) _btnImportVault.onclick = function () {
   readFileText(async function (text) {
     if (!text) { syncMsg('No file selected', 'error'); return }
     try {
@@ -507,13 +507,13 @@ document.getElementById('btn-import-vault').onclick = function () {
     } catch (e) { syncMsg('Import failed: ' + (e && e.message ? e.message : e), 'error') }
   })
 }
-document.getElementById('btn-export-key').onclick = async function () {
+const _btnExportKey = document.getElementById('btn-export-key'); if (_btnExportKey) _btnExportKey.onclick = async function () {
   const mk = session.getMasterKey()
   if (!mk) { syncMsg('Unlock first', 'error'); return }
   const qIdx = pickThreeQuestions()
   showExportKeyModal(qIdx)
 }
-document.getElementById('btn-import-key').onclick = function () {
+const _btnImportKey = document.getElementById('btn-import-key'); if (_btnImportKey) _btnImportKey.onclick = function () {
   readFileText(function (text) {
     if (!text) { syncMsg('No file selected', 'error'); return }
     try { const fileObj = JSON.parse(text); if (fileObj.format !== 'valid-vault-key') { syncMsg('Not a key file', 'error'); return } showImportKeyModal(fileObj) }
@@ -569,7 +569,7 @@ async function showImportKeyModal(fileObj) {
 
 // ---- Scan (getUserMedia + jsQR, in-box) ----
 let scanActive = false
-document.getElementById('qr-scan-box').onclick = async function () {
+const _qrScanBox = document.getElementById('qr-scan-box'); if (_qrScanBox) _qrScanBox.onclick = async function () {
   if (scanActive) return
   const box = document.getElementById('qr-scan-box')
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { syncMsg('Camera not available', 'error'); return }
