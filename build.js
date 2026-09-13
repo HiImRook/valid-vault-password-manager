@@ -229,6 +229,56 @@ document.addEventListener('DOMContentLoaded', function() {
 })
 
 // ---- Global lock monitor: catches a timeout no matter which page/tab is open ----
+function showMenuLockOverlay() {
+  var el = document.getElementById('menu-lock-overlay')
+  if (el) el.classList.remove('hidden')
+}
+function hideMenuLockOverlay() {
+  var el = document.getElementById('menu-lock-overlay')
+  if (el) el.classList.add('hidden')
+  var pw = document.getElementById('menu-unlock-pw'); if (pw) pw.value = ''
+  var msg = document.getElementById('menu-unlock-msg'); if (msg) msg.textContent = ''
+}
+function menuUnlockMsg(t) {
+  var msg = document.getElementById('menu-unlock-msg'); if (msg) msg.textContent = t
+}
+
+window.menuUnlockFp = async function() {
+  var bv = nativeBiometric()
+  var auth = await vault.store.getAuth() || {}
+  if (bv && auth.fingerprintNative) {
+    try {
+      var res = await bv.unlock({ wrapped: auth.fingerprintNative.wrapped, iv: auth.fingerprintNative.iv })
+      var bytes = b64ToBytes(res.masterKey)
+      var ck = await crypto.subtle.importKey('raw', bytes, { name: 'AES-GCM', length: 256 }, true, ['encrypt','decrypt'])
+      vault.session.setMasterKey(ck)
+      hideMenuLockOverlay()
+      await updateStatus()
+      return
+    } catch (e) {
+      menuUnlockMsg('Fingerprint unlock failed. Use password.')
+      return
+    }
+  }
+  var result = await vault.auth.authenticateFingerprint()
+  if (result.success) {
+    vault.session.setMasterKey(result.masterKey)
+    hideMenuLockOverlay()
+    await updateStatus()
+  } else { menuUnlockMsg(result.error) }
+}
+
+window.menuUnlockPw = async function() {
+  var el = document.getElementById('menu-unlock-pw')
+  var pw = el ? el.value : ''
+  var result = await vault.auth.authenticatePassword(pw)
+  if (result.success) {
+    vault.session.setMasterKey(result.masterKey)
+    hideMenuLockOverlay()
+    await updateStatus()
+  } else { menuUnlockMsg(result.error) }
+}
+
 function startLockMonitor() {
   setInterval(async function () {
     var menuPage = document.getElementById('page-menu')
@@ -237,13 +287,9 @@ function startLockMonitor() {
     var unlocked = vault.session.hasMasterKey()
     var soft = await vault.session.isSoftLocked()
     if (!unlocked && !soft) {
-      // session died while inside the menu: snap back to the main page and
-      // let routeView show the correct locked/soft-lock/setup screen
-      menuPage.classList.remove('active')
-      var mainPage = document.getElementById('page-main')
-      if (mainPage) mainPage.classList.add('active')
-      await updateStatus()
-      await routeView()
+      showMenuLockOverlay()
+    } else {
+      hideMenuLockOverlay()
     }
   }, 5000)
 }
@@ -341,6 +387,8 @@ async function updateStatus() {
     if (ham) ham.style.display = unlocked ? '' : 'none'
     var menu = document.getElementById('menu-dropdown')
     if (menu && !unlocked) menu.classList.add('hidden')
+    if (unlocked) { await restartInactivityTimer() }
+    else if (pollTimer) { clearInterval(pollTimer); pollTimer = null }
   } catch (e) {}
 }
 
@@ -376,24 +424,46 @@ async function loadAutoLock() {
 }
 
 // ---- Inactivity auto-lock timer ----
-var inactivityTimer = null
-async function restartInactivityTimer() {
-  if (inactivityTimer) { clearTimeout(inactivityTimer); inactivityTimer = null }
-  if (!vault.session.hasMasterKey()) return  // only run while unlocked
-  var seconds = await getAutoLockSeconds()
-  inactivityTimer = setTimeout(async function() {
-    if (vault.session.hasMasterKey()) { await window.lockAll() }
-  }, seconds * 1000)
-}
+// Design: high-frequency events (touchmove/mousemove/scroll) must NOT each
+// trigger an async IndexedDB read + timer rebuild — that races and produces
+// exactly the "spazzy"/ignores-activity symptom. Instead, every event just
+// bumps a cheap synchronous timestamp; a single poller checks it.
+var lastActivityAt = Date.now()
+var cachedAutoLockMs = 60000
+var pollTimer = null
+
 function noteActivity() {
-  // only reset if unlocked and a timer is meant to run
-  if (vault.session.hasMasterKey()) restartInactivityTimer()
+  lastActivityAt = Date.now()
 }
+
 function startActivityTracking() {
-  // touch-first for phone; mousemove/input included for completeness on any WebView
   ['touchstart','touchmove','click','input','keydown','scroll','mousemove'].forEach(function(ev){
     document.addEventListener(ev, noteActivity, { passive: true })
   })
+}
+
+async function refreshAutoLockCache() {
+  var seconds = await getAutoLockSeconds()
+  cachedAutoLockMs = seconds * 1000
+}
+
+function startInactivityPoll() {
+  if (pollTimer) clearInterval(pollTimer)
+  pollTimer = setInterval(function () {
+    if (!vault.session.hasMasterKey()) return
+    if (Date.now() - lastActivityAt >= cachedAutoLockMs) {
+      window.lockAll()
+    }
+  }, 1000)
+}
+
+// Called once on unlock and whenever the setting changes — refreshes the
+// cached timeout and resets the activity clock, but does NOT touch storage
+// on every tap/scroll the way the old per-event version did.
+async function restartInactivityTimer() {
+  noteActivity()
+  await refreshAutoLockCache()
+  startInactivityPoll()
 }
 
 window.saveQrTimeout = async function() {
@@ -674,34 +744,107 @@ window.showSaveCredential = function() {
   showModal('<h3>Add Credential</h3><input type="text" id="modal-domain" value="' + domain + '" placeholder="domain"><input type="text" id="modal-login" placeholder="username"><input type="password" id="modal-password-cred" placeholder="password"><div style="margin-top:16px;"><button onclick="saveCredential()">Save</button><button onclick="hideModal()" class="secondary">Cancel</button></div>')
 }
 
-window.saveCredential = async function() {
+function credEsc(s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') }
+
+window.loadCredentials = function() { return renderCredentials() }
+
+window.renderCredentials = async function() {
   var masterKey = vault.session.getMasterKey()
-  if (!masterKey) { log('Not authenticated', 'error'); hideModal(); return }
-  var domain = document.getElementById('modal-domain').value
-  var login = document.getElementById('modal-login').value
-  var password = document.getElementById('modal-password-cred').value
-  var result = await vault.passwords.saveCredential(domain, login, password, masterKey)
-  if (result.success) {
-    log('Credential saved for ' + domain, 'success')
-    loadCredentials()
-  } else {
-    log('Save failed: ' + result.error, 'error')
+  var listEl = document.getElementById('credentials-list')
+  if (!listEl) return
+  if (!masterKey) { listEl.innerHTML = '<p style="color:var(--text-dim);font-size:13px;">Unlock to view credentials.</p>'; return }
+  var domRes = await vault.passwords.getAllDomains()
+  if (!domRes.success || !domRes.domains.length) { listEl.innerHTML = '<p style="color:var(--text-dim);font-size:13px;">No credentials saved yet.</p>'; return }
+  var domains = domRes.domains.slice().sort()
+  var html = ''
+  for (var i = 0; i < domains.length; i++) {
+    var domain = domains[i]
+    var res = await vault.passwords.getCredentials(domain, masterKey)
+    if (!res.success) continue
+    var dom = credEsc(domain)
+    html += '<div class="credential-domain" data-domain-toggle="' + dom + '" style="border-bottom:1px solid var(--green-faint);">'
+    html += '<div data-act="toggle-domain" data-domain="' + dom + '" style="display:flex;align-items:center;padding:14px 0;cursor:pointer;">'
+    html += '<span class="domain-caret" data-caret="' + dom + '" style="color:var(--text-dim);margin-right:8px;">&#9654;</span>'
+    html += '<span style="color:var(--green);font-size:14px;font-weight:700;flex:1;">' + dom + '</span>'
+    html += '<span style="color:var(--text-dim);font-size:12px;">' + res.credentials.length + ' account' + (res.credentials.length !== 1 ? 's' : '') + '</span>'
+    html += '</div>'
+    html += '<div data-domain-body="' + dom + '" class="hidden">'
+    for (var j = 0; j < res.credentials.length; j++) {
+      var c = res.credentials[j]
+      var cid = credEsc(c.id)
+      html += '<div style="padding:10px 0 14px 20px;">'
+      html += '<div style="color:var(--text);font-size:13px;margin-bottom:6px;word-break:break-all;">' + credEsc(c.username) + '</div>'
+      html += '<div style="display:flex;align-items:center;gap:8px;">'
+      html += '<span id="pw-' + cid + '" data-shown="0" style="color:var(--text-dim);font-size:13px;font-family:monospace;flex:1;word-break:break-all;">' + '&#8226;'.repeat(8) + '</span>'
+      html += '<button class="small secondary" data-act="toggle-pw" data-cid="' + cid + '">Show</button>'
+      html += '<button class="small danger" data-act="delete" data-cid="' + cid + '" data-dom="' + dom + '">Delete</button>'
+      html += '</div></div>'
+    }
+    html += '</div></div>'
   }
-  hideModal()
+  listEl.innerHTML = html
+  if (!listEl._delegated) {
+    listEl._delegated = true
+    listEl.addEventListener('click', function(e) {
+      var btn = e.target.closest ? e.target.closest('[data-act]') : null
+      if (!btn) return
+      var act = btn.getAttribute('data-act')
+      if (act === 'toggle-domain') {
+        var dom = btn.getAttribute('data-domain')
+        var body = listEl.querySelector('[data-domain-body="' + dom + '"]')
+        var caret = listEl.querySelector('[data-caret="' + dom + '"]')
+        if (body) body.classList.toggle('hidden')
+        if (caret) caret.innerHTML = (body && !body.classList.contains('hidden')) ? '&#9660;' : '&#9654;'
+      } else if (act === 'toggle-pw') {
+        window.toggleCred(btn, btn.getAttribute('data-cid'))
+      } else if (act === 'delete') {
+        window.deleteCred(btn.getAttribute('data-cid'), btn.getAttribute('data-dom'))
+      }
+    })
+  }
 }
 
-window.loadCredentials = async function() {
+var credCache = {}
+async function getCredById(cid) {
+  if (credCache[cid]) return credCache[cid]
   var masterKey = vault.session.getMasterKey()
-  var de2 = document.getElementById('vault-domain'); var domain = de2 ? de2.value : ''
-  var listEl = document.getElementById('credentials-list')
-  if (!masterKey) { listEl.innerHTML = '<p style="color:#666;">Login required</p>'; return }
-  if (!domain) { listEl.innerHTML = '<p style="color:#666;">Enter domain</p>'; return }
-  var result = await vault.passwords.getCredentials(domain, masterKey)
-  if (!result.success) { listEl.innerHTML = '<p style="color:#e74c3c;">' + result.error + '</p>'; return }
-  if (result.credentials.length === 0) { listEl.innerHTML = '<p style="color:#666;">No credentials</p>'; return }
-  listEl.innerHTML = result.credentials.map(function(c) {
-    return '<div class="credential-row"><span class="credential-login">' + c.username + '</span><span class="credential-pass">••••••••</span></div>'
-  }).join('')
+  if (!masterKey) return null
+  var domRes = await vault.passwords.getAllDomains()
+  if (!domRes.success) return null
+  for (var i = 0; i < domRes.domains.length; i++) {
+    var res = await vault.passwords.getCredentials(domRes.domains[i], masterKey)
+    if (!res.success) continue
+    for (var j = 0; j < res.credentials.length; j++) {
+      if (res.credentials[j].id === cid) { credCache[cid] = res.credentials[j]; return res.credentials[j] }
+    }
+  }
+  return null
+}
+
+window.toggleCred = async function(btn, cid) {
+  var span = document.getElementById('pw-' + cid)
+  if (!span) return
+  if (span.getAttribute('data-shown') === '1') {
+    span.textContent = '\u2022'.repeat(8); span.setAttribute('data-shown', '0'); btn.textContent = 'Show'
+  } else {
+    var c = await getCredById(cid)
+    if (!c) { log('Unlock required', 'error'); return }
+    span.textContent = c.password; span.setAttribute('data-shown', '1'); btn.textContent = 'Hide'
+  }
+}
+
+window._pendingDeleteCid = null
+window.deleteCred = function(cid, domain) {
+  window._pendingDeleteCid = cid
+  showModal('<h3>Delete Credential</h3><p style="color:var(--text-dim);font-size:13px;">Remove this login for ' + credEsc(domain) + '? This cannot be undone.</p><div style="margin-top:16px;"><button class="danger" onclick="confirmDeleteCred()">Delete</button><button onclick="hideModal()" class="secondary">Cancel</button></div>')
+}
+window.confirmDeleteCred = async function() {
+  var cid = window._pendingDeleteCid
+  if (!cid) { hideModal(); return }
+  var result = await vault.passwords.deleteCredential(cid)
+  hideModal()
+  if (result && result.success) { delete credCache[cid]; log('Credential deleted', 'success'); credCache = {}; renderCredentials() }
+  else { log('Delete failed', 'error') }
 }
 
 window.lockAll = async function() {
@@ -752,6 +895,7 @@ window.closeMenu = function() {
 
 window.showMenuTab = function(name, el) {
   if (name === 'settings') { loadKeyNickname(); loadQrTimeout(); loadAutoLock() }
+  if (name === 'manage') { credCache = {}; renderCredentials() }
   var panels = document.querySelectorAll('.menu-panel')
   for (var i = 0; i < panels.length; i++) panels[i].classList.remove('active')
   var tabs = document.querySelectorAll('.menu-tab')
