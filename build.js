@@ -225,7 +225,28 @@ document.addEventListener('DOMContentLoaded', function() {
   updateStatus()
   initGlobe()
   routeView()
+  startLockMonitor()
 })
+
+// ---- Global lock monitor: catches a timeout no matter which page/tab is open ----
+function startLockMonitor() {
+  setInterval(async function () {
+    var menuPage = document.getElementById('page-menu')
+    var inMenu = menuPage && menuPage.classList.contains('active')
+    if (!inMenu) return
+    var unlocked = vault.session.hasMasterKey()
+    var soft = await vault.session.isSoftLocked()
+    if (!unlocked && !soft) {
+      // session died while inside the menu: snap back to the main page and
+      // let routeView show the correct locked/soft-lock/setup screen
+      menuPage.classList.remove('active')
+      var mainPage = document.getElementById('page-main')
+      if (mainPage) mainPage.classList.add('active')
+      await updateStatus()
+      await routeView()
+    }
+  }, 5000)
+}
 
 
 window.togglePw = function(btn) {
@@ -369,7 +390,8 @@ function noteActivity() {
   if (vault.session.hasMasterKey()) restartInactivityTimer()
 }
 function startActivityTracking() {
-  ['touchstart','click','keydown','scroll'].forEach(function(ev){
+  // touch-first for phone; mousemove/input included for completeness on any WebView
+  ['touchstart','touchmove','click','input','keydown','scroll','mousemove'].forEach(function(ev){
     document.addEventListener(ev, noteActivity, { passive: true })
   })
 }
@@ -588,7 +610,8 @@ window.enrollPw = async function() {
   if (!(await requireVaultOrError())) return
   var fp = fieldVal('setup-pw','manage-pw')
   var pw = fp.val || ''
-  if (pw.length < 8) { anyMsg('Password must be 8+ characters'); return }
+  if (pw.length < 12) { anyMsg('Password must be 12+ characters'); return }
+  if (!/[a-zA-Z]/.test(pw) || !/[0-9]/.test(pw) || !/[^a-zA-Z0-9]/.test(pw)) { anyMsg('Password needs a letter, a number, and a symbol'); return }
   var mk = vault.session.getMasterKey()
   vault.auth.startPasswordCreation()
   var result = await vault.auth.setPassword(pw, mk)

@@ -124,7 +124,7 @@
           <button id="setup-fp-btn" class="small enroll" onclick="enrollFp()">Enroll</button>
         </div>
         <div class="row">
-          <div class="pw-wrap"><input type="password" id="setup-pw" placeholder="Password (8+ chars)"><button type="button" class="pw-eye" data-target="setup-pw" onclick="togglePw(this)" aria-label="Show/hide"><svg viewBox="0 0 24 24"><path d="M12 4.5C7 4.5 2.7 7.6 1 12c1.7 4.4 6 7.5 11 7.5s9.3-3.1 11-7.5c-1.7-4.4-6-7.5-11-7.5zm0 12.5a5 5 0 110-10 5 5 0 010 10zm0-8a3 3 0 100 6 3 3 0 000-6z"/></svg></button></div>
+          <div class="pw-wrap"><input type="password" id="setup-pw" placeholder="Password (12+ chars, letter/number/symbol)"><button type="button" class="pw-eye" data-target="setup-pw" onclick="togglePw(this)" aria-label="Show/hide"><svg viewBox="0 0 24 24"><path d="M12 4.5C7 4.5 2.7 7.6 1 12c1.7 4.4 6 7.5 11 7.5s9.3-3.1 11-7.5c-1.7-4.4-6-7.5-11-7.5zm0 12.5a5 5 0 110-10 5 5 0 010 10zm0-8a3 3 0 100 6 3 3 0 000-6z"/></svg></button></div>
           <button id="setup-pw-btn" class="small enroll" onclick="enrollPw()">Enroll</button>
         </div>
         <button onclick="finishSetup()" style="margin-top:10px;">Finish &amp; Unlock</button>
@@ -188,7 +188,7 @@
             <button id="manage-fp-btn" class="small enroll" onclick="enrollFp()">Enroll</button>
           </div>
           <div class="row">
-            <div class="pw-wrap"><input type="password" id="manage-pw" placeholder="Password (8+ chars)"><button type="button" class="pw-eye" data-target="manage-pw" onclick="togglePw(this)" aria-label="Show/hide"><svg viewBox="0 0 24 24"><path d="M12 4.5C7 4.5 2.7 7.6 1 12c1.7 4.4 6 7.5 11 7.5s9.3-3.1 11-7.5c-1.7-4.4-6-7.5-11-7.5zm0 12.5a5 5 0 110-10 5 5 0 010 10zm0-8a3 3 0 100 6 3 3 0 000-6z"/></svg></button></div>
+            <div class="pw-wrap"><input type="password" id="manage-pw" placeholder="Password (12+ chars, letter/number/symbol)"><button type="button" class="pw-eye" data-target="manage-pw" onclick="togglePw(this)" aria-label="Show/hide"><svg viewBox="0 0 24 24"><path d="M12 4.5C7 4.5 2.7 7.6 1 12c1.7 4.4 6 7.5 11 7.5s9.3-3.1 11-7.5c-1.7-4.4-6-7.5-11-7.5zm0 12.5a5 5 0 110-10 5 5 0 010 10zm0-8a3 3 0 100 6 3 3 0 000-6z"/></svg></button></div>
             <button id="manage-pw-btn" class="small enroll" onclick="enrollPw()">Enroll</button>
           </div>
           <div id="manage-msg" style="font-size:12px;color:var(--text-dim);margin-top:8px;min-height:8px;"></div>
@@ -784,6 +784,7 @@ async function lockAll() {
   session.lastActivity = 0
   session.softLocked = false
   await writeSoftFlag(false)
+  await clearStorageSession()
   stopTimeout()
 }
 
@@ -1508,8 +1509,11 @@ async function setPassword(password, existingMasterKey) {
     return { success: false, error: timerCheck.error }
   }
 
-  if (password.length < 8) {
-    return { success: false, error: 'Password must be at least 8 characters' }
+  if (password.length < 12) {
+    return { success: false, error: 'Password must be at least 12 characters' }
+  }
+  if (!/[a-zA-Z]/.test(password) || !/[0-9]/.test(password) || !/[^a-zA-Z0-9]/.test(password)) {
+    return { success: false, error: 'Password needs a letter, a number, and a symbol' }
   }
 
   const auth = await getAuth() || {}
@@ -12819,7 +12823,28 @@ document.addEventListener('DOMContentLoaded', function() {
   updateStatus()
   initGlobe()
   routeView()
+  startLockMonitor()
 })
+
+// ---- Global lock monitor: catches a timeout no matter which page/tab is open ----
+function startLockMonitor() {
+  setInterval(async function () {
+    var menuPage = document.getElementById('page-menu')
+    var inMenu = menuPage && menuPage.classList.contains('active')
+    if (!inMenu) return
+    var unlocked = vault.session.hasMasterKey()
+    var soft = await vault.session.isSoftLocked()
+    if (!unlocked && !soft) {
+      // session died while inside the menu: snap back to the main page and
+      // let routeView show the correct locked/soft-lock/setup screen
+      menuPage.classList.remove('active')
+      var mainPage = document.getElementById('page-main')
+      if (mainPage) mainPage.classList.add('active')
+      await updateStatus()
+      await routeView()
+    }
+  }, 5000)
+}
 
 
 window.togglePw = function(btn) {
@@ -12963,7 +12988,8 @@ function noteActivity() {
   if (vault.session.hasMasterKey()) restartInactivityTimer()
 }
 function startActivityTracking() {
-  ['touchstart','click','keydown','scroll'].forEach(function(ev){
+  // touch-first for phone; mousemove/input included for completeness on any WebView
+  ['touchstart','touchmove','click','input','keydown','scroll','mousemove'].forEach(function(ev){
     document.addEventListener(ev, noteActivity, { passive: true })
   })
 }
@@ -13182,7 +13208,8 @@ window.enrollPw = async function() {
   if (!(await requireVaultOrError())) return
   var fp = fieldVal('setup-pw','manage-pw')
   var pw = fp.val || ''
-  if (pw.length < 8) { anyMsg('Password must be 8+ characters'); return }
+  if (pw.length < 12) { anyMsg('Password must be 12+ characters'); return }
+  if (!/[a-zA-Z]/.test(pw) || !/[0-9]/.test(pw) || !/[^a-zA-Z0-9]/.test(pw)) { anyMsg('Password needs a letter, a number, and a symbol'); return }
   var mk = vault.session.getMasterKey()
   vault.auth.startPasswordCreation()
   var result = await vault.auth.setPassword(pw, mk)

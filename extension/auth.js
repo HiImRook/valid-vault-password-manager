@@ -402,8 +402,11 @@ async function setPassword(password, existingMasterKey) {
     return { success: false, error: timerCheck.error }
   }
 
-  if (password.length < 8) {
-    return { success: false, error: 'Password must be at least 8 characters' }
+  if (password.length < 12) {
+    return { success: false, error: 'Password must be at least 12 characters' }
+  }
+  if (!/[a-zA-Z]/.test(password) || !/[0-9]/.test(password) || !/[^a-zA-Z0-9]/.test(password)) {
+    return { success: false, error: 'Password needs a letter, a number, and a symbol' }
   }
 
   const auth = await getAuth() || {}

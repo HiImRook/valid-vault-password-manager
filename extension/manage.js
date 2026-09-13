@@ -370,7 +370,8 @@ btnEditPw.onclick = async () => {
   if (!mk) { showMsg(msgManage, 'Authentication required', 'error'); return }
   const pw = prompt('Enter a password (8+ characters):')
   if (!pw) return
-  if (pw.length < 8) { showMsg(msgManage, 'Password must be 8+ characters', 'error'); return }
+  if (pw.length < 12) { showMsg(msgManage, 'Password must be 12+ characters', 'error'); return }
+  if (!/[a-zA-Z]/.test(pw) || !/[0-9]/.test(pw) || !/[^a-zA-Z0-9]/.test(pw)) { showMsg(msgManage, 'Password needs a letter, a number, and a symbol', 'error'); return }
   auth.startPasswordCreation()
   const result = await auth.setPassword(pw, mk)
   if (result.success) {
