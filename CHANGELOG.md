@@ -5,6 +5,23 @@ All notable changes to Local Vault will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.5] - 2026-09-13
+
+This release fixes a real export bug that made Export Vault appear to do nothing, and replaces the browser-based file download with a proper native implementation.
+
+### Fixed
+- Export Vault reported nothing at all when tapped: success, an empty vault, and a save failure all routed through a log function that wrote to a page element that does not exist anywhere in the phone UI, so every outcome was silently swallowed. A real, visible message area was added for the backup and sync section, and Export Vault, Import Vault, and the shared unlock check now write to it.
+- The exported vault file never included the master key's nickname, unlike the key file, which already did. Both now include it, filesystem-safe, with the user's capitalization preserved.
+- File saving no longer relies on triggering a browser download inside the Android WebView, which does not reliably work there. Saving now goes through Capacitor's native Filesystem and Share APIs, giving a real native save or share action rather than a silent no-op.
+
+### Changed
+- Export Vault is a single button. Tapping it opens a small choice between saving directly to the device's Downloads folder or opening the native share sheet, rather than exposing two separate buttons for the same file.
+- A direct-to-Downloads save path was added using Android's MediaStore API through a small native plugin, requiring no extra storage permission on modern Android.
+
+### Notes
+- This build remains under active testing; see the About section in both the app and the extension.
+- Version bumped to 0.5.5 across the phone and the extension.
+
 ## [0.5.4] - 2026-09-13
 
 This release brings the phone app back into parity with the browser extension's v0.5.3 auth and interface work, and fixes a real bug in the process.

@@ -2,11 +2,17 @@
 
 A local, encrypted, QR code portable password manager. No cloud, no accounts, no sync servers. Your credentials live on your device, encrypted under keys only you can produce, and move between devices over a fully local QR stream or an encrypted backup file.
 
+**Status: Active testing.** Core functionality works end to end, and the project is being hardened through real device use before a wider release. See [ROADMAP.md](ROADMAP.md) for what's tested and what's still in progress.
+
 ---
+
+> ✅ **Export Fix and Native File Saving Notice - v0.5.5**
+>
+> Export Vault now gives real feedback instead of silently doing nothing, includes the master key's nickname in the filename, and saves through Capacitor's native Filesystem and Share APIs rather than an unreliable browser download. One button offers a choice between saving straight to Downloads or opening the native share sheet. See [CHANGELOG.md](CHANGELOG.md) for full details.
 
 > ✅ **Phone De-Drift Notice - v0.5.4**
 >
-> The phone app now matches the browser extension: the same About text, a collapsible credentials list with show/hide and delete only, a 12+ character password rule with a letter, number, and symbol, and an inline unlock overlay inside the settings menu on session timeout instead of booting back to the root lock screen. See [CHANGELOG.md](CHANGELOG.md) for full details.
+> The phone app matches the browser extension: the same About text, a collapsible credentials list, a 12+ character password rule, and an inline unlock overlay on session timeout. See [CHANGELOG.md](CHANGELOG.md) for full details.
 
 > ✅ **Extension De-Drift Notice - v0.5.3**
 >
@@ -14,11 +20,7 @@ A local, encrypted, QR code portable password manager. No cloud, no accounts, no
 
 > ✅ **Sovereign Scanner and Settings Notice - v0.5.2**
 >
-> The QR scanner uses the standard web camera plus a vendored jsQR decoder that runs entirely on device, no Google dependency. See [CHANGELOG.md](CHANGELOG.md) for full details.
-
-> ✅ **Native Biometric Auth Notice - v0.5.0**
->
-> On Android, unlocking uses the device's own authentication through BiometricPrompt and a hardware-backed Keystore. On the extension, fingerprint unlock is the platform authenticator. See [CHANGELOG.md](CHANGELOG.md) for full details.
+> The QR scanner uses the standard web camera plus a vendored jsQR decoder, no Google dependency. See [CHANGELOG.md](CHANGELOG.md) for full details.
 
 ---
 
@@ -54,7 +56,7 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 - Live QR sync - stream your vault or your key as a one-way fountain QR, scan it on the other device
 - Sovereign scanner - the standard web camera plus a vendored jsQR decoder, no Google dependency
 - QR stream timeout - shares auto-close after a set number of seconds, with a countdown and manual close
-- Encrypted vault backup - export the encrypted vault to a file, inert without the matching master key
+- Encrypted vault backup - save directly to Downloads or share the file, inert without the matching master key
 - Encrypted key backup - export the master key wrapped under a passphrase and three security questions, high-iteration KDF, never stored
 - Nameable master key, reflected in the exported backup filename
 
@@ -65,10 +67,10 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 
 **Platform:**
 - Single-file web bundle - modules assembled by build.js into one self-contained HTML file
-- Android via Capacitor, with a native biometric plugin (BiometricPrompt + Keystore)
+- Android via Capacitor, with native plugins for biometric auth and file saving
 - Vendored, self-contained code only, no Google SDKs in the scan path
 
-## Current Status: v0.5.4 (phone) / v0.5.3 (extension)
+## Current Status: v0.5.5 — Active Testing
 
 **Completed:**
 * ✅ Master key wrap architecture - one random 256-bit key, wrapped per method
@@ -77,6 +79,7 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 * ✅ Fingerprint/PIN via the platform authenticator on the extension
 * ✅ 12+ character password rule with letter, number, and symbol enforced everywhere
 * ✅ Phone QR sync and encrypted vault/key backup and restore
+* ✅ Native file saving - direct Downloads save or native share sheet
 * ✅ Sovereign in-square/in-box QR scanner via getUserMedia + vendored jsQR on both surfaces
 * ✅ Nameable master key, reflected in the exported backup filename
 * ✅ Auto-lock inactivity timer and QR stream timeout, both persisted
@@ -86,8 +89,7 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 * ✅ Terminal-green rebrand and Valid globe logo
 
 **In Development:**
-* 📋 On-device confirmation of the v0.5.4 unlock-overlay fix
-* 📋 On-device field testing of sync, backup, and scanner across Android versions
+* 📋 Continued field testing of sync, backup, and native file saving across Android versions
 * 📋 Per-method auth edit and delete on the phone Manage tab
 * 📋 Vault blob encryption - domain names currently plaintext object keys
 
@@ -95,7 +97,7 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 
 Master key transport is deliberate. The primary path is a live QR stream: one device shows its key or vault as a fountain QR, the other scans it. The security is the ceremony, do it somewhere private, since anyone who sees the code can capture it. Shares auto-close after the QR stream timeout.
 
-For disaster recovery there is an offline path. Export Vault writes the already-encrypted vault to a file, which stays useless on any device without the matching master key. Export Key writes the master key wrapped under a passphrase of at least twelve characters plus three security questions, combined into one secret and stretched with a high-iteration KDF. Nothing is stored, so a stolen file cannot be opened without the passphrase and answers, and a lost passphrase means the file is gone by design. The master key can be given a nickname for reference, which is reflected in the exported filename.
+For disaster recovery there is an offline path. Export Vault saves the already-encrypted vault directly to Downloads or through the native share sheet, and stays useless on any device without the matching master key. Export Key writes the master key wrapped under a passphrase of at least twelve characters plus three security questions, combined into one secret and stretched with a high-iteration KDF. Nothing is stored, so a stolen file cannot be opened without the passphrase and answers, and a lost passphrase means the file is gone by design. The master key can be given a nickname for reference, which is reflected in the exported filename.
 
 ## Security Model
 
@@ -146,14 +148,14 @@ There are no stored password hashes. Authentication is the act of deriving a wra
 **Native Biometric (Android):**
 A custom Capacitor plugin bridges JavaScript to Android's BiometricPrompt. It creates a hardware-backed Keystore key that requires user authentication, then uses it to wrap the master key.
 
+**Native File Saving (Android):**
+A custom Capacitor plugin writes exported files directly to the Downloads folder through Android's MediaStore API, and Capacitor's Filesystem and Share plugins back the native share option. No reliance on browser download behavior, which does not work reliably inside the app's WebView.
+
 **Sovereign QR Scanner:**
 Scanning uses the web camera through getUserMedia, drawing frames to a canvas that a vendored jsQR decoder reads. No native scanning plugin, no Google SDK.
 
 **Fountain QR Sync:**
 A vault or key streams as an endless loop of coded fountain frames. The receiver collects across loops and reconstructs the exact payload, then merges or restores it.
-
-**Encrypted Backup Files:**
-Export writes an encrypted file. The vault file stays under the master key. The key file is wrapped by a passphrase and security questions, combined and stretched with a high-iteration KDF.
 
 **Single-File Bundle:**
 build.js assembles the source modules into one self-contained HTML file. No module loader, no CDN, no external requests at runtime.
@@ -182,7 +184,7 @@ Contributions welcome. This project maintains a compact, readable codebase with 
 Report security issues via GitHub Security Advisories.
 
 **Audit Status:**
-Pre-1.0. Community review welcome. auth.js, crypto.js, session.js, and the native biometric plugin are the surfaces that matter.
+Pre-1.0, under active testing. Community review welcome. auth.js, crypto.js, session.js, and the native plugins are the surfaces that matter.
 
 ## License
 

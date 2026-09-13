@@ -2,9 +2,7 @@
 
 
 
-\*\*Current Version:\*\* v0.5.4 (phone) / v0.5.3 (extension)
-
-\*\*Status:\*\* Both surfaces in de-drift parity (Pre-1.0 development, phone in Play closed testing)
+\*\*Current Version:\*\* v0.5.5 — \*\*Status: Active Testing\*\*
 
 
 
@@ -16,31 +14,35 @@
 
 
 
+\### v0.5.5 - Export Fix and Native File Saving (Sep 2026)
+
+\- ✅ Fixed Export Vault appearing to silently fail — its feedback wrote to a page element that never existed
+
+\- ✅ Exported vault filename now includes the master key nickname, matching the key file
+
+\- ✅ File saving moved off the unreliable browser-download trick onto Capacitor's native Filesystem and Share APIs
+
+\- ✅ Export Vault now offers a direct save to the Downloads folder or the native share sheet from one button
+
+\- ✅ Added a small native plugin for direct Downloads saves via Android's MediaStore, no extra permission required
+
+
+
 \### v0.5.4 - Phone De-Drift to Extension Parity (Sep 2026)
 
-\- ✅ About section synced to match the extension exactly, version and website link included
+\- ✅ About section synced to match the extension; collapsible view/delete-only credentials list
 
-\- ✅ Website credentials rebuilt: collapsible domain list, show/hide password, delete only — matches the extension, old Add/Load flow removed
+\- ✅ Inline unlock overlay inside the settings menu on session timeout
 
-\- ✅ Inline unlock overlay inside the settings menu on session timeout, in place of booting to the root lock screen
+\- ✅ Password rule unified to 12+ characters with letter, number, and symbol on both surfaces
 
-\- ✅ Overlay visibility tracked by an explicit in-menu flag rather than inferred page state
-
-\- ✅ Password rule unified to 12+ characters with letter, number, and symbol on both phone and extension, including a gap in the extension's re-enroll path
-
-\- ✅ Locking clears the shared session key on the phone, matching the extension
-
-\- ✅ Fixed a CSS bug where an inline style kept the new overlay permanently visible regardless of its class
+\- ✅ Fixed a CSS bug that could leave the unlock overlay permanently visible
 
 
 
 \### v0.5.3 - Extension De-Drift to Phone Parity (Sep 2026)
 
-\- ✅ Custom app PIN removed from the extension; device unlock via fingerprint or the device's own PIN
-
-\- ✅ Sync tab rebuilt to Share Vault/Key, Export/Import Vault/Key, in-box jsQR scan
-
-\- ✅ Inline unlock overlay and background lock monitor introduced on the extension's manage page
+\- ✅ Custom app PIN removed from the extension; Sync tab rebuilt to Share/Backup/Scan model
 
 \- ✅ Fixed lockAll() not clearing the shared session key, a real lock-bypass
 
@@ -76,7 +78,7 @@
 
 
 
-\## Upcoming After v0.5.4
+\## Upcoming After v0.5.5
 
 
 
@@ -124,9 +126,7 @@ Extend the vault to store and sync general web credentials, building on the same
 
 
 
-⚠️ \*\*The v0.5.4 unlock-overlay fix needs on-device confirmation\*\*
-
-⚠️ \*\*Sync, backup, and scanner still need on-device field testing\*\* across Android versions
+⚠️ \*\*This build is under active testing\*\* — expect rough edges as sync, backup, and native file saving are field-tested on real devices
 
 ⚠️ \*\*Auto-lock is a foreground inactivity timer\*\* on the phone — exact timing while backgrounded is subject to OS suspension
 

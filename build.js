@@ -963,7 +963,7 @@ window.stopPhoneStream = function() {
 
 async function ensurePhoneUnlocked() {
   if (vault.session.hasMasterKey()) return vault.session.getMasterKey()
-  log('Unlock your vault before syncing', 'error')
+  syncMsg('Unlock your vault before syncing', 'error')
   return null
 }
 
@@ -1142,7 +1142,79 @@ function combineSecret(passphrase, questionIdx, answers) {
   return parts.join('\u0000')  // null-join, unlikely to collide
 }
 
-function downloadFile(filename, text) {
+function syncMsg(text, kind) {
+  var el = document.getElementById('sync-msg')
+  if (!el) return
+  el.textContent = text
+  el.style.color = kind === 'error' ? 'var(--danger)' : 'var(--green)'
+}
+
+function nativeDownloader() {
+  try { if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.NativeDownloader) return window.Capacitor.Plugins.NativeDownloader } catch (e) {}
+  return null
+}
+
+async function buildVaultExport() {
+  var masterKey = await ensurePhoneUnlocked()
+  if (!masterKey) { syncMsg('Unlock your vault before syncing', 'error'); return null }
+  var vaultData = await vault.store.getPasswordVault()
+  if (!vaultData) { syncMsg('Nothing to export yet', 'error'); return null }
+  var fileObj = { format: 'valid-vault-vault', version: 1, vault: vaultData }
+  var nickname = ''
+  try { var a = await vault.store.getAuth() || {}; nickname = (a.keyNickname || '').trim() } catch (e) {}
+  var safeName = nickname ? '-' + nickname.replace(/[\\/:*?"<>|]+/g, '').replace(/\s+/g, '-') : ''
+  var fname = 'valid-vault-backup' + safeName + '.vault'
+  return { fname: fname, json: JSON.stringify(fileObj) }
+}
+
+window.chooseDownloadVault = async function() {
+  hideModal()
+  var payload = await buildVaultExport()
+  if (!payload) return
+  var dl = nativeDownloader()
+  if (dl) {
+    try {
+      await dl.saveToDownloads({ filename: payload.fname, data: payload.json })
+      syncMsg('Saved to Downloads: ' + payload.fname, 'success')
+      return
+    } catch (e) {
+      syncMsg('Direct save failed: ' + (e && e.message ? e.message : e), 'error')
+      return
+    }
+  }
+  if (await downloadFile(payload.fname, payload.json)) {
+    syncMsg('Vault exported.', 'success')
+  } else { syncMsg('Could not save the file', 'error') }
+}
+
+window.chooseShareVault = async function() {
+  hideModal()
+  var payload = await buildVaultExport()
+  if (!payload) return
+  if (await downloadFile(payload.fname, payload.json)) {
+    syncMsg('Vault exported. It stays encrypted, useless without your master key.', 'success')
+  } else { syncMsg('Could not save the file', 'error') }
+}
+
+function nativeFilesystem() {
+  try { if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Filesystem) return window.Capacitor.Plugins.Filesystem } catch (e) {}
+  return null
+}
+function nativeShare() {
+  try { if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Share) return window.Capacitor.Plugins.Share } catch (e) {}
+  return null
+}
+
+async function downloadFile(filename, text) {
+  var fs = nativeFilesystem()
+  var share = nativeShare()
+  if (fs && share) {
+    try {
+      var written = await fs.writeFile({ path: filename, data: text, directory: 'CACHE', encoding: 'utf8' })
+      await share.share({ title: filename, url: written.uri, dialogTitle: 'Save ' + filename })
+      return true
+    } catch (e) { return false }
+  }
   try {
     var blob = new Blob([text], { type: 'application/json' })
     var url = URL.createObjectURL(blob)
@@ -1201,7 +1273,7 @@ async function doExportKey(qIdx, passphrase, answers) {
       wrapped: wrapped
     }
     var fname = nickname.replace(/[^a-z0-9]+/gi, '-').toLowerCase() + '.vaultkey'
-    if (downloadFile(fname, JSON.stringify(fileObj))) {
+    if (await downloadFile(fname, JSON.stringify(fileObj))) {
       hideExportKeyModal()
       log('Key exported. Store the file, passphrase, and answers safely.', 'success')
     } else { setExportMsg('Could not save the file') }
@@ -1238,30 +1310,23 @@ async function doImportKey(fileObj, passphrase, answers) {
 
 // ---- Export Vault (already-encrypted vault to a file) ----
 window.exportVault = async function() {
-  var masterKey = await ensurePhoneUnlocked()
-  if (!masterKey) return
-  var vaultData = await vault.store.getPasswordVault()
-  if (!vaultData) { log('Nothing to export yet', 'error'); return }
-  var fileObj = { format: 'valid-vault-vault', version: 1, vault: vaultData }
-  if (downloadFile('valid-vault-backup.vault', JSON.stringify(fileObj))) {
-    log('Vault exported. It stays encrypted, useless without your master key.', 'success')
-  } else { log('Could not save the file', 'error') }
+  showModal('<h3>Export Vault</h3><p style="color:var(--text-dim);font-size:13px;">Save the encrypted vault to a file.</p><div class="row" style="margin-top:16px;"><button onclick="chooseDownloadVault()">Download</button><button onclick="chooseShareVault()" class="secondary">Share</button></div><div class="row" style="margin-top:10px;"><button onclick="hideModal()" class="secondary">Cancel</button></div>')
 }
 
 // ---- Import Vault (restore/merge from a file) ----
 window.importVault = function() {
   readFileText(async function(text) {
-    if (!text) { log('No file selected', 'error'); return }
+    if (!text) { syncMsg('No file selected', 'error'); return }
     try {
       var fileObj = JSON.parse(text)
-      if (fileObj.format !== 'valid-vault-vault') { log('Not a Valid Vault backup file', 'error'); return }
+      if (fileObj.format !== 'valid-vault-vault') { syncMsg('Not a Valid Vault backup file', 'error'); return }
       var masterKey = await ensurePhoneUnlocked()
-      if (!masterKey) return
+      if (!masterKey) { syncMsg('Unlock your vault before syncing', 'error'); return }
       var localVault = await vault.store.getPasswordVault()
       var incoming = fileObj.vault
       if (!localVault) {
         await vault.store.setPasswordVault(incoming)
-        log('Vault restored.', 'success')
+        syncMsg('Vault restored.', 'success')
         return
       }
       var merged = await vault.passwords.mergeVaults(localVault, incoming, masterKey)
@@ -1269,8 +1334,8 @@ window.importVault = function() {
       merged.meta.lastAccess = Date.now()
       await vault.store.setPasswordVault(merged)
       var count = Object.values(merged.credentials || {}).flat().filter(function(c){ return !c.deleted }).length
-      log('Vault merged. ' + count + ' logins.', 'success')
-    } catch (e) { log('Import failed: ' + (e && e.message ? e.message : e), 'error') }
+      syncMsg('Vault merged. ' + count + ' logins.', 'success')
+    } catch (e) { syncMsg('Import failed: ' + (e && e.message ? e.message : e), 'error') }
   })
 }
 
