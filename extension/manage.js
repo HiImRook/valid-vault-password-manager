@@ -1,5 +1,7 @@
 import * as auth from './auth.js'
 import * as passwords from './passwords.js'
+import * as webcreds from './webcreds.js'
+import * as personalinfo from './personalinfo.js'
 import * as session from './session.js'
 import * as store from './store.js'
 import * as pairing from './pairing.js'
@@ -93,12 +95,13 @@ function attachActivityListeners() {
 async function checkAndShowLockOverlay() {
   if (session.hasMasterKey()) { hideLockOverlay(); return }
   const restored = await restoreMasterKeyFromSession()
-  if (restored) { hideLockOverlay() } else { showLockOverlay() }
+  if (restored) { hideLockOverlay() } else { showLockOverlay(); loginCredsUnlocked = false; webCredsUnlocked = false; personalInfoUnlocked = false }
 }
 setInterval(checkAndShowLockOverlay, 5000)
 
 const tabs = document.querySelectorAll('.sidebar-tab')
 const tabManage = document.getElementById('tab-manage')
+const tabWebcreds = document.getElementById('tab-webcreds')
 const tabPersonal = document.getElementById('tab-personal')
 const tabSettings = document.getElementById('tab-settings')
 const tabAbout = document.getElementById('tab-about')
@@ -126,12 +129,15 @@ function showTab(tabName) {
   document.querySelector(`[data-tab="${tabName}"]`).classList.add('active')
   
   tabManage.classList.add('hidden')
+  tabWebcreds.classList.add('hidden')
   tabPersonal.classList.add('hidden')
   document.getElementById('tab-sync').classList.add('hidden')
   tabSettings.classList.add('hidden')
   tabAbout.classList.add('hidden')
   
   document.getElementById('tab-' + tabName).classList.remove('hidden')
+  if (tabName === 'webcreds') loadAllWebCredentials()
+  if (tabName === 'personal') loadPersonalInfo()
 }
 
 function showMsg(el, msg, type) {
@@ -173,7 +179,21 @@ async function loadAuthStatus() {
   applyEnrollBtn(btnEditPw, status.hasPassword)
 }
 
+var loginCredsUnlocked = false
+
 async function loadAllCredentials() {
+  if (!loginCredsUnlocked) {
+    credentialsList.innerHTML = '<div style="padding:24px;text-align:center;"><button id="btn-unlock-creds">\ud83d\udd10 Unlock to view credentials</button></div>'
+    const btn = document.getElementById('btn-unlock-creds')
+    if (btn) btn.onclick = async () => {
+      const authResult = await promptAuth()
+      if (!authResult.success) { showMsg(msgManage, 'Authentication required', 'error'); return }
+      session.setMasterKey(authResult.masterKey)
+      loginCredsUnlocked = true
+      loadAllCredentials()
+    }
+    return
+  }
   const domainsResult = await passwords.getAllDomains()
   if (!domainsResult.success || domainsResult.domains.length === 0) {
     credentialsList.innerHTML = '<div style="padding:24px;text-align:center;color:#666;">No saved credentials</div>'
@@ -277,7 +297,15 @@ async function loadAllCredentials() {
           session.setMasterKey(masterKey)
         }
         
-        showMsg(msgManage, 'Edit functionality coming soon')
+        const newPassword = window.prompt('New password for this login (username stays the same; a different username is a separate login):')
+        if (!newPassword) return
+        const result = await passwords.updateCredential(cred.id, { password: newPassword }, masterKey)
+        if (result.success) {
+          showMsg(msgManage, 'Password updated', 'success')
+          loadAllCredentials()
+        } else {
+          showMsg(msgManage, 'Update failed: ' + result.error, 'error')
+        }
       }
       
       credRow.querySelector('.btn-delete').onclick = async (e) => {
@@ -318,6 +346,360 @@ async function loadAllCredentials() {
     credentialsList.appendChild(domainItem)
   }
 }
+
+const msgWebcreds = document.getElementById('msg-webcreds')
+const webCredsListEl = document.getElementById('webcreds-list')
+const btnAddWebcred = document.getElementById('btn-add-webcred')
+
+var webCredsUnlocked = false
+
+async function loadAllWebCredentials() {
+  if (!webCredsUnlocked) {
+    webCredsListEl.innerHTML = '<div style="padding:24px;text-align:center;"><button id="btn-unlock-webcreds">\ud83d\udd10 Unlock to view web credentials</button></div>'
+    const btn = document.getElementById('btn-unlock-webcreds')
+    if (btn) btn.onclick = async () => {
+      const authResult = await promptAuth()
+      if (!authResult.success) { showMsg(msgWebcreds, 'Authentication required', 'error'); return }
+      session.setMasterKey(authResult.masterKey)
+      webCredsUnlocked = true
+      loadAllWebCredentials()
+    }
+    return
+  }
+  const catResult = await webcreds.getAllCategories()
+  if (!catResult.success || catResult.categories.length === 0) {
+    webCredsListEl.innerHTML = '<div style="padding:24px;text-align:center;color:#666;">No web credentials saved</div>'
+    return
+  }
+
+  const categories = catResult.categories.sort()
+  webCredsListEl.innerHTML = ''
+
+  for (const category of categories) {
+    const vaultData = await store.getWebCredsVault()
+    const catCreds = (vaultData?.credentials?.[category] || []).filter(c => !c.deleted)
+
+    const catItem = document.createElement('div')
+    catItem.style.cssText = 'border-bottom:1px solid #2a2a2a;'
+
+    const catHeader = document.createElement('div')
+    catHeader.className = 'credential-item'
+    catHeader.style.cursor = 'pointer'
+    catHeader.innerHTML =
+      '<span style="color:#666;margin-right:8px;">\u25b6</span>' +
+      '<div class="credential-domain">' + escapeHtml(category) + '</div>' +
+      '<div style="flex:1;"></div>' +
+      '<div style="color:#666;font-size:12px;">' + catCreds.length + ' item' + (catCreds.length !== 1 ? 's' : '') + '</div>'
+
+    const catContent = document.createElement('div')
+    catContent.style.cssText = 'display:none;background:#111;padding:0 16px;'
+
+    catHeader.onclick = () => {
+      const isExpanded = catContent.style.display !== 'none'
+      if (isExpanded) {
+        catContent.style.display = 'none'
+        catHeader.querySelector('span').textContent = '\u25b6'
+      } else {
+        catContent.style.display = 'block'
+        catHeader.querySelector('span').textContent = '\u25bc'
+      }
+    }
+
+    for (const cred of catCreds) {
+      const row = document.createElement('div')
+      row.style.cssText = 'padding:12px 0;border-bottom:1px solid #1a1a1a;display:flex;align-items:center;gap:12px;'
+      row.innerHTML =
+        '<div class="credential-username" style="flex:1;">Item</div>' +
+        '<div class="credential-password" style="width:150px;">\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022</div>' +
+        '<div class="credential-actions">' +
+        '<button class="small secondary btn-show">\ud83d\udc41\ufe0f</button>' +
+        '<button class="small secondary btn-edit">\u270f\ufe0f</button>' +
+        '<button class="small danger btn-delete">\ud83d\uddd1\ufe0f</button>' +
+        '</div>'
+
+      const nameEl = row.querySelector('.credential-username')
+      const valueEl = row.querySelector('.credential-password')
+      nameEl.textContent = 'Item'
+
+      row.querySelector('.btn-show').onclick = async (e) => {
+        e.stopPropagation()
+        if (valueEl.textContent !== '\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022') {
+          valueEl.textContent = '\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022'
+          nameEl.textContent = 'Item'
+          return
+        }
+        let masterKey = session.getMasterKey()
+        if (!masterKey) {
+          const authResult = await promptAuth()
+          if (!authResult.success) { showMsg(msgWebcreds, 'Authentication required', 'error'); return }
+          masterKey = authResult.masterKey
+          session.setMasterKey(masterKey)
+        }
+        const result = await webcreds.getWebCredentials(category, masterKey)
+        if (result.success) {
+          const item = result.credentials.find(c => c.id === cred.id)
+          if (item) { nameEl.textContent = item.name; valueEl.textContent = item.value }
+        }
+      }
+
+      row.querySelector('.btn-edit').onclick = async (e) => {
+        e.stopPropagation()
+        let masterKey = session.getMasterKey()
+        if (!masterKey) {
+          const authResult = await promptAuth()
+          if (!authResult.success) { showMsg(msgWebcreds, 'Authentication required', 'error'); return }
+          masterKey = authResult.masterKey
+          session.setMasterKey(masterKey)
+        }
+        const newValue = window.prompt('New value for this item (name stays the same; a different name is a separate item):')
+        if (!newValue) return
+        const result = await webcreds.updateWebCredential(cred.id, { value: newValue }, masterKey)
+        if (result.success) { showMsg(msgWebcreds, 'Updated', 'success'); loadAllWebCredentials() }
+        else { showMsg(msgWebcreds, 'Update failed: ' + result.error, 'error') }
+      }
+
+      row.querySelector('.btn-delete').onclick = async (e) => {
+        e.stopPropagation()
+        let masterKey = session.getMasterKey()
+        if (!masterKey) {
+          const authResult = await promptAuth()
+          if (!authResult.success) { showMsg(msgWebcreds, 'Authentication required', 'error'); return }
+          masterKey = authResult.masterKey
+          session.setMasterKey(masterKey)
+        }
+        const result = await webcreds.getWebCredentials(category, masterKey)
+        const item = result.success ? result.credentials.find(c => c.id === cred.id) : null
+        const label = item ? item.name : 'this item'
+        if (confirm('Delete "' + label + '" from ' + category + '?')) {
+          const delResult = await webcreds.deleteWebCredential(cred.id)
+          if (delResult.success) { showMsg(msgWebcreds, 'Deleted', 'success'); loadAllWebCredentials() }
+          else { showMsg(msgWebcreds, 'Delete failed: ' + delResult.error, 'error') }
+        }
+      }
+
+      catContent.appendChild(row)
+    }
+
+    catItem.appendChild(catHeader)
+    catItem.appendChild(catContent)
+    webCredsListEl.appendChild(catItem)
+  }
+}
+
+if (btnAddWebcred) {
+  btnAddWebcred.onclick = async () => {
+    let masterKey = session.getMasterKey()
+    if (!masterKey) {
+      const authResult = await promptAuth()
+      if (!authResult.success) { showMsg(msgWebcreds, 'Authentication required', 'error'); return }
+      masterKey = authResult.masterKey
+      session.setMasterKey(masterKey)
+    }
+    const category = prompt('Category (e.g. Wi-Fi):')
+    if (!category) return
+    const name = prompt('Name (e.g. Home Router):')
+    if (!name) return
+    const value = prompt('Value:')
+    if (!value) return
+    const result = await webcreds.saveWebCredential(category.trim(), name.trim(), value, masterKey)
+    if (result.success) { showMsg(msgWebcreds, 'Saved', 'success'); loadAllWebCredentials() }
+    else { showMsg(msgWebcreds, 'Save failed', 'error') }
+  }
+}
+
+
+const msgPersonalInfo = document.getElementById('msg-personalinfo')
+const personalInfoContent = document.getElementById('personalinfo-content')
+
+var personalInfoUnlocked = false
+
+// Viewing only needs a normal unlock (fingerprint or password). Editing anything
+// requires the master password specifically, never fingerprint, since this data
+// covers real identity fields the user asked to gate more tightly than a login.
+async function promptPasswordOnly() {
+  const pw = window.prompt('Enter your master password to make this change:')
+  if (!pw) return { success: false }
+  const result = await auth.authenticatePassword(pw)
+  if (result.success) return { success: true, masterKey: result.masterKey }
+  return { success: false, error: result.error }
+}
+
+async function loadPersonalInfo() {
+  if (!personalInfoUnlocked) {
+    personalInfoContent.innerHTML = '<div style="padding:24px;text-align:center;"><button id="btn-unlock-personalinfo">\ud83d\udd10 Unlock to view Personal Info</button></div>'
+    const btn = document.getElementById('btn-unlock-personalinfo')
+    if (btn) btn.onclick = async () => {
+      const authResult = await promptAuth()
+      if (!authResult.success) { showMsg(msgPersonalInfo, 'Authentication required', 'error'); return }
+      session.setMasterKey(authResult.masterKey)
+      personalInfoUnlocked = true
+      loadPersonalInfo()
+    }
+    return
+  }
+
+  const masterKey = session.getMasterKey()
+  if (!masterKey) { personalInfoUnlocked = false; loadPersonalInfo(); return }
+
+  const result = await personalinfo.getProfile(masterKey)
+  if (!result.success) { personalInfoContent.innerHTML = '<p style="color:var(--danger);">' + result.error + '</p>'; return }
+  const p = result.profile
+
+  var html = ''
+  html += fieldRow('First Name', p.firstName || '(not set)', 'firstName')
+  html += fieldRow('Last Name', p.lastName || '(not set)', 'lastName')
+  html += fieldRow('Phone', p.phone || '(not set)', 'phone')
+
+  html += '<h3 style="margin-top:18px;">Emails</h3>'
+  if (!p.emails || p.emails.length === 0) {
+    html += '<p style="color:var(--text-dim);font-size:13px;">No emails saved.</p>'
+  } else {
+    const sorted = p.emails.slice().sort((a, b) => a.position - b.position)
+    sorted.forEach(function (e, i) {
+      html += '<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #1a1a1a;">'
+      html += '<span style="flex:1;">' + escapeHtml(e.value) + (i === 0 ? ' <span style="color:var(--green);font-size:11px;">(Primary)</span>' : '') + '</span>'
+      html += '<button class="small secondary" data-email-up="' + e.id + '"' + (i === 0 ? ' disabled' : '') + '>\u2191</button>'
+      html += '<button class="small secondary" data-email-down="' + e.id + '"' + (i === sorted.length - 1 ? ' disabled' : '') + '>\u2193</button>'
+      html += '<button class="small danger" data-email-del="' + e.id + '">Delete</button>'
+      html += '</div>'
+    })
+  }
+  html += '<button style="margin-top:8px;" id="btn-add-email">+ Add Email</button>'
+
+  html += '<h3 style="margin-top:18px;">Address</h3>'
+  html += fieldRow('Street', (p.address && p.address.street) || '(not set)', 'address.street')
+  html += fieldRow('City', (p.address && p.address.city) || '(not set)', 'address.city')
+  html += fieldRow('State', (p.address && p.address.state) || '(not set)', 'address.state')
+  html += fieldRow('ZIP', (p.address && p.address.zip) || '(not set)', 'address.zip')
+  html += fieldRow('Country', (p.address && p.address.country) || '(not set)', 'address.country')
+
+  personalInfoContent.innerHTML = html
+
+  if (!personalInfoContent._delegated) {
+    personalInfoContent._delegated = true
+    personalInfoContent.addEventListener('click', async (e) => {
+      const editBtn = e.target.closest('[data-edit-field]')
+      if (editBtn) { await editPersonalInfoField(editBtn.getAttribute('data-edit-field')); return }
+      const upBtn = e.target.closest('[data-email-up]')
+      if (upBtn && !upBtn.disabled) { await moveEmail(upBtn.getAttribute('data-email-up'), -1); return }
+      const downBtn = e.target.closest('[data-email-down]')
+      if (downBtn && !downBtn.disabled) { await moveEmail(downBtn.getAttribute('data-email-down'), 1); return }
+      const delBtn = e.target.closest('[data-email-del]')
+      if (delBtn) { await deleteEmail(delBtn.getAttribute('data-email-del')); return }
+    })
+  }
+  const addEmailBtn = document.getElementById('btn-add-email')
+  if (addEmailBtn) addEmailBtn.onclick = addEmail
+}
+
+function fieldRow(label, value, fieldKey) {
+  return '<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #1a1a1a;">' +
+    '<span style="width:100px;color:var(--text-dim);font-size:13px;">' + label + '</span>' +
+    '<span style="flex:1;">' + escapeHtml(value) + '</span>' +
+    '<button class="small secondary" data-edit-field="' + fieldKey + '">Edit</button>' +
+    '</div>'
+}
+
+async function getFieldValue(profile, fieldKey) {
+  if (fieldKey.indexOf('address.') === 0) {
+    const sub = fieldKey.split('.')[1]
+    return (profile.address && profile.address[sub]) || ''
+  }
+  return profile[fieldKey] || ''
+}
+
+async function editPersonalInfoField(fieldKey) {
+  const authResult = await promptPasswordOnly()
+  if (!authResult.success) { showMsg(msgPersonalInfo, authResult.error || 'Password required', 'error'); return }
+  const masterKey = authResult.masterKey
+  session.setMasterKey(masterKey)
+
+  const current = await personalinfo.getProfile(masterKey)
+  if (!current.success) { showMsg(msgPersonalInfo, current.error, 'error'); return }
+  const profile = current.profile
+
+  const currentValue = await getFieldValue(profile, fieldKey)
+  const newValue = window.prompt('New value:', currentValue)
+  if (newValue === null) return
+
+  if (fieldKey.indexOf('address.') === 0) {
+    const sub = fieldKey.split('.')[1]
+    if (!profile.address) profile.address = { street: '', city: '', state: '', zip: '', country: '' }
+    profile.address[sub] = newValue
+  } else {
+    profile[fieldKey] = newValue
+  }
+
+  const saveResult = await personalinfo.saveProfile(profile, masterKey)
+  if (saveResult.success) { showMsg(msgPersonalInfo, 'Saved', 'success'); loadPersonalInfo() }
+  else { showMsg(msgPersonalInfo, 'Save failed', 'error') }
+}
+
+async function addEmail() {
+  const authResult = await promptPasswordOnly()
+  if (!authResult.success) { showMsg(msgPersonalInfo, authResult.error || 'Password required', 'error'); return }
+  const masterKey = authResult.masterKey
+  session.setMasterKey(masterKey)
+
+  const email = window.prompt('New email address:')
+  if (!email) return
+
+  const current = await personalinfo.getProfile(masterKey)
+  if (!current.success) { showMsg(msgPersonalInfo, current.error, 'error'); return }
+  const profile = current.profile
+  if (!profile.emails) profile.emails = []
+  const nextPosition = profile.emails.length
+  profile.emails.push({ id: personalinfo.generateId(), value: email, position: nextPosition })
+
+  const saveResult = await personalinfo.saveProfile(profile, masterKey)
+  if (saveResult.success) { showMsg(msgPersonalInfo, 'Email added', 'success'); loadPersonalInfo() }
+  else { showMsg(msgPersonalInfo, 'Save failed', 'error') }
+}
+
+async function moveEmail(emailId, direction) {
+  const authResult = await promptPasswordOnly()
+  if (!authResult.success) { showMsg(msgPersonalInfo, authResult.error || 'Password required', 'error'); return }
+  const masterKey = authResult.masterKey
+  session.setMasterKey(masterKey)
+
+  const current = await personalinfo.getProfile(masterKey)
+  if (!current.success) { showMsg(msgPersonalInfo, current.error, 'error'); return }
+  const profile = current.profile
+  const sorted = profile.emails.slice().sort((a, b) => a.position - b.position)
+  const index = sorted.findIndex(e => e.id === emailId)
+  const swapIndex = index + direction
+  if (index === -1 || swapIndex < 0 || swapIndex >= sorted.length) return
+
+  const tmp = sorted[index].position
+  sorted[index].position = sorted[swapIndex].position
+  sorted[swapIndex].position = tmp
+  profile.emails = sorted
+
+  const saveResult = await personalinfo.saveProfile(profile, masterKey)
+  if (saveResult.success) { loadPersonalInfo() }
+  else { showMsg(msgPersonalInfo, 'Save failed', 'error') }
+}
+
+async function deleteEmail(emailId) {
+  const authResult = await promptPasswordOnly()
+  if (!authResult.success) { showMsg(msgPersonalInfo, authResult.error || 'Password required', 'error'); return }
+  const masterKey = authResult.masterKey
+  session.setMasterKey(masterKey)
+
+  if (!window.confirm('Delete this email?')) return
+
+  const current = await personalinfo.getProfile(masterKey)
+  if (!current.success) { showMsg(msgPersonalInfo, current.error, 'error'); return }
+  const profile = current.profile
+  profile.emails = (profile.emails || []).filter(e => e.id !== emailId)
+    .sort((a, b) => a.position - b.position)
+    .map((e, i) => ({ ...e, position: i }))
+
+  const saveResult = await personalinfo.saveProfile(profile, masterKey)
+  if (saveResult.success) { showMsg(msgPersonalInfo, 'Deleted', 'success'); loadPersonalInfo() }
+  else { showMsg(msgPersonalInfo, 'Save failed', 'error') }
+}
+
 
 async function promptAuth() {
   const status = await auth.initAuth()
@@ -540,8 +922,10 @@ const _btnShareVault = document.getElementById('btn-share-vault'); if (_btnShare
   const mk = session.getMasterKey()
   if (!mk) { syncMsg('Unlock your vault first', 'error'); return }
   const vaultData = await getPasswordVault()
-  if (!vaultData) { syncMsg('Nothing to sync yet', 'error'); return }
-  streamShare(JSON.stringify({ kind: 'vault', vault: vaultData }), 'Scan this with your other device to receive your logins')
+  const webCredsData = await store.getWebCredsVault()
+  const personalInfoData = await store.getPersonalInfo()
+  if (!vaultData && !webCredsData && !personalInfoData) { syncMsg('Nothing to sync yet', 'error'); return }
+  streamShare(JSON.stringify({ kind: 'vault', vault: vaultData, webcreds: webCredsData, personalInfo: personalInfoData }), 'Scan this with your other device to receive your logins')
 }
 const _btnShareKey = document.getElementById('btn-share-key'); if (_btnShareKey) _btnShareKey.onclick = async function () {
   const mk = session.getMasterKey()
@@ -597,13 +981,15 @@ const _btnExportVault = document.getElementById('btn-export-vault'); if (_btnExp
   const mk = session.getMasterKey()
   if (!mk) { syncMsg('Unlock first', 'error'); return }
   const vaultData = await getPasswordVault()
-  if (!vaultData) { syncMsg('Nothing to export yet', 'error'); return }
+  const webCredsData = await store.getWebCredsVault()
+  const personalInfoData = await store.getPersonalInfo()
+  if (!vaultData && !webCredsData && !personalInfoData) { syncMsg('Nothing to export yet', 'error'); return }
   let nickname = ''
   try { const a = await store.getAuth() || {}; nickname = (a.keyNickname || '').trim() } catch (e) {}
   // filesystem-safe, but preserve the user's exact capitalization
   const safeName = nickname ? '-' + nickname.replace(/[\\/:*?"<>|]+/g, '').replace(/\s+/g, '-') : ''
   const fname = 'valid-vault-backup' + safeName + '.vault'
-  if (downloadFile(fname, JSON.stringify({ format: 'valid-vault-vault', version: 1, vault: vaultData })))
+  if (downloadFile(fname, JSON.stringify({ format: 'valid-vault-vault', version: 1, vault: vaultData, webcreds: webCredsData, personalInfo: personalInfoData })))
     syncMsg('Vault exported. It stays encrypted, useless without your master key.', 'success')
   else syncMsg('Could not save the file', 'error')
 }
@@ -615,13 +1001,33 @@ const _btnImportVault = document.getElementById('btn-import-vault'); if (_btnImp
       if (fileObj.format !== 'valid-vault-vault') { syncMsg('Not a Valid Vault backup file', 'error'); return }
       const mk = session.getMasterKey()
       if (!mk) { syncMsg('Unlock first', 'error'); return }
-      const local = await getPasswordVault()
-      const incoming = fileObj.vault
-      if (!local) { await setPasswordVault(incoming); syncMsg('Vault restored.', 'success'); return }
-      const merged = await passwords.mergeVaults(local, incoming, mk)
-      merged.meta.createdAt = Math.min(local.meta.createdAt, incoming.meta.createdAt)
-      merged.meta.lastAccess = Date.now()
-      await setPasswordVault(merged)
+      if (fileObj.vault) {
+        const local = await getPasswordVault()
+        const incoming = fileObj.vault
+        if (!local) { await setPasswordVault(incoming) }
+        else {
+          const merged = await passwords.mergeVaults(local, incoming, mk)
+          merged.meta.createdAt = Math.min(local.meta.createdAt, incoming.meta.createdAt)
+          merged.meta.lastAccess = Date.now()
+          await setPasswordVault(merged)
+        }
+      }
+      if (fileObj.webcreds) {
+        const localWc = await store.getWebCredsVault()
+        const incomingWc = fileObj.webcreds
+        if (!localWc) { await store.setWebCredsVault(incomingWc) }
+        else {
+          const mergedWc = await webcreds.mergeWebCredsVaults(localWc, incomingWc, mk)
+          mergedWc.meta.createdAt = Math.min(localWc.meta.createdAt, incomingWc.meta.createdAt)
+          mergedWc.meta.lastAccess = Date.now()
+          await store.setWebCredsVault(mergedWc)
+        }
+      }
+      if (fileObj.personalInfo) {
+        const localPi = await store.getPersonalInfo()
+        const mergedPi = personalinfo.mergeProfiles(localPi, fileObj.personalInfo)
+        await store.setPersonalInfo(mergedPi)
+      }
       syncMsg('Vault merged.', 'success')
     } catch (e) { syncMsg('Import failed: ' + (e && e.message ? e.message : e), 'error') }
   })
@@ -682,8 +1088,45 @@ async function showImportKeyModal(fileObj) {
     const rawMaster = await unwrapMasterKey(fileObj.wrapped, wrapKey)
     const importedKey = await masterKeyToCryptoKey(rawMaster)
     session.setMasterKey(importedKey)
-    syncMsg('Master key imported. This device can now sync and decrypt vaults.', 'success')
+    await persistImportedKey(importedKey)
   } catch (e) { syncMsg('Wrong passphrase or answers.', 'error') }
+}
+
+async function persistImportedKey(importedKey) {
+  const status = await auth.initAuth()
+
+  if (!status.hasPassword && !status.hasFingerprint) {
+    const newPass = window.prompt('No unlock method is set up yet on this browser. Set a password (12+ chars, letter, number, symbol) to use with the imported vault:')
+    if (!newPass) { syncMsg('Master key imported for this session only. Set a password to make it permanent.', 'error'); return }
+    auth.startPasswordCreation()
+    const result = await auth.setPassword(newPass, importedKey)
+    if (result.success) { syncMsg('Master key imported and password set. This browser now uses the imported vault permanently.', 'success') }
+    else { syncMsg('Master key imported for this session only. ' + result.error, 'error') }
+    return
+  }
+
+  if (status.hasPassword) {
+    const currentPass = window.prompt('Key imported. Enter your password to make it permanent on this browser:')
+    if (!currentPass) { syncMsg('Master key imported for this session only. It will revert on next unlock unless you make it permanent.', 'error'); return }
+    auth.startPasswordCreation()
+    const result = await auth.setPassword(currentPass, importedKey)
+    if (!result.success) { syncMsg('Could not make the key permanent: ' + result.error, 'error'); return }
+  }
+
+  if (status.hasFingerprint) {
+    if (window.confirm('Also relink fingerprint unlock to the imported vault? You will be prompted for your fingerprint.')) {
+      try {
+        await auth.startFingerprintEnrollment()
+        const fpResult = await auth.enrollFingerprint(importedKey)
+        if (!fpResult.success) { syncMsg('Password updated, but fingerprint relink failed: ' + fpResult.error, 'error'); return }
+      } catch (e) { syncMsg('Password updated, but fingerprint relink failed.', 'error'); return }
+    } else {
+      syncMsg('Password updated. Fingerprint still unlocks the old vault until you relink it in Manage.', 'success')
+      return
+    }
+  }
+
+  syncMsg('Master key imported and made permanent. This device now stays in sync using this vault.', 'success')
 }
 
 // ---- Scan (getUserMedia + jsQR, in-box) ----
@@ -749,13 +1192,33 @@ async function handleImported(payloadText) {
   if (data.kind === 'vault') {
     const mk = session.getMasterKey()
     if (!mk) { syncMsg('QR sync not enabled. Import master key first', 'error'); return }
-    const local = await getPasswordVault()
-    const incoming = data.vault
-    if (!local) { await setPasswordVault(incoming); syncMsg('Vault imported.', 'success'); return }
-    const merged = await passwords.mergeVaults(local, incoming, mk)
-    merged.meta.createdAt = Math.min(local.meta.createdAt, incoming.meta.createdAt)
-    merged.meta.lastAccess = Date.now()
-    await setPasswordVault(merged)
+    if (data.vault) {
+      const local = await getPasswordVault()
+      const incoming = data.vault
+      if (!local) { await setPasswordVault(incoming) }
+      else {
+        const merged = await passwords.mergeVaults(local, incoming, mk)
+        merged.meta.createdAt = Math.min(local.meta.createdAt, incoming.meta.createdAt)
+        merged.meta.lastAccess = Date.now()
+        await setPasswordVault(merged)
+      }
+    }
+    if (data.webcreds) {
+      const localWc = await store.getWebCredsVault()
+      const incomingWc = data.webcreds
+      if (!localWc) { await store.setWebCredsVault(incomingWc) }
+      else {
+        const mergedWc = await webcreds.mergeWebCredsVaults(localWc, incomingWc, mk)
+        mergedWc.meta.createdAt = Math.min(localWc.meta.createdAt, incomingWc.meta.createdAt)
+        mergedWc.meta.lastAccess = Date.now()
+        await store.setWebCredsVault(mergedWc)
+      }
+    }
+    if (data.personalInfo) {
+      const localPi = await store.getPersonalInfo()
+      const mergedPi = personalinfo.mergeProfiles(localPi, data.personalInfo)
+      await store.setPersonalInfo(mergedPi)
+    }
     syncMsg('Sync complete.', 'success')
     return
   }

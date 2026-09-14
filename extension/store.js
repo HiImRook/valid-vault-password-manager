@@ -1,5 +1,5 @@
 const DB_NAME = 'ValidVault'
-const DB_VERSION = 1
+const DB_VERSION = 3
 
 let db = null
 
@@ -29,6 +29,14 @@ async function openDB() {
       
       if (!database.objectStoreNames.contains('wallets')) {
         database.createObjectStore('wallets', { keyPath: 'id' })
+      }
+      
+      if (!database.objectStoreNames.contains('webcreds')) {
+        database.createObjectStore('webcreds', { keyPath: 'id' })
+      }
+
+      if (!database.objectStoreNames.contains('personalInfo')) {
+        database.createObjectStore('personalInfo', { keyPath: 'id' })
       }
     }
   })
@@ -91,9 +99,25 @@ async function setWalletVault(vaultData) {
   return put('wallets', { id: 'vault', ...vaultData })
 }
 
+async function getWebCredsVault() {
+  return get('webcreds', 'vault')
+}
+
+async function setWebCredsVault(vaultData) {
+  return put('webcreds', { id: 'vault', ...vaultData })
+}
+
+async function getPersonalInfo() {
+  return get('personalInfo', 'profile')
+}
+
+async function setPersonalInfo(profileData) {
+  return put('personalInfo', { id: 'profile', ...profileData })
+}
+
 async function clearAll() {
   const database = await openDB()
-  const stores = ['auth', 'passwords', 'wallets']
+  const stores = ['auth', 'passwords', 'wallets', 'webcreds', 'personalInfo']
   
   for (const storeName of stores) {
     const tx = database.transaction(storeName, 'readwrite')
@@ -113,5 +137,9 @@ export {
   setPasswordVault,
   getWalletVault,
   setWalletVault,
+  getWebCredsVault,
+  setWebCredsVault,
+  getPersonalInfo,
+  setPersonalInfo,
   clearAll
 }

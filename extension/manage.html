@@ -67,6 +67,7 @@
     <div class="sidebar">
       <div class="sidebar-brand">VALID VAULT</div>
       <div class="sidebar-tab active" data-tab="manage">Manage</div>
+      <div class="sidebar-tab" data-tab="webcreds">Web Credentials</div>
       <div class="sidebar-tab" data-tab="personal">Personal Info</div>
       <div class="sidebar-tab" data-tab="sync">Sync</div>
       <div class="sidebar-tab" data-tab="settings">Settings</div>
@@ -102,9 +103,19 @@
         <div id="msg-manage" class="msg hidden"></div>
       </div>
 
+      <div id="tab-webcreds" class="hidden">
+        <h1>Web Credentials</h1>
+        <p style="color:var(--text-dim);font-size:13px;margin-bottom:14px;">Store a secret under a category, like a Wi-Fi password, license key, or security code.</p>
+        <button id="btn-add-webcred">Add</button>
+        <div id="webcreds-list" style="margin-top:14px;"></div>
+        <div id="msg-webcreds" class="msg hidden"></div>
+      </div>
+
       <div id="tab-personal" class="hidden">
         <h1>Personal Info</h1>
-        <p style="color:#666;font-size:14px;">Coming soon: Store addresses, credit cards, IDs, and other personal information.</p>
+        <p style="color:var(--text-dim);font-size:13px;margin-bottom:14px;">Used by autofill on signup and profile forms. Viewing requires unlock; adding or editing any field requires your master password. Social Security numbers and card info are deferred for now, held back for later, added security work.</p>
+        <div id="personalinfo-content"></div>
+        <div id="msg-personalinfo" class="msg hidden"></div>
       </div>
 
       <div id="tab-sync" class="hidden">

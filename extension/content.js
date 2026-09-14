@@ -178,7 +178,7 @@
       </style>
       <div class="backdrop" id="backdrop">
         <div class="card">
-          <div class="title">Save to Valid Vault?</div>
+          <div class="title" id="sp-title">Save to Valid Vault?</div>
           <div class="sub" id="sp-domain"></div>
           <div class="user" id="sp-user"></div>
           <div class="row">
@@ -191,8 +191,9 @@
     return { host, shadow }
   }
 
-  function showSavePrompt(domain, username, password) {
+  function showSavePrompt(domain, username, password, isUpdate) {
     if (!savePrompt) savePrompt = createSavePrompt()
+    savePrompt.shadow.getElementById('sp-title').textContent = isUpdate ? 'Update saved password?' : 'Save to Valid Vault?'
     savePrompt.shadow.getElementById('sp-domain').textContent = domain
     savePrompt.shadow.getElementById('sp-user').textContent = username || '(no username)'
     savePrompt.host.style.display = 'block'
@@ -207,12 +208,18 @@
     }
   }
 
-  function captureAndPrompt() {
+  async function captureAndPrompt() {
     if (!usernameField && !passwordField) return
     const u = usernameField ? usernameField.value : ''
     const p = passwordField ? passwordField.value : ''
     if (!p) return  // no password, nothing to save
-    showSavePrompt(currentDomain, u, p)
+    let existing = null
+    try {
+      const result = await chrome.runtime.sendMessage({ action: 'getCredentialsForDomain', domain: currentDomain })
+      if (result && result.success) existing = result.credentials.find(c => c.username === u)
+    } catch (e) {}
+    if (existing && existing.password === p) return  // already saved, nothing changed
+    showSavePrompt(currentDomain, u, p, !!existing)
   }
 
   function wireSubmitCapture() {
