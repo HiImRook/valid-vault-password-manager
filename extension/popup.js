@@ -53,7 +53,12 @@ async function persistKey() {
     const mk = session.getMasterKey()
     if (!mk) return
     const bytes = new Uint8Array(await crypto.subtle.exportKey('raw', mk))
-    await chrome.storage.session.set({ masterKeyBytes: Array.from(bytes), lastActivity: Date.now() })
+    // Delegate the actual write to the background service worker rather than writing
+    // from the popup directly. Popups are destroyed the instant they lose focus, and
+    // if the write is still in flight at that moment it can be silently lost. The
+    // background worker is a separate, longer-lived context, so once the message is
+    // sent, the write completes there regardless of how fast the popup closes.
+    await chrome.runtime.sendMessage({ action: 'persistSessionKey', masterKeyBytes: Array.from(bytes) })
   } catch (e) {}
 }
 

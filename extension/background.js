@@ -1,3 +1,52 @@
+async function getAuthRecord() {
+  return new Promise(function (resolve) {
+    const req = indexedDB.open('ValidVault')
+    req.onsuccess = function () {
+      try {
+        const tx = req.result.transaction('auth', 'readonly')
+        const get = tx.objectStore('auth').get('primary')
+        get.onsuccess = function () { resolve(get.result || null) }
+        get.onerror = function () { resolve(null) }
+      } catch (e) { resolve(null) }
+    }
+    req.onerror = function () { resolve(null) }
+  })
+}
+
+// Mirrors auth.js's authenticatePassword exactly, but runs here because this is the
+// only content-script-reachable place with correct access to the real vault storage.
+// A content script's IndexedDB is scoped to the PAGE's origin (e.g. tubitv.com), not
+// the extension's, so importing auth.js into a content script would silently read an
+// empty, unrelated database. This function does the same PBKDF2 unwrap, just in the
+// context that actually has the real 'ValidVault' data.
+async function authenticateWithPassword(password) {
+  const auth = await getAuthRecord()
+  if (!auth || !auth.passwordWrappedKey) return { success: false, error: 'No password set' }
+  try {
+    const salt = new Uint8Array(auth.passwordSalt)
+    const iterations = auth.passwordKdfIterations || 100000
+    const encoder = new TextEncoder()
+    const keyMaterial = await crypto.subtle.importKey('raw', encoder.encode(password), 'PBKDF2', false, ['deriveKey'])
+    const unwrappingKey = await crypto.subtle.deriveKey(
+      { name: 'PBKDF2', salt: salt, iterations: iterations, hash: 'SHA-256' },
+      keyMaterial,
+      { name: 'AES-GCM', length: 256 },
+      false,
+      ['unwrapKey']
+    )
+    const iv = new Uint8Array(auth.passwordWrappedKey.iv)
+    const wrapped = new Uint8Array(auth.passwordWrappedKey.wrapped)
+    const masterKey = await crypto.subtle.unwrapKey(
+      'raw', wrapped, unwrappingKey, { name: 'AES-GCM', iv: iv }, { name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']
+    )
+    const bytes = new Uint8Array(await crypto.subtle.exportKey('raw', masterKey))
+    await chrome.storage.session.set({ masterKeyBytes: Array.from(bytes), lastActivity: Date.now() })
+    return { success: true }
+  } catch (e) {
+    return { success: false, error: 'Invalid password' }
+  }
+}
+
 async function getSessionKeyBytes() {
   try {
     const stored = await chrome.storage.session.get('masterKeyBytes')
@@ -45,19 +94,25 @@ async function getPersonalInfoRecord() {
   })
 }
 
-async function personalInfoField(fieldType) {
+async function loadDecryptedProfile() {
   const bytes = await getSessionKeyBytes()
-  if (!bytes) return { success: false, value: null, locked: true }
+  if (!bytes) return { success: false, locked: true }
   const record = await getPersonalInfoRecord()
-  if (!record || !record.data) return { success: true, value: null }
+  if (!record || !record.data) return { success: true, profile: null }
   const key = await crypto.subtle.importKey('raw', new Uint8Array(bytes), { name: 'AES-GCM', length: 256 }, false, ['decrypt'])
-  let profile
   try {
     const json = await decryptField(record.data, key)
-    profile = JSON.parse(json)
+    return { success: true, profile: JSON.parse(json) }
   } catch (e) {
-    return { success: false, value: null, locked: true }
+    return { success: false, locked: true }
   }
+}
+
+async function personalInfoField(fieldType) {
+  const result = await loadDecryptedProfile()
+  if (!result.success) return { success: false, value: null, locked: true }
+  const profile = result.profile
+  if (!profile) return { success: true, value: null }
   if (fieldType.indexOf('address.') === 0) {
     const sub = fieldType.split('.')[1]
     return { success: true, value: (profile.address && profile.address[sub]) || null }
@@ -67,6 +122,15 @@ async function personalInfoField(fieldType) {
     return { success: true, value: emails.length ? emails[0].value : null }
   }
   return { success: true, value: profile[fieldType] || null }
+}
+
+async function personalInfoAllEmails() {
+  const result = await loadDecryptedProfile()
+  if (!result.success) return { success: false, emails: [], locked: true }
+  const profile = result.profile
+  if (!profile) return { success: true, emails: [] }
+  const emails = (profile.emails || []).slice().sort((a, b) => a.position - b.position).map(e => e.value)
+  return { success: true, emails: emails }
 }
 
 async function credentialsForDomain(domain) {
@@ -161,6 +225,20 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
   }
   if (request.action === 'getPersonalInfoField') {
     personalInfoField(request.fieldType).then(sendResponse)
+    return true
+  }
+  if (request.action === 'getPersonalInfoAllEmails') {
+    personalInfoAllEmails().then(sendResponse)
+    return true
+  }
+  if (request.action === 'persistSessionKey') {
+    chrome.storage.session.set({ masterKeyBytes: request.masterKeyBytes, lastActivity: Date.now() })
+      .then(function () { sendResponse({ success: true }) })
+      .catch(function () { sendResponse({ success: false }) })
+    return true
+  }
+  if (request.action === 'authenticateWithPassword') {
+    authenticateWithPassword(request.password).then(sendResponse)
     return true
   }
   if (request.action === 'openManage') {

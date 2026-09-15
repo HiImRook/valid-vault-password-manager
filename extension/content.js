@@ -181,6 +181,7 @@
           <div class="title" id="sp-title">Save to Valid Vault?</div>
           <div class="sub" id="sp-domain"></div>
           <div class="user" id="sp-user"></div>
+          <div class="sub" id="sp-msg" style="color:#ff8866;min-height:14px;"></div>
           <div class="row">
             <button class="save" id="sp-save">Save</button>
             <button class="cancel" id="sp-cancel">Not now</button>
@@ -200,7 +201,12 @@
     const close = () => { savePrompt.host.style.display = 'none' }
     savePrompt.shadow.getElementById('sp-cancel').onclick = close
     savePrompt.shadow.getElementById('sp-save').onclick = async () => {
-      await chrome.runtime.sendMessage({ action: 'saveCredential', domain, username, password })
+      const msgEl = savePrompt.shadow.getElementById('sp-msg')
+      const result = await chrome.runtime.sendMessage({ action: 'saveCredential', domain, username, password })
+      if (result && result.locked) {
+        if (msgEl) msgEl.textContent = 'Vault is locked. Click the Valid Vault icon to unlock, then click Save again.'
+        return
+      }
       close()
     }
     savePrompt.shadow.getElementById('backdrop').onclick = (e) => {
@@ -266,91 +272,236 @@
   }
 
 
-  // Exact autocomplete values are the most reliable signal a browser gives us,
-  // checked first. Everything else is a real-world form, ids/names/placeholders
-  // vary site to site (e.g. id="firstName-field" instead of id="firstName"), so
-  // matching falls back to keyword substrings, then to nearby <label> text.
-  const AUTOCOMPLETE_MAP = {
-    'given-name': 'firstName',
-    'family-name': 'lastName',
-    'email': 'email',
-    'tel': 'phone',
-    'street-address': 'address.street',
-    'address-line1': 'address.street',
-    'address-level2': 'address.city',
-    'address-level1': 'address.state',
-    'postal-code': 'address.zip',
-    'country-name': 'address.country'
+  const SIGNUP_FIELD_MAP = {
+    firstName: ['input[name="first_name"]', 'input[name="firstName"]', 'input[id="firstName"]', 'input[id="first_name"]', 'input[autocomplete="given-name"]', 'input[placeholder*="First" i]'],
+    lastName: ['input[name="last_name"]', 'input[name="lastName"]', 'input[id="lastName"]', 'input[id="last_name"]', 'input[autocomplete="family-name"]', 'input[placeholder*="Last" i]'],
+    email: ['input[type="email"]', 'input[name="email"]', 'input[id="email"]', 'input[autocomplete="email"]', 'input[placeholder*="Email" i]'],
+    phone: ['input[type="tel"]', 'input[name="phone"]', 'input[id="phone"]', 'input[autocomplete="tel"]', 'input[placeholder*="Phone" i]'],
+    'address.street': ['input[name="address"]', 'input[name="street"]', 'input[id="address"]', 'input[id="street"]', 'input[autocomplete="street-address"]', 'input[placeholder*="Address" i]', 'input[placeholder*="Street" i]'],
+    'address.city': ['input[name="city"]', 'input[id="city"]', 'input[autocomplete="address-level2"]', 'input[placeholder*="City" i]'],
+    'address.state': ['input[name="state"]', 'input[id="state"]', 'input[autocomplete="address-level1"]', 'input[placeholder*="State" i]'],
+    'address.zip': ['input[name="zip"]', 'input[name="zipcode"]', 'input[id="zip"]', 'input[autocomplete="postal-code"]', 'input[placeholder*="ZIP" i]', 'input[placeholder*="Postal" i]'],
+    'address.country': ['input[name="country"]', 'input[id="country"]', 'input[autocomplete="country-name"]', 'input[placeholder*="Country" i]']
   }
-
-  const KEYWORD_MAP = [
-    ['firstname', 'firstName'], ['fname', 'firstName'], ['first_name', 'firstName'], ['givenname', 'firstName'],
-    ['lastname', 'lastName'], ['lname', 'lastName'], ['last_name', 'lastName'], ['surname', 'lastName'], ['familyname', 'lastName'],
-    ['email', 'email'],
-    ['phone', 'phone'], ['mobile', 'phone'], ['telephone', 'phone'],
-    ['street', 'address.street'], ['address1', 'address.street'], ['addressline1', 'address.street'],
-    ['city', 'address.city'], ['town', 'address.city'],
-    ['state', 'address.state'], ['province', 'address.state'],
-    ['zip', 'address.zip'], ['postal', 'address.zip'], ['postcode', 'address.zip'],
-    ['country', 'address.country']
-  ]
 
   const filledSignupFields = new WeakSet()
 
-  function labelTextFor(el) {
-    if (el.id) {
-      const byFor = document.querySelector('label[for="' + CSS.escape(el.id) + '"]')
-      if (byFor) return byFor.textContent || ''
-    }
-    const parentLabel = el.closest('label')
-    if (parentLabel) return parentLabel.textContent || ''
-    return ''
-  }
-
   function matchSignupFieldType(el) {
-    const autocomplete = (el.autocomplete || '').toLowerCase()
-    if (AUTOCOMPLETE_MAP[autocomplete]) return AUTOCOMPLETE_MAP[autocomplete]
-
-    if (el.type === 'email') return 'email'
-    if (el.type === 'tel') return 'phone'
-
-    const haystacks = [el.id, el.name, el.placeholder, labelTextFor(el)]
-      .map(s => (s || '').toLowerCase().replace(/[\s_-]+/g, ''))
-
-    for (let i = 0; i < KEYWORD_MAP.length; i++) {
-      const keyword = KEYWORD_MAP[i][0]
-      const fieldType = KEYWORD_MAP[i][1]
-      for (let j = 0; j < haystacks.length; j++) {
-        if (haystacks[j].indexOf(keyword) !== -1) return fieldType
+    for (const fieldType in SIGNUP_FIELD_MAP) {
+      const selectors = SIGNUP_FIELD_MAP[fieldType]
+      for (let i = 0; i < selectors.length; i++) {
+        if (el.matches(selectors[i])) return fieldType
       }
     }
     return null
   }
 
-  async function trySignupAutofill(el) {
-    if (el.type === 'password') return
-    if (filledSignupFields.has(el)) return
-    const fieldType = matchSignupFieldType(el)
-    if (!fieldType) { console.log('[Valid Vault] no field match for', el); return }
-    if (el.value) { console.log('[Valid Vault] field already has a value, skipping', fieldType); return }
-    console.log('[Valid Vault] matched', fieldType, '- requesting from background')
+  // Fingerprint/WebAuthn cannot be triggered from here: the credential is bound to
+  // the extension's own origin (chrome-extension://...), and a content script runs
+  // in the page's origin (e.g. tubitv.com) — a fingerprint attempt made from an
+  // arbitrary website would always fail against the wrong origin. Password auth has
+  // no such restriction, but still can't run its crypto here: a content script's
+  // storage is scoped to the page's own origin, not the extension's, so the actual
+  // unwrap runs in background.js, which has the correct access to the real vault.
+  // This function only collects the password and hands it off.
+  async function unlockInline() {
+    const pw = window.prompt('Vault is locked. Enter your password to unlock:')
+    if (!pw) return false
+    const result = await chrome.runtime.sendMessage({ action: 'authenticateWithPassword', password: pw })
+    return !!(result && result.success)
+  }
+
+  async function fillPersonalInfoField(el, fieldType) {
     const response = await chrome.runtime.sendMessage({ action: 'getPersonalInfoField', fieldType })
-    console.log('[Valid Vault] response for', fieldType, response)
     if (response && response.success && response.value) {
       el.setAttribute('autocomplete', 'off')
       el.value = response.value
       el.dispatchEvent(new Event('input', { bubbles: true }))
       el.dispatchEvent(new Event('change', { bubbles: true }))
       filledSignupFields.add(el)
+      return true
+    }
+    return false
+  }
+
+  // Only used from a deliberate click (the tag, the email picker), never from the
+  // passive page-load scan — an unlock prompt should never appear unprompted just
+  // because a site happened to load with a matching field.
+  async function fillPersonalInfoFieldWithUnlock(el, fieldType) {
+    const response = await chrome.runtime.sendMessage({ action: 'getPersonalInfoField', fieldType })
+    if (response && response.success && response.value) {
+      el.setAttribute('autocomplete', 'off')
+      el.value = response.value
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+      el.dispatchEvent(new Event('change', { bubbles: true }))
+      filledSignupFields.add(el)
+      return true
+    }
+    if (response && response.locked) {
+      const unlocked = await unlockInline()
+      if (unlocked) return fillPersonalInfoField(el, fieldType)
+    }
+    return false
+  }
+
+  function createVaultTag() {
+    const tag = document.createElement('div')
+    tag.textContent = 'V'
+    tag.style.fontWeight = '800'
+    tag.title = 'Fill with Valid Vault'
+    tag.style.cssText = `
+      position: absolute;
+      z-index: 2147483646;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: #00d4aa;
+      color: #05140a;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      line-height: 1;
+      cursor: pointer;
+      user-select: none;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+      border: 1px solid #00b294;
+    `
+    document.body.appendChild(tag)
+    return tag
+  }
+
+  function positionVaultTag(tag, el) {
+    const rect = el.getBoundingClientRect()
+    const size = 22
+    const top = rect.top + window.scrollY + (rect.height - size) / 2
+    const left = rect.right + window.scrollX - size - 6
+    tag.style.top = top + 'px'
+    tag.style.left = left + 'px'
+  }
+
+  const fieldTags = new WeakMap()
+
+  function attachVaultTag(el, fieldType) {
+    if (fieldTags.has(el)) { positionVaultTag(fieldTags.get(el), el); return }
+    if (!el.isConnected) return
+    const tag = createVaultTag()
+    positionVaultTag(tag, el)
+    tag.onclick = (e) => {
+      e.preventDefault()
+      e.stopPropagation()
+      if (fieldType === 'email') {
+        showEmailPicker(el)
+      } else {
+        fillPersonalInfoFieldWithUnlock(el, fieldType)
+      }
+    }
+    fieldTags.set(el, tag)
+    window.addEventListener('scroll', () => positionVaultTag(tag, el), true)
+    window.addEventListener('resize', () => positionVaultTag(tag, el))
+  }
+
+  let emailPicker = null
+
+  function createEmailPicker() {
+    const host = document.createElement('div')
+    host.style.cssText = 'position:absolute;z-index:2147483647;display:none;'
+    document.body.appendChild(host)
+    const shadow = host.attachShadow({ mode: 'closed' })
+    shadow.innerHTML = `
+      <style>
+        .dropdown { position:absolute; background:#1a1a1a; border:1px solid #333; border-radius:8px;
+          box-shadow:0 4px 12px rgba(0,0,0,0.5); min-width:220px; max-width:340px; overflow:hidden;
+          font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; }
+        .header { padding:10px 14px; background:#0a0a0a; color:#00d4aa; font-size:12px; font-weight:500; border-bottom:1px solid #333; }
+        .item { padding:10px 14px; cursor:pointer; border-bottom:1px solid #2a2a2a; color:#e0e0e0; font-size:13px; word-break:break-all; }
+        .item:hover { background:#2a2a2a; }
+        .item:last-child { border-bottom:none; }
+      </style>
+      <div class="dropdown">
+        <div class="header">Choose an email</div>
+        <div id="items"></div>
+      </div>
+    `
+    return { host, shadow }
+  }
+
+  async function showEmailPicker(field) {
+    if (!emailPicker) emailPicker = createEmailPicker()
+    const rect = field.getBoundingClientRect()
+    emailPicker.host.style.left = rect.left + window.scrollX + 'px'
+    emailPicker.host.style.top = rect.bottom + window.scrollY + 2 + 'px'
+    emailPicker.host.style.display = 'block'
+
+    let response = await chrome.runtime.sendMessage({ action: 'getPersonalInfoAllEmails' })
+    if (response && response.locked) {
+      const unlocked = await unlockInline()
+      if (unlocked) response = await chrome.runtime.sendMessage({ action: 'getPersonalInfoAllEmails' })
+    }
+    const itemsContainer = emailPicker.shadow.getElementById('items')
+    itemsContainer.innerHTML = ''
+
+    if (response && response.success && response.emails.length > 0) {
+      response.emails.forEach((email) => {
+        const item = document.createElement('div')
+        item.className = 'item'
+        item.textContent = email
+        item.onclick = () => {
+          field.setAttribute('autocomplete', 'off')
+          field.value = email
+          field.dispatchEvent(new Event('input', { bubbles: true }))
+          field.dispatchEvent(new Event('change', { bubbles: true }))
+          filledSignupFields.add(field)
+          emailPicker.host.style.display = 'none'
+        }
+        itemsContainer.appendChild(item)
+      })
+    } else {
+      itemsContainer.innerHTML = '<div class="item">No saved emails</div>'
     }
   }
 
-  document.addEventListener('focus', (e) => {
-    if (e.target && e.target.tagName === 'INPUT') {
-      console.log('[Valid Vault] focus fired, el:', e.target.id || e.target.name || '(no id/name)')
-      trySignupAutofill(e.target)
+  document.addEventListener('click', (e) => {
+    if (emailPicker && emailPicker.host.style.display !== 'none') {
+      if (!emailPicker.host.contains(e.target)) emailPicker.host.style.display = 'none'
     }
+  })
+
+  async function trySignupAutofill(el) {
+    if (el.type === 'password') return
+    if (filledSignupFields.has(el)) return
+    const fieldType = matchSignupFieldType(el)
+    if (!fieldType) return
+    attachVaultTag(el, fieldType)
+    if (el.value) return
+    // Email can have multiple saved addresses — leave it to the tag/picker so the
+    // user chooses, rather than silently filling in whichever is ranked first.
+    if (fieldType === 'email') return
+    await fillPersonalInfoField(el, fieldType)
+  }
+
+  document.addEventListener('focus', (e) => {
+    if (e.target && e.target.tagName === 'INPUT') trySignupAutofill(e.target)
   }, true)
+
+  async function scanAndPopulatePersonalInfoFields() {
+    const inputs = document.querySelectorAll('input')
+    for (let i = 0; i < inputs.length; i++) {
+      const el = inputs[i]
+      if (el.type === 'password' || el.type === 'hidden') continue
+      if (el.offsetParent === null) continue
+      const fieldType = matchSignupFieldType(el)
+      if (!fieldType) continue
+      attachVaultTag(el, fieldType)
+      if (!el.value && fieldType !== 'email') await fillPersonalInfoField(el, fieldType)
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', scanAndPopulatePersonalInfoFields)
+  } else {
+    scanAndPopulatePersonalInfoFields()
+  }
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init)
