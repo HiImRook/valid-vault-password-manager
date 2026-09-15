@@ -195,7 +195,7 @@ async function enrollFingerprint(existingMasterKey) {
         authenticatorSelection: {
           authenticatorAttachment: 'platform',
           userVerification: 'required',
-          residentKey: 'discouraged'
+          residentKey: 'preferred'
         },
         extensions: { prf: { eval: { first: prfSalt } } },
         timeout: 60000
