@@ -5,6 +5,26 @@ All notable changes to Local Vault will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-09-14
+
+This release adds two new pieces of storage to the extension, Web Credentials and Personal Info, and fixes a real correctness bug that would have broken syncing the same vault across multiple browsers.
+
+### Added
+- **Personal Info**, a new tab under Manage for first name, last name, phone, address, and multiple ranked emails (reorder with up/down, the top one is marked Primary). Viewing requires a normal unlock, but adding or editing any field requires the master password specifically, never fingerprint, a deliberately stricter gate for this category of data.
+- **Web Credentials** gained a working Edit. It previously supported add and delete only.
+- Both Website Credentials (logins) and Web Credentials now require their own explicit re-unlock inside Manage, separate from simply having the extension open, and re-lock when the extension itself locks.
+- Personal Info, Web Credentials, and login credentials are all now included in Share Vault, Export Vault, Import Vault, and QR sync, so they travel together as one vault.
+
+### Fixed
+- Importing a master key only ever changed the session in memory. It never re-wrapped the browser's own password or fingerprint around the imported key, so after a lock and unlock, the browser silently reverted to its original key, and anything saved since the import became unreadable. Importing a key now re-wraps it under the browser's existing unlock methods, so it genuinely becomes the browser's key going forward. This was the key gap standing between "export and import a file" and the same vault file staying usable across Chrome, Firefox, and other browsers with one shared master key.
+- The save-on-submit prompt fired on every login, even to a site already saved with an unchanged password. It now checks first: silent if nothing changed, a save prompt for a genuinely new username, and an update prompt only when the password for an existing username has changed.
+- A fingerprint enrollment issue was tracked down during this cycle: Windows began showing its cross-device/security-key chooser with no local Windows Hello option. Traced through the actual commit history rather than guessed at; the extension's code was confirmed unchanged since v0.3.1. The cause was Windows account passkey state, not the extension, resolved by removing the existing passkey in Windows Settings and re-enrolling.
+
+### Notes
+- Extra fields on login credentials (recovery email, notes, and similar) were deliberately left out. A future native autofill feature will handle that separately rather than storing it on the credential record.
+- Autofill injection itself, and login-type tracking (username vs. email vs. phone) on Website Credentials, are scoped but not yet built.
+- Version bumped to 0.6.0 across the phone and the extension.
+
 ## [0.5.5] - 2026-09-13
 
 This release fixes a real export bug that made Export Vault appear to do nothing, and replaces the browser-based file download with a proper native implementation.

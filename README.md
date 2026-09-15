@@ -6,21 +6,21 @@ A local, encrypted, QR code portable password manager. No cloud, no accounts, no
 
 ---
 
+> ✅ **Web Credentials, Personal Info, and Uni-Vault Key Fix - v0.6.0**
+>
+> The extension gained a Personal Info tab (name, phone, address, ranked emails) and a working Edit for Web Credentials. Fixed a real gap where an imported master key didn't persist past a lock/unlock, which is what makes the same vault file usable across multiple browsers with one shared key. See [CHANGELOG.md](CHANGELOG.md) for full details.
+
 > ✅ **Export Fix and Native File Saving Notice - v0.5.5**
 >
-> Export Vault now gives real feedback instead of silently doing nothing, includes the master key's nickname in the filename, and saves through Capacitor's native Filesystem and Share APIs rather than an unreliable browser download. One button offers a choice between saving straight to Downloads or opening the native share sheet. See [CHANGELOG.md](CHANGELOG.md) for full details.
+> Export Vault now gives real feedback instead of silently doing nothing, and saves through Capacitor's native Filesystem and Share APIs. See [CHANGELOG.md](CHANGELOG.md) for full details.
 
 > ✅ **Phone De-Drift Notice - v0.5.4**
 >
-> The phone app matches the browser extension: the same About text, a collapsible credentials list, a 12+ character password rule, and an inline unlock overlay on session timeout. See [CHANGELOG.md](CHANGELOG.md) for full details.
+> The phone app matches the browser extension's auth model and interface. See [CHANGELOG.md](CHANGELOG.md) for full details.
 
 > ✅ **Extension De-Drift Notice - v0.5.3**
 >
-> The browser extension matches the phone app's auth and sync model: no custom app PIN, the same Share/Backup/Scan sync flow, and a vendored jsQR scanner. See [CHANGELOG.md](CHANGELOG.md) for full details.
-
-> ✅ **Sovereign Scanner and Settings Notice - v0.5.2**
->
-> The QR scanner uses the standard web camera plus a vendored jsQR decoder, no Google dependency. See [CHANGELOG.md](CHANGELOG.md) for full details.
+> The browser extension matches the phone app's auth and sync model. See [CHANGELOG.md](CHANGELOG.md) for full details.
 
 ---
 
@@ -36,6 +36,8 @@ Valid Vault is a self-hosted password manager built on a master key wrap archite
 
 No cloud service holds your data. No company can be subpoenaed for it or breached for it, and there is never any data for anyone to sell. You cannot leak what you never sent anywhere.
 
+**One vault, many surfaces.** The same master key that unlocks your vault on one browser unlocks the same vault file on another browser, or on the phone. Import a key once and it becomes that browser's key going forward, export the vault, import it elsewhere, and every surface stays in sync through the same timestamp-based merge logic, no server involved.
+
 ---
 
 ## Core Features
@@ -45,59 +47,54 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 - Verify-by-unwrap - the GCM auth tag is the verifier, nothing cheaper exists in storage
 - Android: hardware-backed Keystore key gated by device authentication
 - Extension: platform authenticator (fingerprint / device PIN) via WebAuthn
-- Fresh salt on every credential change
+- Importing a key re-wraps it under the browser's own unlock methods, so it persists across lock and unlock rather than silently reverting
 
 **Unlock and Locking:**
 - Fingerprint, device PIN, and password all fully unlock the vault
 - Auto-lock inactivity timer in seconds, locks the vault and returns to the lock screen
 - Both surfaces show an inline unlock overlay on session timeout instead of a dead end
+- Website Credentials, Web Credentials, and Personal Info each require their own explicit re-unlock inside Manage; editing Personal Info specifically requires the master password, never fingerprint
 
 **Sync and Backup:**
 - Live QR sync - stream your vault or your key as a one-way fountain QR, scan it on the other device
 - Sovereign scanner - the standard web camera plus a vendored jsQR decoder, no Google dependency
-- QR stream timeout - shares auto-close after a set number of seconds, with a countdown and manual close
 - Encrypted vault backup - save directly to Downloads or share the file, inert without the matching master key
 - Encrypted key backup - export the master key wrapped under a passphrase and three security questions, high-iteration KDF, never stored
-- Nameable master key, reflected in the exported backup filename
+- Logins, Web Credentials, and Personal Info all travel together through the same export/import/QR flow, merged by timestamp with tombstoned deletes
 
 **Vault:**
-- Per-credential AES-GCM encryption of usernames and passwords
-- IndexedDB persistence - no external database or server, settings persist here too
-- Collapsible, view-and-delete-only credential list on both surfaces
+- Per-credential AES-GCM encryption
+- Website Credentials - logins grouped by site, multiple usernames per site supported, matched by username on merge
+- Web Credentials - category-organized secrets like Wi-Fi passwords or license keys, view/edit/delete
+- Personal Info - one profile per vault: name, phone, address, and ranked emails for future autofill
+- IndexedDB persistence - no external database or server
 
 **Platform:**
 - Single-file web bundle - modules assembled by build.js into one self-contained HTML file
 - Android via Capacitor, with native plugins for biometric auth and file saving
 - Vendored, self-contained code only, no Google SDKs in the scan path
 
-## Current Status: v0.5.5 — Active Testing
+## Current Status: v0.6.0 — Active Testing
 
 **Completed:**
-* ✅ Master key wrap architecture - one random 256-bit key, wrapped per method
-* ✅ Verify-by-unwrap - stored verification hashes removed entirely
-* ✅ Native Android biometric unlock via BiometricPrompt + hardware Keystore
-* ✅ Fingerprint/PIN via the platform authenticator on the extension
+* ✅ Master key wrap architecture, verify-by-unwrap, no stored hashes
+* ✅ Native Android biometric unlock; extension fingerprint/PIN via WebAuthn
 * ✅ 12+ character password rule with letter, number, and symbol enforced everywhere
-* ✅ Phone QR sync and encrypted vault/key backup and restore
-* ✅ Native file saving - direct Downloads save or native share sheet
-* ✅ Sovereign in-square/in-box QR scanner via getUserMedia + vendored jsQR on both surfaces
-* ✅ Nameable master key, reflected in the exported backup filename
-* ✅ Auto-lock inactivity timer and QR stream timeout, both persisted
-* ✅ Inline unlock overlay on session timeout, on both the phone and the extension
-* ✅ Collapsible, view-and-delete-only credentials list on both surfaces
-* ✅ Credential merge engine - username-keyed, newest password wins
-* ✅ Terminal-green rebrand and Valid globe logo
+* ✅ Persistent key import — the real fix behind using one vault across multiple browsers
+* ✅ Phone and extension QR sync, encrypted vault/key backup and restore, native file saving
+* ✅ Website Credentials, Web Credentials, and Personal Info, all encrypted, all synced together
+* ✅ Sovereign QR scanner, inline unlock overlays, seconds-based auto-lock
 
 **In Development:**
+* 📋 Autofill injection — scoped, not yet built; Personal Info and login-type detection exist as storage only
 * 📋 Continued field testing of sync, backup, and native file saving across Android versions
 * 📋 Per-method auth edit and delete on the phone Manage tab
-* 📋 Vault blob encryption - domain names currently plaintext object keys
 
 ## Sync and Backup Model
 
-Master key transport is deliberate. The primary path is a live QR stream: one device shows its key or vault as a fountain QR, the other scans it. The security is the ceremony, do it somewhere private, since anyone who sees the code can capture it. Shares auto-close after the QR stream timeout.
+Master key transport is deliberate. The primary path is a live QR stream: one device shows its key or vault as a fountain QR, the other scans it. For disaster recovery there is an offline path: Export Vault saves the encrypted vault directly to Downloads or through the native share sheet, and Export Key writes the master key wrapped under a passphrase plus three security questions, stretched with a high-iteration KDF, never stored.
 
-For disaster recovery there is an offline path. Export Vault saves the already-encrypted vault directly to Downloads or through the native share sheet, and stays useless on any device without the matching master key. Export Key writes the master key wrapped under a passphrase of at least twelve characters plus three security questions, combined into one secret and stretched with a high-iteration KDF. Nothing is stored, so a stolen file cannot be opened without the passphrase and answers, and a lost passphrase means the file is gone by design. The master key can be given a nickname for reference, which is reflected in the exported filename.
+Because importing a key now persists, the same vault file genuinely works the same way everywhere: set a password in Chrome, export the vault, import the key and the vault into Firefox with the same password, add a credential there, export again, and Chrome picks up the change on its next import. No server, no account, just timestamp-based merge.
 
 ## Security Model
 
@@ -109,9 +106,9 @@ For disaster recovery there is an offline path. Export Vault saves the already-e
 
 **No Google in the scan path.** The scanner uses the web camera and a vendored jsQR decoder, which runs entirely on device.
 
-**Locking is enforced end to end.** A manual or timeout lock clears the shared session key everywhere it was stored, not just from local memory, so a locked session cannot silently resume.
+**Locking is enforced end to end.** A manual or timeout lock clears the shared session key everywhere it was stored, so a locked session cannot silently resume.
 
-**Unlock methods stay local.** Fingerprint, device PIN, and password open the vault on one specific device. They never enter a sync.
+**Personal Info gets a stricter gate.** Viewing it requires a normal unlock; adding or editing any field requires the master password specifically, not fingerprint.
 
 **Design boundaries:**
 - Domain names are currently stored as plaintext object keys. Single-blob vault encryption is planned.
@@ -145,17 +142,17 @@ npx cap open android
 **Verify-by-Unwrap:**
 There are no stored password hashes. Authentication is the act of deriving a wrapping key and attempting the AES-GCM unwrap. The auth tag rejects wrong keys, so the cheapest offline attack is the full KDF.
 
+**Persistent Key Import:**
+Importing a master key re-wraps it under the browser's existing password (and fingerprint, if enrolled), so it becomes that browser's key going forward instead of reverting on the next unlock. This is the piece that makes the same vault file usable across Chrome, Firefox, and other browsers with one shared master key.
+
 **Native Biometric (Android):**
 A custom Capacitor plugin bridges JavaScript to Android's BiometricPrompt. It creates a hardware-backed Keystore key that requires user authentication, then uses it to wrap the master key.
 
 **Native File Saving (Android):**
-A custom Capacitor plugin writes exported files directly to the Downloads folder through Android's MediaStore API, and Capacitor's Filesystem and Share plugins back the native share option. No reliance on browser download behavior, which does not work reliably inside the app's WebView.
+A custom Capacitor plugin writes exported files directly to the Downloads folder through Android's MediaStore API, and Capacitor's Filesystem and Share plugins back the native share option.
 
 **Sovereign QR Scanner:**
 Scanning uses the web camera through getUserMedia, drawing frames to a canvas that a vendored jsQR decoder reads. No native scanning plugin, no Google SDK.
-
-**Fountain QR Sync:**
-A vault or key streams as an endless loop of coded fountain frames. The receiver collects across loops and reconstructs the exact payload, then merges or restores it.
 
 **Single-File Bundle:**
 build.js assembles the source modules into one self-contained HTML file. No module loader, no CDN, no external requests at runtime.

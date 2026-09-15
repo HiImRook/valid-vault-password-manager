@@ -2,7 +2,7 @@
 
 
 
-\*\*Current Version:\*\* v0.5.5 — \*\*Status: Active Testing\*\*
+\*\*Current Version:\*\* v0.6.0 — \*\*Status: Active Testing\*\*
 
 
 
@@ -14,29 +14,33 @@
 
 
 
+\### v0.6.0 - Web Credentials, Personal Info, Uni-Vault Key Fix (Sep 2026)
+
+\- ✅ Personal Info tab: name, phone, address, ranked/reorderable emails; view unlocks normally, edit requires the master password specifically
+
+\- ✅ Web Credentials gained a working Edit (previously add/delete only)
+
+\- ✅ Website Credentials and Web Credentials both require their own explicit re-unlock inside Manage
+
+\- ✅ Personal Info, Web Credentials, and logins all now travel together through Share/Export/Import/QR sync
+
+\- ✅ Fixed persistent key import — an imported master key now re-wraps under the browser's own unlock methods, so it genuinely becomes the browser's key going forward instead of silently reverting on next unlock. This was the real gap in using one vault file across multiple browsers with a shared master key.
+
+\- ✅ Save-on-submit prompt now checks existing saved state first — silent on an unchanged login, a save prompt for a new username, an update prompt for a changed password
+
+\- ✅ Tracked down and resolved a Windows Hello / passkey chooser issue during this cycle, confirmed via actual commit history to be Windows account state, not the extension's code
+
+
+
 \### v0.5.5 - Export Fix and Native File Saving (Sep 2026)
 
-\- ✅ Fixed Export Vault appearing to silently fail — its feedback wrote to a page element that never existed
-
-\- ✅ Exported vault filename now includes the master key nickname, matching the key file
-
-\- ✅ File saving moved off the unreliable browser-download trick onto Capacitor's native Filesystem and Share APIs
-
-\- ✅ Export Vault now offers a direct save to the Downloads folder or the native share sheet from one button
-
-\- ✅ Added a small native plugin for direct Downloads saves via Android's MediaStore, no extra permission required
+\- ✅ Fixed Export Vault appearing to silently fail; added native Filesystem/Share-based file saving
 
 
 
 \### v0.5.4 - Phone De-Drift to Extension Parity (Sep 2026)
 
-\- ✅ About section synced to match the extension; collapsible view/delete-only credentials list
-
-\- ✅ Inline unlock overlay inside the settings menu on session timeout
-
-\- ✅ Password rule unified to 12+ characters with letter, number, and symbol on both surfaces
-
-\- ✅ Fixed a CSS bug that could leave the unlock overlay permanently visible
+\- ✅ About synced to match the extension; collapsible view/delete-only credentials list; inline unlock overlay
 
 
 
@@ -44,33 +48,11 @@
 
 \- ✅ Custom app PIN removed from the extension; Sync tab rebuilt to Share/Backup/Scan model
 
-\- ✅ Fixed lockAll() not clearing the shared session key, a real lock-bypass
 
 
+\### v0.5.0–v0.5.2 and earlier
 
-\### v0.5.2 - Sovereign QR Scanner and Settings Persistence (Sep 2026)
-
-\- ✅ Replaced ML Kit with getUserMedia + vendored jsQR on the phone
-
-\- ✅ Settings persist across app restart; auto-lock as a real inactivity timer in seconds
-
-
-
-\### v0.5.1 - Phone Sync and Encrypted Offline Backup (Sep 2026)
-
-\- ✅ Phone QR sync wired end to end; encrypted vault and key backup/restore
-
-
-
-\### v0.5.0 - Native Biometric Auth and Internal-Testing Hardening (Sep 2026)
-
-\- ✅ Native Android biometric unlock via BiometricPrompt + hardware Keystore
-
-
-
-\### v0.4.0 and earlier
-
-\- ✅ Terminal-green rebrand, stateless fountain-QR sync, credential merge engine, WebAuthn PRF fingerprint binding, vault foundation — see CHANGELOG.md for full detail
+\- ✅ Native biometric auth, phone QR sync and encrypted backup, sovereign QR scanner, terminal-green rebrand — see CHANGELOG.md for full detail
 
 
 
@@ -78,13 +60,17 @@
 
 
 
-\## Upcoming After v0.5.5
+\## Upcoming After v0.6.0
 
 
 
-\### v0.6.x - Web Credentials
+\### Autofill Injection (scoped, not yet built)
 
-Extend the vault to store and sync general web credentials, building on the same local encryption and sync model already in place for logins.
+\- Website Credentials needs a `loginType` field (username/email/phone) so the correct field type gets targeted on injection
+
+\- Personal Info autofill for signup and profile forms
+
+\- Must be built the safe way: background.js decrypts with its own session key and sends only plaintext to content.js for injection — the raw master key itself never reaches the page context
 
 
 
@@ -92,11 +78,9 @@ Extend the vault to store and sync general web credentials, building on the same
 
 
 
-\### Personal Info
+\### Extended Personal Info
 
-\- Store addresses, cards, IDs under the same local encryption and sync model
-
-\- Deferred until after the v1.0 release and a security audit; currently a placeholder on both surfaces
+\- Social Security number and credit/debit card storage — deliberately held back for now, pending additional security work
 
 
 
@@ -114,7 +98,7 @@ Extend the vault to store and sync general web credentials, building on the same
 
 \- Styled Export/Import Key modals on the extension (currently plain browser prompts)
 
-\- Floating-button autofill fallback for login pages without a traditional form
+\- A desktop app to own the vault file directly and sync it across browser extensions (Chrome, Firefox, Edge) without manual export/import — browser extensions can't watch or write an arbitrary file continuously, so this is the real fix for seamless cross-browser sync
 
 
 
@@ -126,13 +110,15 @@ Extend the vault to store and sync general web credentials, building on the same
 
 
 
-⚠️ \*\*This build is under active testing\*\* — expect rough edges as sync, backup, and native file saving are field-tested on real devices
+⚠️ \*\*This build is under active testing\*\* — expect rough edges
+
+⚠️ \*\*Autofill injection is scoped but not implemented\*\* — Personal Info and login-type tracking exist as storage only for now
 
 ⚠️ \*\*Auto-lock is a foreground inactivity timer\*\* on the phone — exact timing while backgrounded is subject to OS suspension
 
 ⚠️ \*\*Per-method auth edit and delete deferred on the phone\*\*
 
-⚠️ \*\*Personal Info is a placeholder\*\* on both surfaces
+⚠️ \*\*SSN and card storage deliberately deferred\*\*, pending security work
 
 ⚠️ \*\*WebAuthn RP name remains "Local Vault" in code\*\* to preserve enrollments
 
@@ -174,5 +160,5 @@ MIT License - See LICENSE file for details
 
 
 
-\*\*Last Updated:\*\* Sep 13, 2026
+\*\*Last Updated:\*\* Sep 14, 2026
 
