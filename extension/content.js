@@ -266,25 +266,62 @@
   }
 
 
-  const SIGNUP_FIELD_MAP = {
-    firstName: ['input[name="first_name"]', 'input[name="firstName"]', 'input[id="firstName"]', 'input[id="first_name"]', 'input[autocomplete="given-name"]', 'input[placeholder*="First" i]'],
-    lastName: ['input[name="last_name"]', 'input[name="lastName"]', 'input[id="lastName"]', 'input[id="last_name"]', 'input[autocomplete="family-name"]', 'input[placeholder*="Last" i]'],
-    email: ['input[type="email"]', 'input[name="email"]', 'input[id="email"]', 'input[autocomplete="email"]', 'input[placeholder*="Email" i]'],
-    phone: ['input[type="tel"]', 'input[name="phone"]', 'input[id="phone"]', 'input[autocomplete="tel"]', 'input[placeholder*="Phone" i]'],
-    'address.street': ['input[name="address"]', 'input[name="street"]', 'input[id="address"]', 'input[id="street"]', 'input[autocomplete="street-address"]', 'input[placeholder*="Address" i]', 'input[placeholder*="Street" i]'],
-    'address.city': ['input[name="city"]', 'input[id="city"]', 'input[autocomplete="address-level2"]', 'input[placeholder*="City" i]'],
-    'address.state': ['input[name="state"]', 'input[id="state"]', 'input[autocomplete="address-level1"]', 'input[placeholder*="State" i]'],
-    'address.zip': ['input[name="zip"]', 'input[name="zipcode"]', 'input[id="zip"]', 'input[autocomplete="postal-code"]', 'input[placeholder*="ZIP" i]', 'input[placeholder*="Postal" i]'],
-    'address.country': ['input[name="country"]', 'input[id="country"]', 'input[autocomplete="country-name"]', 'input[placeholder*="Country" i]']
+  // Exact autocomplete values are the most reliable signal a browser gives us,
+  // checked first. Everything else is a real-world form, ids/names/placeholders
+  // vary site to site (e.g. id="firstName-field" instead of id="firstName"), so
+  // matching falls back to keyword substrings, then to nearby <label> text.
+  const AUTOCOMPLETE_MAP = {
+    'given-name': 'firstName',
+    'family-name': 'lastName',
+    'email': 'email',
+    'tel': 'phone',
+    'street-address': 'address.street',
+    'address-line1': 'address.street',
+    'address-level2': 'address.city',
+    'address-level1': 'address.state',
+    'postal-code': 'address.zip',
+    'country-name': 'address.country'
   }
+
+  const KEYWORD_MAP = [
+    ['firstname', 'firstName'], ['fname', 'firstName'], ['first_name', 'firstName'], ['givenname', 'firstName'],
+    ['lastname', 'lastName'], ['lname', 'lastName'], ['last_name', 'lastName'], ['surname', 'lastName'], ['familyname', 'lastName'],
+    ['email', 'email'],
+    ['phone', 'phone'], ['mobile', 'phone'], ['telephone', 'phone'],
+    ['street', 'address.street'], ['address1', 'address.street'], ['addressline1', 'address.street'],
+    ['city', 'address.city'], ['town', 'address.city'],
+    ['state', 'address.state'], ['province', 'address.state'],
+    ['zip', 'address.zip'], ['postal', 'address.zip'], ['postcode', 'address.zip'],
+    ['country', 'address.country']
+  ]
 
   const filledSignupFields = new WeakSet()
 
+  function labelTextFor(el) {
+    if (el.id) {
+      const byFor = document.querySelector('label[for="' + CSS.escape(el.id) + '"]')
+      if (byFor) return byFor.textContent || ''
+    }
+    const parentLabel = el.closest('label')
+    if (parentLabel) return parentLabel.textContent || ''
+    return ''
+  }
+
   function matchSignupFieldType(el) {
-    for (const fieldType in SIGNUP_FIELD_MAP) {
-      const selectors = SIGNUP_FIELD_MAP[fieldType]
-      for (let i = 0; i < selectors.length; i++) {
-        if (el.matches(selectors[i])) return fieldType
+    const autocomplete = (el.autocomplete || '').toLowerCase()
+    if (AUTOCOMPLETE_MAP[autocomplete]) return AUTOCOMPLETE_MAP[autocomplete]
+
+    if (el.type === 'email') return 'email'
+    if (el.type === 'tel') return 'phone'
+
+    const haystacks = [el.id, el.name, el.placeholder, labelTextFor(el)]
+      .map(s => (s || '').toLowerCase().replace(/[\s_-]+/g, ''))
+
+    for (let i = 0; i < KEYWORD_MAP.length; i++) {
+      const keyword = KEYWORD_MAP[i][0]
+      const fieldType = KEYWORD_MAP[i][1]
+      for (let j = 0; j < haystacks.length; j++) {
+        if (haystacks[j].indexOf(keyword) !== -1) return fieldType
       }
     }
     return null
@@ -309,7 +346,10 @@
   }
 
   document.addEventListener('focus', (e) => {
-    if (e.target && e.target.tagName === 'INPUT') trySignupAutofill(e.target)
+    if (e.target && e.target.tagName === 'INPUT') {
+      console.log('[Valid Vault] focus fired, el:', e.target.id || e.target.name || '(no id/name)')
+      trySignupAutofill(e.target)
+    }
   }, true)
 
   if (document.readyState === 'loading') {
