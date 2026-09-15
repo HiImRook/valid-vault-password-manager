@@ -8,7 +8,7 @@ async function getSessionKeyBytes() {
 
 async function getVault() {
   return new Promise(function (resolve) {
-    const req = indexedDB.open('ValidVault', 1)
+    const req = indexedDB.open('ValidVault')
     req.onsuccess = function () {
       const db = req.result
       try {
@@ -27,6 +27,46 @@ async function decryptField(field, key) {
   const ct = new Uint8Array(field.ciphertext)
   const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: iv }, key, ct)
   return new TextDecoder().decode(pt)
+}
+
+async function getPersonalInfoRecord() {
+  return new Promise(function (resolve) {
+    const req = indexedDB.open('ValidVault')
+    req.onsuccess = function () {
+      const db = req.result
+      try {
+        const tx = db.transaction('personalInfo', 'readonly')
+        const get = tx.objectStore('personalInfo').get('profile')
+        get.onsuccess = function () { resolve(get.result || null) }
+        get.onerror = function () { resolve(null) }
+      } catch (e) { resolve(null) }
+    }
+    req.onerror = function () { resolve(null) }
+  })
+}
+
+async function personalInfoField(fieldType) {
+  const bytes = await getSessionKeyBytes()
+  if (!bytes) return { success: false, value: null, locked: true }
+  const record = await getPersonalInfoRecord()
+  if (!record || !record.data) return { success: true, value: null }
+  const key = await crypto.subtle.importKey('raw', new Uint8Array(bytes), { name: 'AES-GCM', length: 256 }, false, ['decrypt'])
+  let profile
+  try {
+    const json = await decryptField(record.data, key)
+    profile = JSON.parse(json)
+  } catch (e) {
+    return { success: false, value: null, locked: true }
+  }
+  if (fieldType.indexOf('address.') === 0) {
+    const sub = fieldType.split('.')[1]
+    return { success: true, value: (profile.address && profile.address[sub]) || null }
+  }
+  if (fieldType === 'email') {
+    const emails = (profile.emails || []).slice().sort((a, b) => a.position - b.position)
+    return { success: true, value: emails.length ? emails[0].value : null }
+  }
+  return { success: true, value: profile[fieldType] || null }
 }
 
 async function credentialsForDomain(domain) {
@@ -60,7 +100,7 @@ function genId() {
 
 async function writeVault(vault) {
   return new Promise(function (resolve) {
-    const req = indexedDB.open('ValidVault', 1)
+    const req = indexedDB.open('ValidVault')
     req.onsuccess = function () {
       try {
         const tx = req.result.transaction('passwords', 'readwrite')
@@ -119,6 +159,10 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
     credentialsForDomain(request.domain).then(sendResponse)
     return true
   }
+  if (request.action === 'getPersonalInfoField') {
+    personalInfoField(request.fieldType).then(sendResponse)
+    return true
+  }
   if (request.action === 'openManage') {
     chrome.tabs.create({ url: 'manage.html' })
     sendResponse({ success: true })
@@ -141,7 +185,7 @@ async function getLockSettings() {
 
 async function authHasPin() {
   const auth = await new Promise(function (resolve) {
-    const req = indexedDB.open('ValidVault', 1)
+    const req = indexedDB.open('ValidVault')
     req.onsuccess = function () {
       try {
         const tx = req.result.transaction('auth', 'readonly')

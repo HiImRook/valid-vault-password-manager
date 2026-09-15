@@ -250,8 +250,11 @@
     usernameField = fields.username
     passwordField = fields.password
 
-    usernameField.addEventListener('focus', () => showDropdown(usernameField))
-    passwordField.addEventListener('focus', () => showDropdown(passwordField))
+    usernameField.setAttribute('autocomplete', 'off')
+    passwordField.setAttribute('autocomplete', 'off')
+
+    usernameField.addEventListener('focus', (e) => { showDropdown(usernameField); e.stopImmediatePropagation() }, true)
+    passwordField.addEventListener('focus', (e) => { showDropdown(passwordField); e.stopImmediatePropagation() }, true)
     wireSubmitCapture()
 
     document.addEventListener('click', (e) => {
@@ -261,6 +264,53 @@
       }
     })
   }
+
+
+  const SIGNUP_FIELD_MAP = {
+    firstName: ['input[name="first_name"]', 'input[name="firstName"]', 'input[id="firstName"]', 'input[id="first_name"]', 'input[autocomplete="given-name"]', 'input[placeholder*="First" i]'],
+    lastName: ['input[name="last_name"]', 'input[name="lastName"]', 'input[id="lastName"]', 'input[id="last_name"]', 'input[autocomplete="family-name"]', 'input[placeholder*="Last" i]'],
+    email: ['input[type="email"]', 'input[name="email"]', 'input[id="email"]', 'input[autocomplete="email"]', 'input[placeholder*="Email" i]'],
+    phone: ['input[type="tel"]', 'input[name="phone"]', 'input[id="phone"]', 'input[autocomplete="tel"]', 'input[placeholder*="Phone" i]'],
+    'address.street': ['input[name="address"]', 'input[name="street"]', 'input[id="address"]', 'input[id="street"]', 'input[autocomplete="street-address"]', 'input[placeholder*="Address" i]', 'input[placeholder*="Street" i]'],
+    'address.city': ['input[name="city"]', 'input[id="city"]', 'input[autocomplete="address-level2"]', 'input[placeholder*="City" i]'],
+    'address.state': ['input[name="state"]', 'input[id="state"]', 'input[autocomplete="address-level1"]', 'input[placeholder*="State" i]'],
+    'address.zip': ['input[name="zip"]', 'input[name="zipcode"]', 'input[id="zip"]', 'input[autocomplete="postal-code"]', 'input[placeholder*="ZIP" i]', 'input[placeholder*="Postal" i]'],
+    'address.country': ['input[name="country"]', 'input[id="country"]', 'input[autocomplete="country-name"]', 'input[placeholder*="Country" i]']
+  }
+
+  const filledSignupFields = new WeakSet()
+
+  function matchSignupFieldType(el) {
+    for (const fieldType in SIGNUP_FIELD_MAP) {
+      const selectors = SIGNUP_FIELD_MAP[fieldType]
+      for (let i = 0; i < selectors.length; i++) {
+        if (el.matches(selectors[i])) return fieldType
+      }
+    }
+    return null
+  }
+
+  async function trySignupAutofill(el) {
+    if (el.type === 'password') return
+    if (filledSignupFields.has(el)) return
+    const fieldType = matchSignupFieldType(el)
+    if (!fieldType) { console.log('[Valid Vault] no field match for', el); return }
+    if (el.value) { console.log('[Valid Vault] field already has a value, skipping', fieldType); return }
+    console.log('[Valid Vault] matched', fieldType, '- requesting from background')
+    const response = await chrome.runtime.sendMessage({ action: 'getPersonalInfoField', fieldType })
+    console.log('[Valid Vault] response for', fieldType, response)
+    if (response && response.success && response.value) {
+      el.setAttribute('autocomplete', 'off')
+      el.value = response.value
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+      el.dispatchEvent(new Event('change', { bubbles: true }))
+      filledSignupFields.add(el)
+    }
+  }
+
+  document.addEventListener('focus', (e) => {
+    if (e.target && e.target.tagName === 'INPUT') trySignupAutofill(e.target)
+  }, true)
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init)
