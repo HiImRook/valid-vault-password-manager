@@ -6,6 +6,10 @@ A local, encrypted, QR code portable password manager. No cloud, no accounts, no
 
 ---
 
+> ✅ **Autofill Injection Foundation - v0.6.1**
+>
+> The extension now reads Personal Info and Website Credentials to autofill page forms - Personal Info fields populate on load, email fields are click-to-pick since a profile can hold several ranked emails, and a visible field tag marks anything matched. Fixed a `VersionError` bug that had silently broken background vault access, and a popup/background race that could drop the session key on a fast tab switch. Website Credentials still doesn't reliably save new logins from a real signup flow - see [CHANGELOG.md](CHANGELOG.md) for the known gap.
+
 > ✅ **Web Credentials, Personal Info, and Uni-Vault Key Fix - v0.6.0**
 >
 > The extension gained a Personal Info tab (name, phone, address, ranked emails) and a working Edit for Web Credentials. Fixed a real gap where an imported master key didn't persist past a lock/unlock, which is what makes the same vault file usable across multiple browsers with one shared key. See [CHANGELOG.md](CHANGELOG.md) for full details.
@@ -54,6 +58,14 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 - Auto-lock inactivity timer in seconds, locks the vault and returns to the lock screen
 - Both surfaces show an inline unlock overlay on session timeout instead of a dead end
 - Website Credentials, Web Credentials, and Personal Info each require their own explicit re-unlock inside Manage; editing Personal Info specifically requires the master password, never fingerprint
+- The extension can also be unlocked inline, directly on a page, when a tagged field is clicked while locked - password-only, since a WebAuthn platform credential can't be triggered from a page's own origin
+
+**Autofill (Extension):**
+- Personal Info fields (name, phone, address) auto-populate matched, empty fields on page load
+- Email fields are click-to-pick from a small on-field picker listing every saved, ranked email, never auto-filled silently
+- Website Credentials show a picker of saved usernames for the current site; injection only, no password reveal - that's the site's own UI if it has one
+- A visible field tag marks anything Valid Vault has matched
+- Foundation is working end to end; matching quality and reliably saving new logins from real signup flows are still being hardened
 
 **Sync and Backup:**
 - Live QR sync - stream your vault or your key as a one-way fountain QR, scan it on the other device
@@ -66,7 +78,7 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 - Per-credential AES-GCM encryption
 - Website Credentials - logins grouped by site, multiple usernames per site supported, matched by username on merge
 - Web Credentials - category-organized secrets like Wi-Fi passwords or license keys, view/edit/delete
-- Personal Info - one profile per vault: name, phone, address, and ranked emails for future autofill
+- Personal Info - one profile per vault: name, phone, address, and ranked emails, used as an autofill source only, never stored per-site
 - IndexedDB persistence - no external database or server
 
 **Platform:**
@@ -74,19 +86,21 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 - Android via Capacitor, with native plugins for biometric auth and file saving
 - Vendored, self-contained code only, no Google SDKs in the scan path
 
-## Current Status: v0.6.0 — Active Testing
+## Current Status: v0.6.1 - Active Testing
 
 **Completed:**
 * ✅ Master key wrap architecture, verify-by-unwrap, no stored hashes
 * ✅ Native Android biometric unlock; extension fingerprint/PIN via WebAuthn
 * ✅ 12+ character password rule with letter, number, and symbol enforced everywhere
-* ✅ Persistent key import — the real fix behind using one vault across multiple browsers
+* ✅ Persistent key import - the real fix behind using one vault across multiple browsers
 * ✅ Phone and extension QR sync, encrypted vault/key backup and restore, native file saving
 * ✅ Website Credentials, Web Credentials, and Personal Info, all encrypted, all synced together
 * ✅ Sovereign QR scanner, inline unlock overlays, seconds-based auto-lock
+* ✅ Autofill injection foundation - Personal Info and Website Credentials autofill working end to end
 
 **In Development:**
-* 📋 Autofill injection — scoped, not yet built; Personal Info and login-type detection exist as storage only
+* 📋 Website Credentials reliably saving new logins captured from real signup flows - a known regression is currently rolled back and unresolved
+* 📋 `loginType` field (username/email/phone) on Website Credentials for more reliable matching
 * 📋 Continued field testing of sync, backup, and native file saving across Android versions
 * 📋 Per-method auth edit and delete on the phone Manage tab
 
@@ -109,6 +123,10 @@ Because importing a key now persists, the same vault file genuinely works the sa
 **Locking is enforced end to end.** A manual or timeout lock clears the shared session key everywhere it was stored, so a locked session cannot silently resume.
 
 **Personal Info gets a stricter gate.** Viewing it requires a normal unlock; adding or editing any field requires the master password specifically, not fingerprint.
+
+**Autofill never exposes the master key.** background.js is the only place the session key lives; content.js, running in the page's own context, only ever receives specific plaintext values it explicitly requested for injection. Inline unlock is password-only for the same reason a content script can't trigger a WebAuthn platform credential bound to the extension's own origin.
+
+**No competitor-targeting logic exists or is planned.** Autofill competes on being fully local and already-unlocked in memory, not on hiding another password manager's UI.
 
 **Design boundaries:**
 - Domain names are currently stored as plaintext object keys. Single-blob vault encryption is planned.
@@ -144,6 +162,9 @@ There are no stored password hashes. Authentication is the act of deriving a wra
 
 **Persistent Key Import:**
 Importing a master key re-wraps it under the browser's existing password (and fingerprint, if enrolled), so it becomes that browser's key going forward instead of reverting on the next unlock. This is the piece that makes the same vault file usable across Chrome, Firefox, and other browsers with one shared master key.
+
+**Safe Autofill Injection:**
+background.js holds the session key and does all decryption; content.js, running in the visited page's own origin, only ever receives the specific plaintext value it asked for (a name, a saved login) and never the master key itself. Inline unlock on a locked page is password-only, since a WebAuthn platform credential is bound to the extension's own origin and can't be triggered from a page's origin.
 
 **Native Biometric (Android):**
 A custom Capacitor plugin bridges JavaScript to Android's BiometricPrompt. It creates a hardware-backed Keystore key that requires user authentication, then uses it to wrap the master key.

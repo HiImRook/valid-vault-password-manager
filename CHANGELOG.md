@@ -5,6 +5,29 @@ All notable changes to Local Vault will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.1] - 2026-09-18
+
+This release adds real autofill injection to the extension - reading Personal Info and Website Credentials to populate page forms - built the safe way, with background.js holding the session key and content.js only ever receiving plaintext values it explicitly asked for.
+
+### Added
+- **Personal Info autofill on page load.** Empty, matched fields (name, phone, address) are auto-populated using a three-tier heuristic: `autocomplete` attribute match first, keyword match against field `id`/`name`/`placeholder` second, nearby `<label>` text as a fallback. This replaces exact-selector matching, which failed on real signup forms (e.g. a field with `id="firstName-field"` never matched `id="firstName"`).
+- **Email fields are click-to-pick, never auto-filled.** A profile can hold several ranked emails, so an email field is never silently populated on page load. Clicking the field's tag opens a small picker listing every saved email by rank, and only the one selected gets injected.
+- **Visible field tag.** A small circular badge marks any field Valid Vault has matched, repositioning correctly on scroll and resize.
+- **Inline unlock, directly on the page.** Clicking a tagged field while the vault is locked prompts for the master password right there, no popup required. This is password-only by design - see Notes.
+
+### Fixed
+- `background.js` had `indexedDB.open('ValidVault', 1)` hardcoded in three places. With the database now at version 3 after v0.6.0's new stores, this threw a `VersionError` and silently broke background vault access. Opens with no explicit version now.
+- The popup could lose the session key on a fast tab switch: `popup.js` wrote it to `chrome.storage.session` itself, and Manifest V3 destroys a popup instantly on losing focus, which could interrupt that write mid-flight. The write is now delegated to `background.js` via message-passing, which has a longer lifecycle.
+
+### Known Gaps
+- **Website Credentials does not reliably save new logins captured from a real signup flow.** Root cause: `detectLoginForm()`'s field-selection can collide with Personal Info's autofill targeting the same field on a form (grabbing a first-name field instead of the actual login/email field). A fix was built and shipped internally, caused a separate regression, and was rolled back. Still open, and the clear next priority on content.js.
+- Autofill matching quality varies site to site. This release is a working foundation, not a finished feature.
+- `loginType` (username vs. email vs. phone as the site's actual identity field) remains scoped but not built; Website Credentials still store a generic login string.
+
+### Notes
+- Fingerprint/PIN unlock is intentionally unavailable from the inline, on-page prompt. A WebAuthn platform credential is bound to the origin that created it (`chrome-extension://...`), and a content script running in a visited page's own origin can never trigger that credential. Password-only inline unlock is expected behavior, not a bug.
+- No competitor-targeting logic was added, and none is planned. Autofill wins on being fully local and already-unlocked in memory, not on hiding another extension's UI.
+
 ## [0.6.0] - 2026-09-14
 
 This release adds two new pieces of storage to the extension, Web Credentials and Personal Info, and fixes a real correctness bug that would have broken syncing the same vault across multiple browsers.
