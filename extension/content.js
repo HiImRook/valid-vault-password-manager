@@ -146,7 +146,68 @@
   function fillCredentials(cred) {
     if (usernameField) usernameField.value = cred.username
     if (passwordField) passwordField.value = cred.password
+    if (cred.extraFields && cred.extraFields.length) {
+      const form = (passwordField && passwordField.closest('form')) || document
+      const candidates = form.querySelectorAll('input')
+      for (const el of candidates) {
+        if (isTrackedField(el)) continue
+        if (el.type === 'password' || el.type === 'hidden' || el.value) continue
+        const match = cred.extraFields.find((f) => f.label === getFieldLabel(el))
+        if (match) {
+          el.value = match.value
+          el.dispatchEvent(new Event('input', { bubbles: true }))
+          el.dispatchEvent(new Event('change', { bubbles: true }))
+        }
+      }
+    }
     hideDropdown()
+  }
+
+  // Anything on the form that isn't the login/password and isn't a Personal Info
+  // field (name, phone, address, email stay a settings-driven autofill source, never
+  // captured per-site) still belongs to this one site's credential record, things
+  // like an account number. It's captured as the user types it, not filled from a
+  // settings page, and saved alongside the login it was typed next to.
+  function isTrackedField(el) {
+    return el === usernameField || el === passwordField
+  }
+
+  function getFieldLabel(el) {
+    if (el.labels && el.labels.length && el.labels[0].textContent) {
+      return el.labels[0].textContent.trim().replace(/\s+/g, ' ')
+    }
+    if (el.getAttribute('aria-label')) return el.getAttribute('aria-label').trim()
+    if (el.placeholder) return el.placeholder.trim()
+    if (el.name) return el.name.trim()
+    if (el.id) return el.id.trim()
+    return 'Field'
+  }
+
+  function collectExtraFields() {
+    if (!passwordField) return []
+    const form = passwordField.closest('form') || document
+    const inputs = form.querySelectorAll('input')
+    const extras = []
+    for (const el of inputs) {
+      if (['password', 'hidden', 'submit', 'button', 'checkbox', 'radio'].indexOf(el.type) !== -1) continue
+      if (isTrackedField(el)) continue
+      if (matchSignupFieldType(el)) continue
+      if (el.offsetParent === null) continue
+      if (!el.value) continue
+      extras.push({ label: getFieldLabel(el), value: el.value })
+    }
+    return extras
+  }
+
+  function sameExtraFields(existingExtras, newExtras) {
+    const a = existingExtras || []
+    const b = newExtras || []
+    if (a.length !== b.length) return false
+    const byLabel = new Map(a.map((f) => [f.label, f.value]))
+    for (const f of b) {
+      if (byLabel.get(f.label) !== f.value) return false
+    }
+    return true
   }
 
   function escapeHtml(str) {
@@ -170,7 +231,8 @@
           font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; box-shadow:0 8px 30px rgba(0,0,0,0.6); }
         .title { color:#33ff66; font-size:15px; font-weight:700; margin-bottom:6px; }
         .sub { color:#6fae7f; font-size:12px; margin-bottom:4px; word-break:break-all; }
-        .user { color:#b8f0c4; font-size:13px; margin:8px 0 16px; word-break:break-all; }
+        .user { color:#b8f0c4; font-size:13px; margin:4px 0 8px; word-break:break-all; }
+        .extra-note { color:#6fae7f; font-size:11px; margin-bottom:16px; }
         .row { display:flex; gap:10px; }
         button { flex:1; padding:11px; border-radius:6px; border:none; font-size:13px; font-weight:700; cursor:pointer; }
         .save { background:#33ff66; color:#05140a; }
@@ -181,6 +243,7 @@
           <div class="title" id="sp-title">Save to Valid Vault?</div>
           <div class="sub" id="sp-domain"></div>
           <div class="user" id="sp-user"></div>
+          <div class="extra-note" id="sp-extra"></div>
           <div class="sub" id="sp-msg" style="color:#ff8866;min-height:14px;"></div>
           <div class="row">
             <button class="save" id="sp-save">Save</button>
@@ -192,17 +255,23 @@
     return { host, shadow }
   }
 
-  function showSavePrompt(domain, username, password, isUpdate) {
+  function showSavePrompt(domain, username, password, isUpdate, extraFields) {
     if (!savePrompt) savePrompt = createSavePrompt()
     savePrompt.shadow.getElementById('sp-title').textContent = isUpdate ? 'Update saved password?' : 'Save to Valid Vault?'
     savePrompt.shadow.getElementById('sp-domain').textContent = domain
     savePrompt.shadow.getElementById('sp-user').textContent = username || '(no username)'
+    const extraEl = savePrompt.shadow.getElementById('sp-extra')
+    if (extraEl) {
+      extraEl.textContent = extraFields && extraFields.length
+        ? '+ ' + extraFields.length + ' additional field' + (extraFields.length !== 1 ? 's' : '') + ' on this form will be saved too'
+        : ''
+    }
     savePrompt.host.style.display = 'block'
     const close = () => { savePrompt.host.style.display = 'none' }
     savePrompt.shadow.getElementById('sp-cancel').onclick = close
     savePrompt.shadow.getElementById('sp-save').onclick = async () => {
       const msgEl = savePrompt.shadow.getElementById('sp-msg')
-      const result = await chrome.runtime.sendMessage({ action: 'saveCredential', domain, username, password })
+      const result = await chrome.runtime.sendMessage({ action: 'saveCredential', domain, username, password, extraFields })
       if (result && result.locked) {
         if (msgEl) msgEl.textContent = 'Vault is locked. Click the Valid Vault icon to unlock, then click Save again.'
         return
@@ -219,13 +288,14 @@
     const u = usernameField ? usernameField.value : ''
     const p = passwordField ? passwordField.value : ''
     if (!p) return  // no password, nothing to save
+    const extras = collectExtraFields()
     let existing = null
     try {
       const result = await chrome.runtime.sendMessage({ action: 'getCredentialsForDomain', domain: currentDomain })
       if (result && result.success) existing = result.credentials.find(c => c.username === u)
     } catch (e) {}
-    if (existing && existing.password === p) return  // already saved, nothing changed
-    showSavePrompt(currentDomain, u, p, !!existing)
+    if (existing && existing.password === p && sameExtraFields(existing.extraFields, extras)) return  // already saved, nothing changed
+    showSavePrompt(currentDomain, u, p, !!existing, extras)
   }
 
   function wireSubmitCapture() {

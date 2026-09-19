@@ -144,7 +144,12 @@ async function credentialsForDomain(domain) {
   const out = []
   for (const cred of vault.credentials[domain]) {
     try {
-      out.push({ id: cred.id, username: await decryptField(cred.username, key), password: await decryptField(cred.password, key) })
+      out.push({
+        id: cred.id,
+        username: await decryptField(cred.username, key),
+        password: await decryptField(cred.password, key),
+        extraFields: await decryptExtraFields(cred.extraFields, key)
+      })
     } catch (e) {
       return { success: false, credentials: [], locked: true }
     }
@@ -156,6 +161,25 @@ async function encryptField(text, key) {
   const iv = crypto.getRandomValues(new Uint8Array(12))
   const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv }, key, new TextEncoder().encode(text))
   return { iv: Array.from(iv), ciphertext: Array.from(new Uint8Array(ct)) }
+}
+
+async function encryptExtraFields(extraFields, key) {
+  const out = []
+  for (const field of extraFields || []) {
+    if (!field || !field.label || !field.value) continue
+    out.push({ label: await encryptField(field.label, key), value: await encryptField(field.value, key) })
+  }
+  return out
+}
+
+async function decryptExtraFields(extraFields, key) {
+  const out = []
+  for (const field of extraFields || []) {
+    try {
+      out.push({ label: await decryptField(field.label, key), value: await decryptField(field.value, key) })
+    } catch (e) {}
+  }
+  return out
 }
 
 function genId() {
@@ -177,7 +201,14 @@ async function writeVault(vault) {
   })
 }
 
-async function saveCredential(domain, username, password) {
+// Extra fields are anything on the login/signup form that isn't the username or
+// password, and isn't a Personal Info field either (name, phone, address, email
+// stay a settings-driven autofill source, never captured per-site). Things like an
+// account number belong to that one site's credential, not to a generic autofill
+// profile, so they're captured as the user types them and merged in by label: a
+// field seen again on a later visit updates its saved value, a field not seen this
+// time keeps whatever was saved before.
+async function saveCredential(domain, username, password, extraFields) {
   const bytes = await getSessionKeyBytes()
   if (!bytes) return { success: false, locked: true }
   const key = await crypto.subtle.importKey('raw', new Uint8Array(bytes), { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt'])
@@ -188,25 +219,40 @@ async function saveCredential(domain, username, password) {
 
   // if a live credential with the same username exists, update it (dedup), else add
   let existingId = null
+  let existingExtraFields = []
   for (const cred of vault.credentials[domain]) {
     if (cred.deleted) continue
     try {
       const u = await decryptField(cred.username, key)
-      if (u === username) { existingId = cred.id; break }
+      if (u === username) {
+        existingId = cred.id
+        existingExtraFields = await decryptExtraFields(cred.extraFields, key)
+        break
+      }
     } catch (e) {}
   }
+
+  const mergedExtraFields = existingExtraFields.slice()
+  for (const field of (extraFields || [])) {
+    if (!field || !field.label || !field.value) continue
+    const idx = mergedExtraFields.findIndex(f => f.label === field.label)
+    if (idx !== -1) mergedExtraFields[idx] = { label: field.label, value: field.value }
+    else mergedExtraFields.push({ label: field.label, value: field.value })
+  }
+
   const encUser = await encryptField(username, key)
   const encPass = await encryptField(password, key)
+  const encExtraFields = await encryptExtraFields(mergedExtraFields, key)
   const now = Date.now()
   if (existingId) {
     for (let i = 0; i < vault.credentials[domain].length; i++) {
       if (vault.credentials[domain][i].id === existingId) {
-        vault.credentials[domain][i] = { id: existingId, username: encUser, password: encPass, createdAt: vault.credentials[domain][i].createdAt || now, updatedAt: now }
+        vault.credentials[domain][i] = { id: existingId, username: encUser, password: encPass, extraFields: encExtraFields, createdAt: vault.credentials[domain][i].createdAt || now, updatedAt: now }
         break
       }
     }
   } else {
-    vault.credentials[domain].push({ id: genId(), username: encUser, password: encPass, createdAt: now, updatedAt: now })
+    vault.credentials[domain].push({ id: genId(), username: encUser, password: encPass, extraFields: encExtraFields, createdAt: now, updatedAt: now })
   }
   vault.meta = vault.meta || {}
   vault.meta.lastAccess = now
@@ -216,7 +262,7 @@ async function saveCredential(domain, username, password) {
 
 chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
   if (request.action === 'saveCredential') {
-    saveCredential(request.domain, request.username, request.password).then(sendResponse)
+    saveCredential(request.domain, request.username, request.password, request.extraFields).then(sendResponse)
     return true
   }
   if (request.action === 'getCredentialsForDomain') {

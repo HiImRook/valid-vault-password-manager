@@ -26,12 +26,36 @@ function isLive(cred) {
   return !cred.deleted
 }
 
-async function saveCredential(domain, username, password, masterKey) {
+async function encryptExtraFields(extraFields, masterKey) {
+  const out = []
+  for (const field of extraFields || []) {
+    if (!field || !field.label || field.value === undefined || field.value === null || field.value === '') continue
+    out.push({
+      label: await encrypt(field.label, masterKey),
+      value: await encrypt(field.value, masterKey)
+    })
+  }
+  return out
+}
+
+async function decryptExtraFields(extraFields, masterKey) {
+  const out = []
+  for (const field of extraFields || []) {
+    out.push({
+      label: await decrypt(field.label, masterKey),
+      value: await decrypt(field.value, masterKey)
+    })
+  }
+  return out
+}
+
+async function saveCredential(domain, username, password, masterKey, extraFields) {
   await ensureVault()
   const vault = await getPasswordVault()
 
   const encUsername = await encrypt(username, masterKey)
   const encPassword = await encrypt(password, masterKey)
+  const encExtraFields = await encryptExtraFields(extraFields, masterKey)
 
   if (!vault.credentials[domain]) {
     vault.credentials[domain] = []
@@ -53,6 +77,7 @@ async function saveCredential(domain, username, password, masterKey) {
     id,
     username: encUsername,
     password: encPassword,
+    extraFields: encExtraFields,
     createdAt: Date.now(),
     updatedAt: Date.now()
   })
@@ -81,6 +106,7 @@ async function getCredentials(domain, masterKey) {
         id: cred.id,
         username: await decrypt(cred.username, masterKey),
         password: await decrypt(cred.password, masterKey),
+        extraFields: await decryptExtraFields(cred.extraFields, masterKey),
         createdAt: cred.createdAt,
         updatedAt: cred.updatedAt
       })
@@ -123,6 +149,9 @@ async function updateCredential(credentialId, updates, masterKey) {
       }
       if (updates.password) {
         creds[index].password = await encrypt(updates.password, masterKey)
+      }
+      if (updates.extraFields) {
+        creds[index].extraFields = await encryptExtraFields(updates.extraFields, masterKey)
       }
       creds[index].updatedAt = Date.now()
       vault.meta.lastAccess = Date.now()
@@ -199,10 +228,12 @@ async function reEncryptVault(vault, oldKey, newKey) {
       }
       const username = await decrypt(cred.username, oldKey)
       const password = await decrypt(cred.password, oldKey)
+      const extraFieldsPlain = await decryptExtraFields(cred.extraFields, oldKey)
       list.push({
         id: cred.id,
         username: await encrypt(username, newKey),
         password: await encrypt(password, newKey),
+        extraFields: await encryptExtraFields(extraFieldsPlain, newKey),
         createdAt: cred.createdAt,
         updatedAt: cred.updatedAt
       })

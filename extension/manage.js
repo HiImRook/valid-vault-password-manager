@@ -236,16 +236,19 @@ async function loadAllCredentials() {
     for (let i = 0; i < domainCreds.length; i++) {
       const cred = domainCreds[i]
       const credRow = document.createElement('div')
-      credRow.style.cssText = 'padding:12px 0;border-bottom:1px solid #1a1a1a;display:flex;align-items:center;gap:12px;'
-      credRow.innerHTML = 
+      credRow.style.cssText = 'padding:12px 0;border-bottom:1px solid #1a1a1a;'
+      credRow.innerHTML =
+        '<div style="display:flex;align-items:center;gap:12px;">' +
         '<div class="credential-username" style="flex:1;">Account ' + (i + 1) + '</div>' +
         '<div class="credential-password" style="width:150px;">••••••••</div>' +
         '<div class="credential-actions">' +
         '<button class="small secondary btn-show">👁️</button>' +
         '<button class="small secondary btn-edit">✏️</button>' +
         '<button class="small danger btn-delete">🗑️</button>' +
-        '</div>'
-      
+        '</div>' +
+        '</div>' +
+        '<div class="credential-extra" style="display:none;margin-top:8px;padding-left:4px;"></div>'
+
       credRow.dataset.credId = cred.id
       credRow.dataset.credIndex = i
       
@@ -253,15 +256,18 @@ async function loadAllCredentials() {
         e.stopPropagation()
         const usernameEl = credRow.querySelector('.credential-username')
         const pwEl = credRow.querySelector('.credential-password')
-        
+        const extraEl = credRow.querySelector('.credential-extra')
+
         if (pwEl.textContent !== '••••••••') {
           pwEl.textContent = '••••••••'
           usernameEl.textContent = 'Account ' + (i + 1)
+          extraEl.style.display = 'none'
+          extraEl.innerHTML = ''
           return
         }
-        
+
         let masterKey = session.getMasterKey()
-        
+
         if (!masterKey) {
           const authResult = await promptAuth()
           if (!authResult.success) {
@@ -271,13 +277,14 @@ async function loadAllCredentials() {
           masterKey = authResult.masterKey
           session.setMasterKey(masterKey)
         }
-        
+
         const result = await passwords.getCredentials(domain, masterKey)
         if (result.success) {
           const credential = result.credentials.find(c => c.id === cred.id)
           if (credential) {
             usernameEl.textContent = credential.username
             pwEl.textContent = credential.password
+            renderExtraFields(extraEl, credential, masterKey)
           }
         }
       }
@@ -345,6 +352,67 @@ async function loadAllCredentials() {
     domainItem.appendChild(domainContent)
     credentialsList.appendChild(domainItem)
   }
+}
+
+// Anything a signup or login form asked for beyond the login and password itself,
+// like an account number, lives here: saved for and under that one site's
+// credential, never in the Personal Info autofill profile.
+function renderExtraFields(container, credential, masterKey) {
+  container.style.display = 'block'
+  container.innerHTML = ''
+  const fields = credential.extraFields || []
+
+  if (fields.length === 0) {
+    const none = document.createElement('div')
+    none.style.cssText = 'color:#666;font-size:12px;padding:4px 0;'
+    none.textContent = 'No additional fields saved'
+    container.appendChild(none)
+  }
+
+  fields.forEach((field, idx) => {
+    const row = document.createElement('div')
+    row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12px;'
+    row.innerHTML =
+      '<span style="width:140px;color:var(--text-dim);">' + escapeHtml(field.label) + '</span>' +
+      '<span style="flex:1;">' + escapeHtml(field.value) + '</span>' +
+      '<button class="small secondary btn-edit-extra">Edit</button>' +
+      '<button class="small danger btn-delete-extra">Delete</button>'
+
+    row.querySelector('.btn-edit-extra').onclick = async () => {
+      const newValue = window.prompt('New value for "' + field.label + '":', field.value)
+      if (newValue === null) return
+      const updated = fields.map((f, i2) => i2 === idx ? { label: f.label, value: newValue } : f)
+      const result = await passwords.updateCredential(credential.id, { extraFields: updated }, masterKey)
+      if (result.success) { showMsg(msgManage, 'Updated', 'success'); loadAllCredentials() }
+      else { showMsg(msgManage, 'Update failed: ' + result.error, 'error') }
+    }
+
+    row.querySelector('.btn-delete-extra').onclick = async () => {
+      if (!confirm('Delete "' + field.label + '"?')) return
+      const updated = fields.filter((f, i2) => i2 !== idx)
+      const result = await passwords.updateCredential(credential.id, { extraFields: updated }, masterKey)
+      if (result.success) { showMsg(msgManage, 'Deleted', 'success'); loadAllCredentials() }
+      else { showMsg(msgManage, 'Delete failed: ' + result.error, 'error') }
+    }
+
+    container.appendChild(row)
+  })
+
+  const addBtn = document.createElement('button')
+  addBtn.className = 'small secondary'
+  addBtn.style.marginTop = '4px'
+  addBtn.textContent = '+ Add Field'
+  addBtn.onclick = async () => {
+    const label = window.prompt('Field name (e.g. Account Number):')
+    if (!label) return
+    const value = window.prompt('Value:')
+    if (value === null) return
+    const updated = fields.concat([{ label: label.trim(), value }])
+    const result = await passwords.updateCredential(credential.id, { extraFields: updated }, masterKey)
+    if (result.success) { showMsg(msgManage, 'Added', 'success'); loadAllCredentials() }
+    else { showMsg(msgManage, 'Add failed: ' + result.error, 'error') }
+  }
+  container.appendChild(addBtn)
 }
 
 const msgWebcreds = document.getElementById('msg-webcreds')
