@@ -306,7 +306,7 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
     return false
   }
   if (request.action === 'stagePendingSave') {
-    stagePendingSave(sender, request.domain, request.username, request.password, request.extraFields)
+    stagePendingSave(sender, request.id, request.domain, request.username, request.password, request.extraFields)
       .then(function () { sendResponse({ success: true }) })
     return true
   }
@@ -315,7 +315,7 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
     return true
   }
   if (request.action === 'resolvePendingSave') {
-    resolvePendingSave(sender)
+    resolvePendingSave(sender, request.id)
       .then(function () { sendResponse({ success: true }) })
     return true
   }
@@ -347,43 +347,77 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
 // prevents two tabs mid-login from clobbering each other, and a fresh submit in
 // the same tab naturally overwrites whatever was staged before it.
 const PENDING_SAVE_TTL_MS = 45000
+// Cap on how many un-resolved captures one tab can stage at once. Keeps a tab
+// left open with several abandoned form submissions from growing this
+// unboundedly; the oldest entry is dropped to make room for a new one.
+const PENDING_SAVE_MAX_PER_TAB = 5
 
-async function stagePendingSave(sender, domain, username, password, extraFields) {
+// Each tab holds a MAP of id -> entry (not a single record), so two
+// submissions in the same tab within the TTL window stage as two independent
+// records instead of the second silently overwriting the first. The caller
+// (content.js) generates the id and is the only one who ever needs it again
+// (to resolve that specific prompt), so no round trip is needed to hand one
+// back on stage.
+async function stagePendingSave(sender, id, domain, username, password, extraFields) {
   const tabId = sender && sender.tab && sender.tab.id
-  if (tabId === undefined || tabId === null) return
+  if (tabId === undefined || tabId === null || !id) return
+  const key = 'pendingSave_' + tabId
   try {
-    await chrome.storage.session.set({
-      ['pendingSave_' + tabId]: { domain, username, password, extraFields, ts: Date.now() }
-    })
+    const stored = await chrome.storage.session.get(key)
+    const map = (stored && stored[key]) || {}
+    map[id] = { domain, username, password, extraFields, ts: Date.now() }
+    const ids = Object.keys(map)
+    if (ids.length > PENDING_SAVE_MAX_PER_TAB) {
+      ids.sort((a, b) => map[a].ts - map[b].ts)
+      for (let i = 0; i < ids.length - PENDING_SAVE_MAX_PER_TAB; i++) delete map[ids[i]]
+    }
+    await chrome.storage.session.set({ [key]: map })
   } catch (e) {}
 }
 
+// Returns the OLDEST still-live entry (FIFO), so a page that resolves it in
+// order surfaces earlier captures before later ones. Expired entries are
+// pruned from the map as a side effect, but a live entry is never deleted
+// here — only resolvePendingSave() or TTL expiry removes one.
 async function takePendingSave(sender) {
   const tabId = sender && sender.tab && sender.tab.id
   if (tabId === undefined || tabId === null) return { found: false }
   const key = 'pendingSave_' + tabId
   try {
     const stored = await chrome.storage.session.get(key)
-    const entry = stored && stored[key]
-    if (!entry) return { found: false }
-    if (Date.now() - entry.ts > PENDING_SAVE_TTL_MS) {
-      await chrome.storage.session.remove(key)
-      return { found: false }
+    const map = (stored && stored[key]) || {}
+    const now = Date.now()
+    let changed = false
+    let oldestId = null
+    for (const id of Object.keys(map)) {
+      if (now - map[id].ts > PENDING_SAVE_TTL_MS) { delete map[id]; changed = true; continue }
+      if (!oldestId || map[id].ts < map[oldestId].ts) oldestId = id
     }
-    // Deliberately not removed here — see the comment above. Cleared only by
-    // resolvePendingSave() or TTL expiry, so it survives intermediate hops.
-    return { found: true, domain: entry.domain, username: entry.username, password: entry.password, extraFields: entry.extraFields }
+    if (changed) await chrome.storage.session.set({ [key]: map })
+    if (!oldestId) return { found: false }
+    const entry = map[oldestId]
+    return { found: true, id: oldestId, domain: entry.domain, username: entry.username, password: entry.password, extraFields: entry.extraFields }
   } catch (e) {
     return { found: false }
   }
 }
 
 // Called once the user actually acts on the resulting save prompt (Save or Not
-// now) so it stops reappearing on later pages in the same tab within the TTL.
-async function resolvePendingSave(sender) {
+// now), or once maybePromptSave() determines nothing needs saving, so that
+// specific record stops reappearing. Other still-pending entries in the same
+// tab are untouched.
+async function resolvePendingSave(sender, id) {
   const tabId = sender && sender.tab && sender.tab.id
-  if (tabId === undefined || tabId === null) return
-  try { await chrome.storage.session.remove('pendingSave_' + tabId) } catch (e) {}
+  if (tabId === undefined || tabId === null || !id) return
+  const key = 'pendingSave_' + tabId
+  try {
+    const stored = await chrome.storage.session.get(key)
+    const map = stored && stored[key]
+    if (!map) return
+    delete map[id]
+    if (Object.keys(map).length === 0) await chrome.storage.session.remove(key)
+    else await chrome.storage.session.set({ [key]: map })
+  } catch (e) {}
 }
 
 // ---- Inactivity soft/hard lock (driven by the service worker) ----

@@ -346,7 +346,7 @@
     return { host, shadow }
   }
 
-  function showSavePrompt(domain, username, password, isUpdate, extraFields) {
+  function showSavePrompt(domain, username, password, isUpdate, extraFields, pendingId) {
     if (!savePrompt) savePrompt = createSavePrompt()
     savePrompt.shadow.getElementById('sp-title').textContent = isUpdate ? 'Update saved password?' : 'Save to Valid Vault?'
     savePrompt.shadow.getElementById('sp-domain').textContent = domain
@@ -357,14 +357,19 @@
         ? '+ ' + extraFields.length + ' additional field' + (extraFields.length !== 1 ? 's' : '') + ' on this form will be saved too'
         : ''
     }
+    const msgEl0 = savePrompt.shadow.getElementById('sp-msg')
+    if (msgEl0) msgEl0.textContent = ''
     savePrompt.host.style.display = 'block'
     // Any real dismissal — cancel, clicking outside, or a successful save —
-    // resolves the underlying pending-save record so it stops reappearing on
-    // later pages in this tab. A locked-vault save attempt does NOT resolve it
-    // (see below), since the user is expected to unlock and click Save again.
+    // resolves the underlying pending-save record (by its own id, since more
+    // than one can be staged in the same tab) so it stops reappearing on later
+    // pages in this tab. A locked-vault save attempt does NOT resolve it (see
+    // below), since the user is expected to unlock and click Save again. A
+    // non-locked write failure (storage error, etc.) also does not resolve it
+    // — the user sees an error and can retry Save without losing the capture.
     const close = () => {
       savePrompt.host.style.display = 'none'
-      try { chrome.runtime.sendMessage({ action: 'resolvePendingSave' }) } catch (e) {}
+      if (pendingId) { try { chrome.runtime.sendMessage({ action: 'resolvePendingSave', id: pendingId }) } catch (e) {} }
     }
     savePrompt.shadow.getElementById('sp-cancel').onclick = close
     savePrompt.shadow.getElementById('sp-save').onclick = async () => {
@@ -373,6 +378,10 @@
       const result = await chrome.runtime.sendMessage({ action: 'saveCredential', domain, username, password, extraFields })
       if (result && result.locked) {
         if (msgEl) msgEl.textContent = 'Vault is locked. Click the Valid Vault icon to unlock, then click Save again.'
+        return
+      }
+      if (!result || !result.success) {
+        if (msgEl) msgEl.textContent = 'Could not save — please try again.'
         return
       }
       close()
@@ -386,14 +395,19 @@
   // checkPendingSave() can be resolving a save that was staged on a DIFFERENT
   // page than the one currently loaded (a redirect mid-login) — the credential
   // must always be saved under the domain it was actually typed on.
-  async function maybePromptSave(domain, u, p, extras) {
+  async function maybePromptSave(domain, u, p, extras, pendingId) {
     let existing = null
     try {
       const result = await chrome.runtime.sendMessage({ action: 'getCredentialsForDomain', domain })
       if (result && result.success) existing = result.credentials.find(c => c.username === u)
     } catch (e) {}
-    if (existing && existing.password === p && sameExtraFields(existing.extraFields, extras)) return  // already saved, nothing changed
-    showSavePrompt(domain, u, p, !!existing, extras)
+    if (existing && existing.password === p && sameExtraFields(existing.extraFields, extras)) {
+      // already saved, nothing changed — resolve the staged record now instead
+      // of leaving it to sit until the TTL expires
+      if (pendingId) { try { chrome.runtime.sendMessage({ action: 'resolvePendingSave', id: pendingId }) } catch (e) {} }
+      return
+    }
+    showSavePrompt(domain, u, p, !!existing, extras, pendingId)
   }
 
   // One logical submission can trigger this three separate ways — the form's
@@ -416,16 +430,21 @@
       if (!p) return  // no password, nothing to save
       const extras = collectExtraFields(password)
 
+      // Own id per capture (generated here, not round-tripped from background)
+      // so two submissions in the same tab within the TTL window stage as two
+      // independent records instead of the second overwriting the first.
+      const pendingId = 'ps_' + Date.now() + '_' + Math.random().toString(36).slice(2)
+
       // Stage a copy in background.js BEFORE the async existing-credential lookup
       // below. A real submit can navigate away — or tear down this whole content
       // script — before that lookup's promise resolves, silently losing the save
       // prompt. The staged copy survives navigation; checkPendingSave() picks it
       // up on whatever page loads next, if this document doesn't get the chance.
       try {
-        chrome.runtime.sendMessage({ action: 'stagePendingSave', domain: currentDomain, username: u, password: p, extraFields: extras })
+        chrome.runtime.sendMessage({ action: 'stagePendingSave', id: pendingId, domain: currentDomain, username: u, password: p, extraFields: extras })
       } catch (e) {}
 
-      await maybePromptSave(currentDomain, u, p, extras)
+      await maybePromptSave(currentDomain, u, p, extras, pendingId)
     } finally {
       if (password) captureInFlight.delete(password)
     }
@@ -442,7 +461,7 @@
       pending = await chrome.runtime.sendMessage({ action: 'takePendingSave' })
     } catch (e) { return }
     if (!pending || !pending.found) return
-    await maybePromptSave(pending.domain, pending.username, pending.password, pending.extraFields)
+    await maybePromptSave(pending.domain, pending.username, pending.password, pending.extraFields, pending.id)
   }
 
   // formFields is captured once, per form, in this closure — every listener
@@ -543,6 +562,39 @@
   })
   formObserver.observe(document.documentElement, { childList: true, subtree: true })
 
+  // Same-document SPA navigations (pushState/replaceState, or back/forward via
+  // popstate) never reload this content script, so checkPendingSave() would
+  // otherwise only ever run once, at the very first load. history is the same
+  // underlying object the page's own scripts see (isolated worlds still share
+  // window/DOM), so wrapping it here also catches the page's own router calls.
+  // Debounced together with a rescan, since a router may fire several history
+  // calls back-to-back for one logical navigation.
+  let routeChangeScheduled = false
+  function scheduleRouteChange() {
+    if (routeChangeScheduled) return
+    routeChangeScheduled = true
+    setTimeout(() => {
+      routeChangeScheduled = false
+      init()
+      scanAndPopulatePersonalInfoFields()
+      checkPendingSave()
+    }, 250)
+  }
+  try {
+    const origPushState = history.pushState
+    const origReplaceState = history.replaceState
+    history.pushState = function () {
+      const ret = origPushState.apply(this, arguments)
+      scheduleRouteChange()
+      return ret
+    }
+    history.replaceState = function () {
+      const ret = origReplaceState.apply(this, arguments)
+      scheduleRouteChange()
+      return ret
+    }
+    window.addEventListener('popstate', scheduleRouteChange)
+  } catch (e) {}
 
   const SIGNUP_FIELD_MAP = {
     firstName: ['input[name="first_name"]', 'input[name="firstName"]', 'input[id="firstName"]', 'input[id="first_name"]', 'input[autocomplete="given-name"]', 'input[placeholder*="First" i]'],
