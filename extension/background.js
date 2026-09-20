@@ -346,10 +346,19 @@ async function takePendingSaveForDomain(sender, domain) {
   try {
     const stored = await chrome.storage.session.get(key)
     const entry = stored && stored[key]
-    await chrome.storage.session.remove(key)  // one-shot regardless of match
     if (!entry) return { found: false }
+    if (Date.now() - entry.ts > PENDING_SAVE_TTL_MS) {
+      await chrome.storage.session.remove(key)  // stale — safe to drop regardless of domain
+      return { found: false }
+    }
+    // A login flow often redirects through a different hostname before landing
+    // on the page that should actually show the save prompt (login.x.com ->
+    // x.com/dashboard, SSO, etc). Only consume the entry on a real domain match
+    // — otherwise leave it in place so a later page in this same tab, within
+    // the TTL, still gets the chance to pick it up. Deleting unconditionally
+    // here would silently lose the save prompt on any such redirect.
     if (entry.domain !== domain) return { found: false }
-    if (Date.now() - entry.ts > PENDING_SAVE_TTL_MS) return { found: false }
+    await chrome.storage.session.remove(key)  // consumed
     return { found: true, username: entry.username, password: entry.password, extraFields: entry.extraFields }
   } catch (e) {
     return { found: false }

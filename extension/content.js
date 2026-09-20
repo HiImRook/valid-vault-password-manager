@@ -10,9 +10,16 @@
   }
 
   let currentDomain = window.location.hostname
-  let usernameField = null
-  let passwordField = null
   let dropdown = null
+  let dropdownOwnerField = null  // which field the currently-open dropdown belongs to
+
+  // A page can have more than one login form (or gain a second one dynamically,
+  // via the MutationObserver below). Each wired form gets its own {username,
+  // password} pair instead of everything sharing one mutable global — a shared
+  // pair meant that wiring a second form silently repointed the first form's
+  // already-attached listeners at the wrong fields.
+  const wiredForms = []
+  const trackedFields = new Set()  // every username/password field across all wired forms
 
   // Shared low-level matcher: both the login-username heuristic and the signup/
   // personal-info classifier (matchSignupFieldType, below) run candidate fields
@@ -46,11 +53,12 @@
     'input[placeholder*="login" i]'
   ]
 
-  function detectLoginForm() {
+  function detectLoginForm(skipPasswordFields) {
     const pwFields = document.querySelectorAll('input[type="password"]')
     if (pwFields.length === 0) return null
 
     for (const pwField of pwFields) {
+      if (skipPasswordFields && skipPasswordFields.has(pwField)) continue
       const form = pwField.closest('form') || document
       const candidates = Array.from(form.querySelectorAll('input[type="text"], input[type="email"], input[type="tel"]'))
         .filter((input) => input.offsetParent !== null)
@@ -141,9 +149,13 @@
     dropdown.host.style.top = rect.bottom + window.scrollY + 2 + 'px'
   }
 
-  async function showDropdown(field) {
+  // formFields identifies which form's dropdown this is, so selecting a
+  // credential always fills the fields it was opened from, even if another
+  // login form on the page got focused/wired in between.
+  async function showDropdown(field, formFields) {
     if (!dropdown) dropdown = createDropdown()
 
+    dropdownOwnerField = field
     positionDropdown(field)
     dropdown.host.style.display = 'block'
 
@@ -163,7 +175,7 @@
           <div class="username">${escapeHtml(cred.username)}</div>
           <div class="password-dots">••••••••</div>
         `
-        item.onclick = () => fillCredentials(cred)
+        item.onclick = () => fillCredentials(cred, formFields)
         itemsContainer.appendChild(item)
       }
 
@@ -181,20 +193,22 @@
     if (dropdown) dropdown.host.style.display = 'none'
   }
 
-  function fillCredentials(cred) {
+  function fillCredentials(cred, formFields) {
     pingActivity()
-    if (usernameField) {
-      usernameField.value = cred.username
-      usernameField.dispatchEvent(new Event('input', { bubbles: true }))
-      usernameField.dispatchEvent(new Event('change', { bubbles: true }))
+    const username = formFields && formFields.username
+    const password = formFields && formFields.password
+    if (username) {
+      username.value = cred.username
+      username.dispatchEvent(new Event('input', { bubbles: true }))
+      username.dispatchEvent(new Event('change', { bubbles: true }))
     }
-    if (passwordField) {
-      passwordField.value = cred.password
-      passwordField.dispatchEvent(new Event('input', { bubbles: true }))
-      passwordField.dispatchEvent(new Event('change', { bubbles: true }))
+    if (password) {
+      password.value = cred.password
+      password.dispatchEvent(new Event('input', { bubbles: true }))
+      password.dispatchEvent(new Event('change', { bubbles: true }))
     }
     if (cred.extraFields && cred.extraFields.length) {
-      const form = (passwordField && passwordField.closest('form')) || document
+      const form = (password && password.closest('form')) || document
       const candidates = form.querySelectorAll('input')
       for (const el of candidates) {
         if (isTrackedField(el)) continue
@@ -216,7 +230,7 @@
   // like an account number. It's captured as the user types it, not filled from a
   // settings page, and saved alongside the login it was typed next to.
   function isTrackedField(el) {
-    return el === usernameField || el === passwordField
+    return trackedFields.has(el)
   }
 
   // A saved label and a freshly-read one rarely come back byte-identical: sites
@@ -243,7 +257,7 @@
     return 'Field'
   }
 
-  function collectExtraFields() {
+  function collectExtraFields(passwordField) {
     if (!passwordField) return []
     const form = passwordField.closest('form') || document
     const inputs = form.querySelectorAll('input')
@@ -354,12 +368,14 @@
     showSavePrompt(currentDomain, u, p, !!existing, extras)
   }
 
-  async function captureAndPrompt() {
-    if (!usernameField && !passwordField) return
-    const u = usernameField ? usernameField.value : ''
-    const p = passwordField ? passwordField.value : ''
+  async function captureAndPrompt(formFields) {
+    const username = formFields && formFields.username
+    const password = formFields && formFields.password
+    if (!username && !password) return
+    const u = username ? username.value : ''
+    const p = password ? password.value : ''
     if (!p) return  // no password, nothing to save
-    const extras = collectExtraFields()
+    const extras = collectExtraFields(password)
 
     // Stage a copy in background.js BEFORE the async existing-credential lookup
     // below. A real submit can navigate away — or tear down this whole content
@@ -385,23 +401,30 @@
     await maybePromptSave(pending.username, pending.password, pending.extraFields)
   }
 
-  function wireSubmitCapture() {
-    if (!passwordField) return
-    const form = passwordField.closest('form')
+  // formFields is captured once, per form, in this closure — every listener
+  // here reads it directly instead of a shared mutable variable, so wiring a
+  // second form later can't repoint what this form's listeners act on.
+  function wireSubmitCapture(formFields) {
+    const password = formFields.password
+    const form = password.closest('form')
     if (form) {
-      form.addEventListener('submit', function () { captureAndPrompt() }, true)
+      form.addEventListener('submit', function () { captureAndPrompt(formFields) }, true)
     }
     // also capture Enter in password field and clicks on likely submit buttons
-    passwordField.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter') setTimeout(captureAndPrompt, 0)
+    password.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') setTimeout(() => captureAndPrompt(formFields), 0)
     })
     // button clicks near the form (submit buttons that are not type=submit in a form)
     document.addEventListener('click', function (e) {
       const t = e.target
       if (!t) return
       const isBtn = (t.tagName === 'BUTTON') || (t.tagName === 'INPUT' && (t.type === 'submit' || t.type === 'button'))
-      if (isBtn && passwordField && passwordField.value) {
-        setTimeout(captureAndPrompt, 50)
+      // If this form has a real <form> element, only react to a button that's
+      // actually inside it — otherwise every wired form's listener would fire
+      // on every button click on the page, not just its own.
+      const belongsToThisForm = form ? form.contains(t) : true
+      if (isBtn && belongsToThisForm && password.value) {
+        setTimeout(() => captureAndPrompt(formFields), 50)
       }
     }, true)
   }
@@ -411,34 +434,37 @@
   // form is injected into the page after the initial scan.
   const wiredPasswordFields = new WeakSet()
 
-  function init() {
-    const fields = detectLoginForm()
-    if (!fields) return
-    if (wiredPasswordFields.has(fields.password)) {
-      // Same form as last time (observer re-fired on an unrelated DOM change) —
-      // just make sure the module-level refs still point at it.
-      usernameField = fields.username
-      passwordField = fields.password
-      return
-    }
+  function wireLoginForm(fields) {
+    const { username, password } = fields
+    wiredPasswordFields.add(password)
+    trackedFields.add(username)
+    trackedFields.add(password)
+    wiredForms.push(fields)
 
-    usernameField = fields.username
-    passwordField = fields.password
-    wiredPasswordFields.add(passwordField)
+    username.setAttribute('autocomplete', 'off')
+    password.setAttribute('autocomplete', 'off')
 
-    usernameField.setAttribute('autocomplete', 'off')
-    passwordField.setAttribute('autocomplete', 'off')
-
-    usernameField.addEventListener('focus', (e) => { showDropdown(usernameField); e.stopImmediatePropagation() }, true)
-    passwordField.addEventListener('focus', (e) => { showDropdown(passwordField); e.stopImmediatePropagation() }, true)
-    wireSubmitCapture()
+    username.addEventListener('focus', (e) => { showDropdown(username, fields); e.stopImmediatePropagation() }, true)
+    password.addEventListener('focus', (e) => { showDropdown(password, fields); e.stopImmediatePropagation() }, true)
+    wireSubmitCapture(fields)
   }
 
-  // Registered once (not per-init call) since it only reads the current
-  // usernameField/passwordField refs rather than binding to a specific form.
+  // Wires every not-yet-wired login form currently on the page. Recurses so a
+  // page with multiple login forms present at once (or gaining a second one
+  // later) gets all of them, not just the first.
+  function init() {
+    const fields = detectLoginForm(wiredPasswordFields)
+    if (!fields) return
+    wireLoginForm(fields)
+    init()
+  }
+
+  // Registered once (not per-form) — reads dropdownOwnerField, which tracks
+  // whichever field the currently-open dropdown belongs to, rather than a
+  // single shared "the" username field.
   document.addEventListener('click', (e) => {
     if (!dropdown) return
-    if (!dropdown.host.contains(e.target) && e.target !== usernameField) {
+    if (!dropdown.host.contains(e.target) && e.target !== dropdownOwnerField) {
       hideDropdown()
     }
   })
@@ -701,9 +727,9 @@
     }
   }
 
-  // init() must run first: it sets usernameField/passwordField, which
-  // matchSignupFieldType (via isTrackedField) relies on to keep the login form's
-  // own fields out of the signup/personal-info scan below.
+  // init() must run first: it populates trackedFields, which matchSignupFieldType
+  // (via isTrackedField) relies on to keep every wired login form's own fields
+  // out of the signup/personal-info scan below.
   function bootstrap() {
     init()
     scanAndPopulatePersonalInfoFields()
