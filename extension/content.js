@@ -5,9 +5,34 @@
   // background.js's inactivity timer only resets on an explicit 'activity' message.
   // Without this, actively using autofill on a page doesn't count as activity, and
   // the vault can lock mid-use even while the person is right there working with it.
+  // Throttled so the broader set of call sites below (ordinary typing, every
+  // autofill dispatch, dropdown opens) can ping liberally without turning every
+  // keystroke into its own runtime message — only the correctness of "was there
+  // recent activity" matters, not sub-second precision.
+  let lastActivityPingAt = 0
   function pingActivity() {
+    const now = Date.now()
+    if (now - lastActivityPingAt < 3000) return
+    lastActivityPingAt = now
     try { chrome.runtime.sendMessage({ action: 'activity' }) } catch (e) {}
   }
+
+  // Ordinary typing/selecting in any field on the page, and every synthetic
+  // input event our own autofill dispatches, both land here — so passive
+  // personal-info autofill and plain typing both count as activity now, not
+  // just the handful of deliberate click-driven actions (dropdown pick, tag
+  // click, unlock) that were the only things resetting the timer before.
+  document.addEventListener('input', (e) => {
+    const t = e.target
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT')) pingActivity()
+  }, true)
+  // Tab/arrow-key navigation between fields, and time spent with a dropdown
+  // or the save prompt open, doesn't fire 'input' at all — this catches the
+  // "still clearly here, just not typing this instant" case.
+  document.addEventListener('keydown', (e) => {
+    const t = e.target
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT')) pingActivity()
+  }, true)
 
   // React (and similar frameworks) install their own value tracker over a plain
   // `el.value = x` assignment, so setting it directly can leave the DOM showing
@@ -202,6 +227,9 @@
   // credential always fills the fields it was opened from, even if another
   // login form on the page got focused/wired in between.
   async function showDropdown(field, formFields) {
+    // Opening the dropdown (without necessarily picking anything yet) is
+    // itself a sign the person is actively working the page, not idle.
+    pingActivity()
     if (!dropdown) dropdown = createDropdown()
 
     dropdownOwnerField = field
@@ -496,6 +524,11 @@
       pending = await chrome.runtime.sendMessage({ action: 'takePendingSave' })
     } catch (e) { return }
     if (!pending || !pending.found) return
+    // A pending save being recovered here means a login/SSO/MFA flow is still
+    // actively in progress in this tab (a real submission happened recently
+    // enough that its record hasn't expired) — that counts as the person
+    // being present, even though nothing on this exact page was clicked yet.
+    pingActivity()
     await maybePromptSave(pending.domain, pending.username, pending.password, pending.extraFields, pending.id)
   }
 
