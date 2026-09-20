@@ -467,18 +467,27 @@
   // formFields is captured once, per form, in this closure — every listener
   // here reads it directly instead of a shared mutable variable, so wiring a
   // second form later can't repoint what this form's listeners act on.
+  //
+  // Returns a teardown function that removes every listener this attached,
+  // including the document-level click listener — which otherwise lives for
+  // the lifetime of the page even after the form itself is long gone from the
+  // DOM (an SPA that mounts/unmounts a login form repeatedly would otherwise
+  // accumulate one such listener, and its retained closure, per mount).
   function wireSubmitCapture(formFields) {
     const password = formFields.password
     const form = password.closest('form')
-    if (form) {
-      form.addEventListener('submit', function () { captureAndPrompt(formFields) }, true)
-    }
+
+    const submitHandler = function () { captureAndPrompt(formFields) }
+    if (form) form.addEventListener('submit', submitHandler, true)
+
     // also capture Enter in password field and clicks on likely submit buttons
-    password.addEventListener('keydown', function (e) {
+    const keydownHandler = function (e) {
       if (e.key === 'Enter') setTimeout(() => captureAndPrompt(formFields), 0)
-    })
+    }
+    password.addEventListener('keydown', keydownHandler)
+
     // button clicks near the form (submit buttons that are not type=submit in a form)
-    document.addEventListener('click', function (e) {
+    const clickHandler = function (e) {
       const t = e.target
       if (!t) return
       const isBtn = (t.tagName === 'BUTTON') || (t.tagName === 'INPUT' && (t.type === 'submit' || t.type === 'button'))
@@ -489,7 +498,14 @@
       if (isBtn && belongsToThisForm && password.value) {
         setTimeout(() => captureAndPrompt(formFields), 50)
       }
-    }, true)
+    }
+    document.addEventListener('click', clickHandler, true)
+
+    return function teardown() {
+      if (form) form.removeEventListener('submit', submitHandler, true)
+      password.removeEventListener('keydown', keydownHandler)
+      document.removeEventListener('click', clickHandler, true)
+    }
   }
 
   // Fields already wired get their listeners attached exactly once, even though
@@ -502,14 +518,29 @@
     wiredPasswordFields.add(password)
     trackedFields.add(username)
     trackedFields.add(password)
-    wiredForms.push(fields)
 
     username.setAttribute('autocomplete', 'off')
     password.setAttribute('autocomplete', 'off')
 
-    username.addEventListener('focus', (e) => { showDropdown(username, fields); e.stopImmediatePropagation() }, true)
-    password.addEventListener('focus', (e) => { showDropdown(password, fields); e.stopImmediatePropagation() }, true)
-    wireSubmitCapture(fields)
+    const usernameFocusHandler = (e) => { showDropdown(username, fields); e.stopImmediatePropagation() }
+    const passwordFocusHandler = (e) => { showDropdown(password, fields); e.stopImmediatePropagation() }
+    username.addEventListener('focus', usernameFocusHandler, true)
+    password.addEventListener('focus', passwordFocusHandler, true)
+    const teardownSubmitCapture = wireSubmitCapture(fields)
+
+    // Recorded (not just fire-and-forget listeners) so cleanupDetachedState()
+    // can find and tear this down once the form is removed from the DOM —
+    // see that function for why this matters.
+    wiredForms.push({
+      fields,
+      cleanup: function () {
+        username.removeEventListener('focus', usernameFocusHandler, true)
+        password.removeEventListener('focus', passwordFocusHandler, true)
+        teardownSubmitCapture()
+        trackedFields.delete(username)
+        trackedFields.delete(password)
+      }
+    })
   }
 
   // Wires every not-yet-wired login form currently on the page. Recurses so a
@@ -546,9 +577,40 @@
     rescanScheduled = true
     setTimeout(() => {
       rescanScheduled = false
+      cleanupDetachedState()
       init()
       scanAndPopulatePersonalInfoFields()
     }, 250)
+  }
+
+  // A form (or a personal-info field) removed from the DOM — an SPA navigating
+  // away from a login step, a modal closing, a wizard moving on — otherwise
+  // left every listener wireLoginForm()/attachVaultTag() attached still alive
+  // indefinitely: the document-level submit-capture click listener per wired
+  // form, and the window scroll/resize listeners keeping each floating vault
+  // tag positioned, none of which ever got torn down on their own. On a
+  // long-lived SPA page that mounts/unmounts forms repeatedly this accumulates
+  // without bound. Cheap to run (small arrays, one isConnected check each), so
+  // it rides along on the same debounce as the rescan above rather than
+  // needing its own scheduling.
+  function cleanupDetachedState() {
+    for (let i = wiredForms.length - 1; i >= 0; i--) {
+      const entry = wiredForms[i]
+      if (!entry.fields.password.isConnected) {
+        entry.cleanup()
+        wiredForms.splice(i, 1)
+      }
+    }
+    for (let i = taggedFieldRecords.length - 1; i >= 0; i--) {
+      const rec = taggedFieldRecords[i]
+      if (!rec.el.isConnected) {
+        if (rec.tag && rec.tag.parentNode) rec.tag.parentNode.removeChild(rec.tag)
+        window.removeEventListener('scroll', rec.scrollHandler, true)
+        window.removeEventListener('resize', rec.resizeHandler)
+        fieldTags.delete(rec.el)
+        taggedFieldRecords.splice(i, 1)
+      }
+    }
   }
 
   // Attributes a framework commonly fills in AFTER the bare <input> is first
@@ -570,6 +632,14 @@
         continue
       }
       for (const node of mutation.addedNodes) {
+        if (node.nodeType !== 1) continue
+        if (node.matches && node.matches('input')) { scheduleRescan(); return }
+        if (node.querySelector && node.querySelector('input')) { scheduleRescan(); return }
+      }
+      // Removed nodes matter too now — that's what lets cleanupDetachedState()
+      // above actually run promptly instead of only whenever something else
+      // happens to add a new input later.
+      for (const node of mutation.removedNodes) {
         if (node.nodeType !== 1) continue
         if (node.matches && node.matches('input')) { scheduleRescan(); return }
         if (node.querySelector && node.querySelector('input')) { scheduleRescan(); return }
@@ -814,6 +884,14 @@
   }
 
   const fieldTags = new WeakMap()
+  // Parallel array (not just the WeakMap above) so cleanupDetachedState() can
+  // actually enumerate tagged fields — a WeakMap can't be iterated. Without
+  // this, a personal-info field removed from the DOM (an SPA step navigated
+  // away from) leaves its floating "V" tag icon on screen forever, along with
+  // the window scroll/resize listeners keeping it positioned — both outlive
+  // the field indefinitely since nothing ever calls removeEventListener or
+  // removes the tag element.
+  const taggedFieldRecords = []
 
   function attachVaultTag(el, fieldType) {
     if (fieldTags.has(el)) { positionVaultTag(fieldTags.get(el), el); return }
@@ -830,9 +908,12 @@
         fillPersonalInfoFieldWithUnlock(el, fieldType)
       }
     }
+    const scrollHandler = () => positionVaultTag(tag, el)
+    const resizeHandler = () => positionVaultTag(tag, el)
+    window.addEventListener('scroll', scrollHandler, true)
+    window.addEventListener('resize', resizeHandler)
     fieldTags.set(el, tag)
-    window.addEventListener('scroll', () => positionVaultTag(tag, el), true)
-    window.addEventListener('resize', () => positionVaultTag(tag, el))
+    taggedFieldRecords.push({ el, tag, scrollHandler, resizeHandler })
   }
 
   let emailPicker = null
