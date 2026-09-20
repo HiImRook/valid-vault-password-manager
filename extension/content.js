@@ -551,8 +551,24 @@
     }, 250)
   }
 
+  // Attributes a framework commonly fills in AFTER the bare <input> is first
+  // inserted (React/Vue hydration, a multi-step form library assigning name/id
+  // once a step becomes active, etc). Without watching these, a field that
+  // looked unclassifiable at insertion time — no name, no id, nothing — stays
+  // unclassified forever, even though matchSignupFieldType()/detectLoginForm()
+  // would happily recognize it once the attribute lands. 'type' is included so
+  // a field that's turned into a password field after insertion (some frameworks
+  // build the field generically, then set type='password' for a password step)
+  // is picked up by detectLoginForm() too, not just the personal-info scan.
+  const WATCHED_DYNAMIC_ATTRS = ['name', 'id', 'autocomplete', 'aria-label', 'placeholder', 'type']
+
   const formObserver = new MutationObserver((mutations) => {
     for (const mutation of mutations) {
+      if (mutation.type === 'attributes') {
+        const el = mutation.target
+        if (el && el.nodeType === 1 && el.tagName === 'INPUT') { scheduleRescan(); return }
+        continue
+      }
       for (const node of mutation.addedNodes) {
         if (node.nodeType !== 1) continue
         if (node.matches && node.matches('input')) { scheduleRescan(); return }
@@ -560,7 +576,12 @@
       }
     }
   })
-  formObserver.observe(document.documentElement, { childList: true, subtree: true })
+  formObserver.observe(document.documentElement, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: WATCHED_DYNAMIC_ATTRS
+  })
 
   // Same-document SPA navigations (pushState/replaceState, or back/forward via
   // popstate) never reload this content script, so checkPendingSave() would
