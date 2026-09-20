@@ -310,8 +310,8 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
       .then(function () { sendResponse({ success: true }) })
     return true
   }
-  if (request.action === 'takePendingSaveForDomain') {
-    takePendingSaveForDomain(sender, request.domain).then(sendResponse)
+  if (request.action === 'takePendingSave') {
+    takePendingSave(sender).then(sendResponse)
     return true
   }
   return false
@@ -323,11 +323,18 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
 // that credential is already saved is async — and a real submit can navigate
 // (or tear the content script down) before that check resolves, losing the save
 // prompt entirely. Staging the capture here, keyed by tab, lets whatever page
-// loads next in that same tab pick the prompt back up. Scoped per-tab (not just
-// per-domain) so two tabs mid-login don't clobber each other, and one-shot +
-// short-lived so a stale entry can't resurface a save prompt on an unrelated
-// later visit to the same domain.
-const PENDING_SAVE_TTL_MS = 30000
+// loads next in that same tab pick the prompt back up.
+//
+// Deliberately NOT filtered by domain. A login flow very often redirects through
+// a different hostname before landing on the page that should show the save
+// prompt (login.x.com -> x.com/dashboard, SSO, etc) — matching on domain meant
+// that extremely common case never worked at all. The only scoping left is: the
+// same tab (so two tabs mid-login can't clobber each other), one-shot (the first
+// page load after staging consumes it, whatever domain it's on), and a short TTL
+// (so it can't resurface on some unrelated page the user happens to open in that
+// tab much later). The staged domain always travels with the record and is what
+// actually gets saved — never the domain of the page that picked it up.
+const PENDING_SAVE_TTL_MS = 15000
 
 async function stagePendingSave(sender, domain, username, password, extraFields) {
   const tabId = sender && sender.tab && sender.tab.id
@@ -339,7 +346,7 @@ async function stagePendingSave(sender, domain, username, password, extraFields)
   } catch (e) {}
 }
 
-async function takePendingSaveForDomain(sender, domain) {
+async function takePendingSave(sender) {
   const tabId = sender && sender.tab && sender.tab.id
   if (tabId === undefined || tabId === null) return { found: false }
   const key = 'pendingSave_' + tabId
@@ -347,19 +354,9 @@ async function takePendingSaveForDomain(sender, domain) {
     const stored = await chrome.storage.session.get(key)
     const entry = stored && stored[key]
     if (!entry) return { found: false }
-    if (Date.now() - entry.ts > PENDING_SAVE_TTL_MS) {
-      await chrome.storage.session.remove(key)  // stale — safe to drop regardless of domain
-      return { found: false }
-    }
-    // A login flow often redirects through a different hostname before landing
-    // on the page that should actually show the save prompt (login.x.com ->
-    // x.com/dashboard, SSO, etc). Only consume the entry on a real domain match
-    // — otherwise leave it in place so a later page in this same tab, within
-    // the TTL, still gets the chance to pick it up. Deleting unconditionally
-    // here would silently lose the save prompt on any such redirect.
-    if (entry.domain !== domain) return { found: false }
-    await chrome.storage.session.remove(key)  // consumed
-    return { found: true, username: entry.username, password: entry.password, extraFields: entry.extraFields }
+    await chrome.storage.session.remove(key)  // one-shot: consumed on the first read, any domain
+    if (Date.now() - entry.ts > PENDING_SAVE_TTL_MS) return { found: false }
+    return { found: true, domain: entry.domain, username: entry.username, password: entry.password, extraFields: entry.extraFields }
   } catch (e) {
     return { found: false }
   }

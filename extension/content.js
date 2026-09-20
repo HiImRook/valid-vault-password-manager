@@ -358,14 +358,18 @@
     }
   }
 
-  async function maybePromptSave(u, p, extras) {
+  // domain is passed explicitly (not read from the outer currentDomain) because
+  // checkPendingSave() can be resolving a save that was staged on a DIFFERENT
+  // page than the one currently loaded (a redirect mid-login) — the credential
+  // must always be saved under the domain it was actually typed on.
+  async function maybePromptSave(domain, u, p, extras) {
     let existing = null
     try {
-      const result = await chrome.runtime.sendMessage({ action: 'getCredentialsForDomain', domain: currentDomain })
+      const result = await chrome.runtime.sendMessage({ action: 'getCredentialsForDomain', domain })
       if (result && result.success) existing = result.credentials.find(c => c.username === u)
     } catch (e) {}
     if (existing && existing.password === p && sameExtraFields(existing.extraFields, extras)) return  // already saved, nothing changed
-    showSavePrompt(currentDomain, u, p, !!existing, extras)
+    showSavePrompt(domain, u, p, !!existing, extras)
   }
 
   async function captureAndPrompt(formFields) {
@@ -386,19 +390,21 @@
       chrome.runtime.sendMessage({ action: 'stagePendingSave', domain: currentDomain, username: u, password: p, extraFields: extras })
     } catch (e) {}
 
-    await maybePromptSave(u, p, extras)
+    await maybePromptSave(currentDomain, u, p, extras)
   }
 
   // Checked once per page load. If the previous page's submit got cut off by
-  // navigation before it could show its own save prompt, this is where that
-  // prompt actually appears.
+  // navigation before it could show its own save prompt — including a redirect
+  // to a different hostname, which is common for login flows (SSO, login.x.com
+  // -> x.com/dashboard) — this is where that prompt actually appears, under the
+  // domain the credential was originally typed on.
   async function checkPendingSave() {
     let pending
     try {
-      pending = await chrome.runtime.sendMessage({ action: 'takePendingSaveForDomain', domain: currentDomain })
+      pending = await chrome.runtime.sendMessage({ action: 'takePendingSave' })
     } catch (e) { return }
     if (!pending || !pending.found) return
-    await maybePromptSave(pending.username, pending.password, pending.extraFields)
+    await maybePromptSave(pending.domain, pending.username, pending.password, pending.extraFields)
   }
 
   // formFields is captured once, per form, in this closure — every listener
@@ -469,12 +475,14 @@
     }
   })
 
-  // Login forms that arrive after the initial scan (SPA navigations, a login
-  // modal injected on click, content loaded behind an XHR) never went through
-  // detectLoginForm() at all before this — init() only ran once, at load. Any
-  // later-added password field is invisible to autofill until something re-runs
-  // detection. Re-scanning on every DOM mutation is wasteful, so this only acts
-  // when a password field actually shows up that init() hasn't seen yet.
+  // Fields that arrive after the initial scan (SPA navigations, a modal injected
+  // on click, content loaded behind an XHR) never went through detection at all
+  // before this — both init() (login forms) and scanAndPopulatePersonalInfoFields()
+  // (name/email/phone/address fields) only ran once, at load. Re-scanning on every
+  // DOM mutation is wasteful, so this only acts when a plausible new <input> shows
+  // up. scanAndPopulatePersonalInfoFields()/attachVaultTag() are idempotent (they
+  // skip fields already tagged/filled), so re-running them on every such mutation
+  // is safe, just a little redundant.
   let rescanScheduled = false
   function scheduleRescan() {
     if (rescanScheduled) return
@@ -482,6 +490,7 @@
     setTimeout(() => {
       rescanScheduled = false
       init()
+      scanAndPopulatePersonalInfoFields()
     }, 250)
   }
 
@@ -489,8 +498,8 @@
     for (const mutation of mutations) {
       for (const node of mutation.addedNodes) {
         if (node.nodeType !== 1) continue
-        if (node.matches && node.matches('input[type="password"]')) { scheduleRescan(); return }
-        if (node.querySelector && node.querySelector('input[type="password"]')) { scheduleRescan(); return }
+        if (node.matches && node.matches('input')) { scheduleRescan(); return }
+        if (node.querySelector && node.querySelector('input')) { scheduleRescan(); return }
       }
     }
   })
@@ -509,6 +518,60 @@
     'address.country': ['input[name="country"]', 'input[id="country"]', 'input[autocomplete="country-name"]', 'input[placeholder*="Country" i]']
   }
 
+  // Fallback for fields the exact selectors above miss — id="firstName-field",
+  // name="first_name_input", aria-label="First name", etc. Each keyword is
+  // matched as a whole word/phrase against a normalized signal string (never a
+  // raw substring), so "state" doesn't match inside "statement" and "address"
+  // doesn't match inside "email address" ahead of the email check.
+  const SIGNUP_FIELD_KEYWORDS = {
+    firstName: ['first name', 'given name', 'firstname', 'fname'],
+    lastName: ['last name', 'family name', 'surname', 'lastname', 'lname'],
+    email: ['email', 'e mail', 'email address'],
+    phone: ['phone', 'phone number', 'mobile', 'mobile number', 'cell phone', 'telephone'],
+    'address.street': ['street address', 'address line 1', 'address line1', 'mailing address', 'street'],
+    'address.city': ['city', 'town'],
+    'address.state': ['state', 'province'],
+    'address.zip': ['zip code', 'zip', 'postal code', 'postcode'],
+    'address.country': ['country']
+  }
+
+  // Whole-word/phrase containment: pads both sides with spaces so a match can
+  // only land on a real word boundary, not a substring buried inside a longer
+  // word (e.g. "state" must not match "statement").
+  function normalizedIncludesPhrase(normalized, phrase) {
+    return (' ' + normalized + ' ').indexOf(' ' + phrase + ' ') !== -1
+  }
+
+  // Every raw signal a field carries that a person (or the reviewer flagging
+  // this gap) would recognize the field by — not just the single "best" one
+  // getFieldLabel picks for display, but all of them, since a fallback match
+  // only needs ONE to hit.
+  function fieldSignalStrings(el) {
+    const out = []
+    if (el.name) out.push(el.name)
+    if (el.id) out.push(el.id)
+    const ariaLabel = el.getAttribute('aria-label')
+    if (ariaLabel) out.push(ariaLabel)
+    if (el.placeholder) out.push(el.placeholder)
+    if (el.labels && el.labels.length) {
+      for (const l of el.labels) if (l.textContent) out.push(l.textContent)
+    }
+    return out
+  }
+
+  function matchSignupFieldTypeByKeywords(el) {
+    const signals = fieldSignalStrings(el).map(normalizeLabel)
+    for (const fieldType in SIGNUP_FIELD_KEYWORDS) {
+      const keywords = SIGNUP_FIELD_KEYWORDS[fieldType]
+      for (const signal of signals) {
+        for (const keyword of keywords) {
+          if (normalizedIncludesPhrase(signal, keyword)) return fieldType
+        }
+      }
+    }
+    return null
+  }
+
   const filledSignupFields = new WeakSet()
 
   function matchSignupFieldType(el) {
@@ -520,7 +583,7 @@
     for (const fieldType in SIGNUP_FIELD_MAP) {
       if (fieldMatchesSelectors(el, SIGNUP_FIELD_MAP[fieldType])) return fieldType
     }
-    return null
+    return matchSignupFieldTypeByKeywords(el)
   }
 
   // Fingerprint/WebAuthn cannot be triggered from here: the credential is bound to
