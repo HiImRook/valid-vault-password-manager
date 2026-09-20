@@ -352,6 +352,26 @@ const PENDING_SAVE_TTL_MS = 45000
 // unboundedly; the oldest entry is dropped to make room for a new one.
 const PENDING_SAVE_MAX_PER_TAB = 5
 
+// stagePendingSave/takePendingSave/resolvePendingSave are each read-modify-write
+// on the same chrome.storage.session key. The onMessage listener invokes them
+// in the order their messages arrive, but each one awaits storage I/O before
+// writing back — so two calls for the same tab, invoked back to back, could
+// otherwise interleave (e.g. resolvePendingSave's read landing before
+// stagePendingSave's write has actually committed, so the resolve finds
+// nothing to remove and the just-staged record is stuck until TTL expiry).
+// This chains all three onto one per-tab promise queue so each call's full
+// body finishes before the next one for that tab starts, regardless of how
+// their internal awaits would otherwise interleave.
+const tabPendingSaveLocks = new Map()
+function withPendingSaveLock(tabId, fn) {
+  const prevTail = tabPendingSaveLocks.get(tabId) || Promise.resolve()
+  const result = prevTail.then(fn, fn)
+  // Keep the chain alive even if fn throws, so one failure doesn't wedge
+  // every later operation for this tab.
+  tabPendingSaveLocks.set(tabId, result.then(() => {}, () => {}))
+  return result
+}
+
 // Each tab holds a MAP of id -> entry (not a single record), so two
 // submissions in the same tab within the TTL window stage as two independent
 // records instead of the second silently overwriting the first. The caller
@@ -361,18 +381,20 @@ const PENDING_SAVE_MAX_PER_TAB = 5
 async function stagePendingSave(sender, id, domain, username, password, extraFields) {
   const tabId = sender && sender.tab && sender.tab.id
   if (tabId === undefined || tabId === null || !id) return
-  const key = 'pendingSave_' + tabId
-  try {
-    const stored = await chrome.storage.session.get(key)
-    const map = (stored && stored[key]) || {}
-    map[id] = { domain, username, password, extraFields, ts: Date.now() }
-    const ids = Object.keys(map)
-    if (ids.length > PENDING_SAVE_MAX_PER_TAB) {
-      ids.sort((a, b) => map[a].ts - map[b].ts)
-      for (let i = 0; i < ids.length - PENDING_SAVE_MAX_PER_TAB; i++) delete map[ids[i]]
-    }
-    await chrome.storage.session.set({ [key]: map })
-  } catch (e) {}
+  return withPendingSaveLock(tabId, async () => {
+    const key = 'pendingSave_' + tabId
+    try {
+      const stored = await chrome.storage.session.get(key)
+      const map = (stored && stored[key]) || {}
+      map[id] = { domain, username, password, extraFields, ts: Date.now() }
+      const ids = Object.keys(map)
+      if (ids.length > PENDING_SAVE_MAX_PER_TAB) {
+        ids.sort((a, b) => map[a].ts - map[b].ts)
+        for (let i = 0; i < ids.length - PENDING_SAVE_MAX_PER_TAB; i++) delete map[ids[i]]
+      }
+      await chrome.storage.session.set({ [key]: map })
+    } catch (e) {}
+  })
 }
 
 // Returns the OLDEST still-live entry (FIFO), so a page that resolves it in
@@ -382,24 +404,26 @@ async function stagePendingSave(sender, id, domain, username, password, extraFie
 async function takePendingSave(sender) {
   const tabId = sender && sender.tab && sender.tab.id
   if (tabId === undefined || tabId === null) return { found: false }
-  const key = 'pendingSave_' + tabId
-  try {
-    const stored = await chrome.storage.session.get(key)
-    const map = (stored && stored[key]) || {}
-    const now = Date.now()
-    let changed = false
-    let oldestId = null
-    for (const id of Object.keys(map)) {
-      if (now - map[id].ts > PENDING_SAVE_TTL_MS) { delete map[id]; changed = true; continue }
-      if (!oldestId || map[id].ts < map[oldestId].ts) oldestId = id
+  return withPendingSaveLock(tabId, async () => {
+    const key = 'pendingSave_' + tabId
+    try {
+      const stored = await chrome.storage.session.get(key)
+      const map = (stored && stored[key]) || {}
+      const now = Date.now()
+      let changed = false
+      let oldestId = null
+      for (const id of Object.keys(map)) {
+        if (now - map[id].ts > PENDING_SAVE_TTL_MS) { delete map[id]; changed = true; continue }
+        if (!oldestId || map[id].ts < map[oldestId].ts) oldestId = id
+      }
+      if (changed) await chrome.storage.session.set({ [key]: map })
+      if (!oldestId) return { found: false }
+      const entry = map[oldestId]
+      return { found: true, id: oldestId, domain: entry.domain, username: entry.username, password: entry.password, extraFields: entry.extraFields }
+    } catch (e) {
+      return { found: false }
     }
-    if (changed) await chrome.storage.session.set({ [key]: map })
-    if (!oldestId) return { found: false }
-    const entry = map[oldestId]
-    return { found: true, id: oldestId, domain: entry.domain, username: entry.username, password: entry.password, extraFields: entry.extraFields }
-  } catch (e) {
-    return { found: false }
-  }
+  })
 }
 
 // Called once the user actually acts on the resulting save prompt (Save or Not
@@ -409,15 +433,17 @@ async function takePendingSave(sender) {
 async function resolvePendingSave(sender, id) {
   const tabId = sender && sender.tab && sender.tab.id
   if (tabId === undefined || tabId === null || !id) return
-  const key = 'pendingSave_' + tabId
-  try {
-    const stored = await chrome.storage.session.get(key)
-    const map = stored && stored[key]
-    if (!map) return
-    delete map[id]
-    if (Object.keys(map).length === 0) await chrome.storage.session.remove(key)
-    else await chrome.storage.session.set({ [key]: map })
-  } catch (e) {}
+  return withPendingSaveLock(tabId, async () => {
+    const key = 'pendingSave_' + tabId
+    try {
+      const stored = await chrome.storage.session.get(key)
+      const map = stored && stored[key]
+      if (!map) return
+      delete map[id]
+      if (Object.keys(map).length === 0) await chrome.storage.session.remove(key)
+      else await chrome.storage.session.set({ [key]: map })
+    } catch (e) {}
+  })
 }
 
 // ---- Inactivity soft/hard lock (driven by the service worker) ----
