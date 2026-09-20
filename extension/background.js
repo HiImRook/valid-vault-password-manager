@@ -305,8 +305,56 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
     sendResponse({ success: true })
     return false
   }
+  if (request.action === 'stagePendingSave') {
+    stagePendingSave(sender, request.domain, request.username, request.password, request.extraFields)
+      .then(function () { sendResponse({ success: true }) })
+    return true
+  }
+  if (request.action === 'takePendingSaveForDomain') {
+    takePendingSaveForDomain(sender, request.domain).then(sendResponse)
+    return true
+  }
   return false
 })
+
+// ---- Pending save (survives a submit-triggered navigation) ----
+//
+// A form submit captures username/password synchronously, but checking whether
+// that credential is already saved is async — and a real submit can navigate
+// (or tear the content script down) before that check resolves, losing the save
+// prompt entirely. Staging the capture here, keyed by tab, lets whatever page
+// loads next in that same tab pick the prompt back up. Scoped per-tab (not just
+// per-domain) so two tabs mid-login don't clobber each other, and one-shot +
+// short-lived so a stale entry can't resurface a save prompt on an unrelated
+// later visit to the same domain.
+const PENDING_SAVE_TTL_MS = 30000
+
+async function stagePendingSave(sender, domain, username, password, extraFields) {
+  const tabId = sender && sender.tab && sender.tab.id
+  if (tabId === undefined || tabId === null) return
+  try {
+    await chrome.storage.session.set({
+      ['pendingSave_' + tabId]: { domain, username, password, extraFields, ts: Date.now() }
+    })
+  } catch (e) {}
+}
+
+async function takePendingSaveForDomain(sender, domain) {
+  const tabId = sender && sender.tab && sender.tab.id
+  if (tabId === undefined || tabId === null) return { found: false }
+  const key = 'pendingSave_' + tabId
+  try {
+    const stored = await chrome.storage.session.get(key)
+    const entry = stored && stored[key]
+    await chrome.storage.session.remove(key)  // one-shot regardless of match
+    if (!entry) return { found: false }
+    if (entry.domain !== domain) return { found: false }
+    if (Date.now() - entry.ts > PENDING_SAVE_TTL_MS) return { found: false }
+    return { found: true, username: entry.username, password: entry.password, extraFields: entry.extraFields }
+  } catch (e) {
+    return { found: false }
+  }
+}
 
 // ---- Inactivity soft/hard lock (driven by the service worker) ----
 

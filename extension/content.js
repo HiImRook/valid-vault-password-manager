@@ -14,19 +14,50 @@
   let passwordField = null
   let dropdown = null
 
+  // Shared low-level matcher: both the login-username heuristic and the signup/
+  // personal-info classifier (matchSignupFieldType, below) run candidate fields
+  // through the same selector-list check, instead of each hand-rolling its own
+  // matching logic. Keeps the two classifiers from silently disagreeing about
+  // what a given input actually is.
+  function fieldMatchesSelectors(el, selectors) {
+    for (let i = 0; i < selectors.length; i++) {
+      if (el.matches(selectors[i])) return true
+    }
+    return false
+  }
+
+  // Used only to PREFER a candidate within detectLoginForm's existing pool of
+  // visible text/email/tel inputs — it never narrows that pool. If nothing
+  // matches, the previous behavior (first visible candidate) still applies, so
+  // this can only make matching better on sites that already worked, not break
+  // them.
+  const USERNAME_SELECTORS = [
+    'input[autocomplete="username"]',
+    'input[autocomplete="email"]',
+    'input[type="email"]',
+    'input[name*="user" i]',
+    'input[id*="user" i]',
+    'input[name*="email" i]',
+    'input[id*="email" i]',
+    'input[name="login"]',
+    'input[id="login"]',
+    'input[placeholder*="email" i]',
+    'input[placeholder*="username" i]',
+    'input[placeholder*="login" i]'
+  ]
+
   function detectLoginForm() {
     const pwFields = document.querySelectorAll('input[type="password"]')
     if (pwFields.length === 0) return null
 
     for (const pwField of pwFields) {
       const form = pwField.closest('form') || document
-      const inputs = form.querySelectorAll('input[type="text"], input[type="email"], input[type="tel"]')
-      
-      for (const input of inputs) {
-        if (input.offsetParent !== null) {
-          return { username: input, password: pwField }
-        }
-      }
+      const candidates = Array.from(form.querySelectorAll('input[type="text"], input[type="email"], input[type="tel"]'))
+        .filter((input) => input.offsetParent !== null)
+      if (candidates.length === 0) continue
+
+      const best = candidates.find((input) => fieldMatchesSelectors(input, USERNAME_SELECTORS)) || candidates[0]
+      return { username: best, password: pwField }
     }
     return null
   }
@@ -313,12 +344,7 @@
     }
   }
 
-  async function captureAndPrompt() {
-    if (!usernameField && !passwordField) return
-    const u = usernameField ? usernameField.value : ''
-    const p = passwordField ? passwordField.value : ''
-    if (!p) return  // no password, nothing to save
-    const extras = collectExtraFields()
+  async function maybePromptSave(u, p, extras) {
     let existing = null
     try {
       const result = await chrome.runtime.sendMessage({ action: 'getCredentialsForDomain', domain: currentDomain })
@@ -326,6 +352,37 @@
     } catch (e) {}
     if (existing && existing.password === p && sameExtraFields(existing.extraFields, extras)) return  // already saved, nothing changed
     showSavePrompt(currentDomain, u, p, !!existing, extras)
+  }
+
+  async function captureAndPrompt() {
+    if (!usernameField && !passwordField) return
+    const u = usernameField ? usernameField.value : ''
+    const p = passwordField ? passwordField.value : ''
+    if (!p) return  // no password, nothing to save
+    const extras = collectExtraFields()
+
+    // Stage a copy in background.js BEFORE the async existing-credential lookup
+    // below. A real submit can navigate away — or tear down this whole content
+    // script — before that lookup's promise resolves, silently losing the save
+    // prompt. The staged copy survives navigation; checkPendingSave() picks it
+    // up on whatever page loads next, if this document doesn't get the chance.
+    try {
+      chrome.runtime.sendMessage({ action: 'stagePendingSave', domain: currentDomain, username: u, password: p, extraFields: extras })
+    } catch (e) {}
+
+    await maybePromptSave(u, p, extras)
+  }
+
+  // Checked once per page load. If the previous page's submit got cut off by
+  // navigation before it could show its own save prompt, this is where that
+  // prompt actually appears.
+  async function checkPendingSave() {
+    let pending
+    try {
+      pending = await chrome.runtime.sendMessage({ action: 'takePendingSaveForDomain', domain: currentDomain })
+    } catch (e) { return }
+    if (!pending || !pending.found) return
+    await maybePromptSave(pending.username, pending.password, pending.extraFields)
   }
 
   function wireSubmitCapture() {
@@ -349,12 +406,25 @@
     }, true)
   }
 
+  // Fields already wired get their listeners attached exactly once, even though
+  // init() itself may run again later (see the MutationObserver below) when a
+  // form is injected into the page after the initial scan.
+  const wiredPasswordFields = new WeakSet()
+
   function init() {
     const fields = detectLoginForm()
     if (!fields) return
+    if (wiredPasswordFields.has(fields.password)) {
+      // Same form as last time (observer re-fired on an unrelated DOM change) —
+      // just make sure the module-level refs still point at it.
+      usernameField = fields.username
+      passwordField = fields.password
+      return
+    }
 
     usernameField = fields.username
     passwordField = fields.password
+    wiredPasswordFields.add(passwordField)
 
     usernameField.setAttribute('autocomplete', 'off')
     passwordField.setAttribute('autocomplete', 'off')
@@ -362,14 +432,43 @@
     usernameField.addEventListener('focus', (e) => { showDropdown(usernameField); e.stopImmediatePropagation() }, true)
     passwordField.addEventListener('focus', (e) => { showDropdown(passwordField); e.stopImmediatePropagation() }, true)
     wireSubmitCapture()
-
-    document.addEventListener('click', (e) => {
-      if (!dropdown) return
-      if (!dropdown.host.contains(e.target) && e.target !== usernameField) {
-        hideDropdown()
-      }
-    })
   }
+
+  // Registered once (not per-init call) since it only reads the current
+  // usernameField/passwordField refs rather than binding to a specific form.
+  document.addEventListener('click', (e) => {
+    if (!dropdown) return
+    if (!dropdown.host.contains(e.target) && e.target !== usernameField) {
+      hideDropdown()
+    }
+  })
+
+  // Login forms that arrive after the initial scan (SPA navigations, a login
+  // modal injected on click, content loaded behind an XHR) never went through
+  // detectLoginForm() at all before this — init() only ran once, at load. Any
+  // later-added password field is invisible to autofill until something re-runs
+  // detection. Re-scanning on every DOM mutation is wasteful, so this only acts
+  // when a password field actually shows up that init() hasn't seen yet.
+  let rescanScheduled = false
+  function scheduleRescan() {
+    if (rescanScheduled) return
+    rescanScheduled = true
+    setTimeout(() => {
+      rescanScheduled = false
+      init()
+    }, 250)
+  }
+
+  const formObserver = new MutationObserver((mutations) => {
+    for (const mutation of mutations) {
+      for (const node of mutation.addedNodes) {
+        if (node.nodeType !== 1) continue
+        if (node.matches && node.matches('input[type="password"]')) { scheduleRescan(); return }
+        if (node.querySelector && node.querySelector('input[type="password"]')) { scheduleRescan(); return }
+      }
+    }
+  })
+  formObserver.observe(document.documentElement, { childList: true, subtree: true })
 
 
   const SIGNUP_FIELD_MAP = {
@@ -387,11 +486,13 @@
   const filledSignupFields = new WeakSet()
 
   function matchSignupFieldType(el) {
+    // The login form's own username/password fields are owned by the login-detection
+    // path (detectLoginForm/isTrackedField), never the signup/personal-info one — a
+    // field otherwise matching e.g. the email pattern shouldn't also grow a "fill
+    // from profile" tag while it's actively serving as the login username.
+    if (isTrackedField(el)) return null
     for (const fieldType in SIGNUP_FIELD_MAP) {
-      const selectors = SIGNUP_FIELD_MAP[fieldType]
-      for (let i = 0; i < selectors.length; i++) {
-        if (el.matches(selectors[i])) return fieldType
-      }
+      if (fieldMatchesSelectors(el, SIGNUP_FIELD_MAP[fieldType])) return fieldType
     }
     return null
   }
@@ -600,15 +701,18 @@
     }
   }
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', scanAndPopulatePersonalInfoFields)
-  } else {
+  // init() must run first: it sets usernameField/passwordField, which
+  // matchSignupFieldType (via isTrackedField) relies on to keep the login form's
+  // own fields out of the signup/personal-info scan below.
+  function bootstrap() {
+    init()
     scanAndPopulatePersonalInfoFields()
+    checkPendingSave()
   }
 
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init)
+    document.addEventListener('DOMContentLoaded', bootstrap)
   } else {
-    init()
+    bootstrap()
   }
 })()
