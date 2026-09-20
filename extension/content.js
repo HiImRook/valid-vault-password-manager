@@ -2,6 +2,13 @@
   if (window.localVaultInjected) return
   window.localVaultInjected = true
 
+  // background.js's inactivity timer only resets on an explicit 'activity' message.
+  // Without this, actively using autofill on a page doesn't count as activity, and
+  // the vault can lock mid-use even while the person is right there working with it.
+  function pingActivity() {
+    try { chrome.runtime.sendMessage({ action: 'activity' }) } catch (e) {}
+  }
+
   let currentDomain = window.location.hostname
   let usernameField = null
   let passwordField = null
@@ -144,15 +151,24 @@
   }
 
   function fillCredentials(cred) {
-    if (usernameField) usernameField.value = cred.username
-    if (passwordField) passwordField.value = cred.password
+    pingActivity()
+    if (usernameField) {
+      usernameField.value = cred.username
+      usernameField.dispatchEvent(new Event('input', { bubbles: true }))
+      usernameField.dispatchEvent(new Event('change', { bubbles: true }))
+    }
+    if (passwordField) {
+      passwordField.value = cred.password
+      passwordField.dispatchEvent(new Event('input', { bubbles: true }))
+      passwordField.dispatchEvent(new Event('change', { bubbles: true }))
+    }
     if (cred.extraFields && cred.extraFields.length) {
       const form = (passwordField && passwordField.closest('form')) || document
       const candidates = form.querySelectorAll('input')
       for (const el of candidates) {
         if (isTrackedField(el)) continue
         if (el.type === 'password' || el.type === 'hidden' || el.value) continue
-        const match = cred.extraFields.find((f) => f.label === getFieldLabel(el))
+        const match = cred.extraFields.find((f) => normalizeLabel(f.label) === normalizeLabel(getFieldLabel(el)))
         if (match) {
           el.value = match.value
           el.dispatchEvent(new Event('input', { bubbles: true }))
@@ -170,6 +186,19 @@
   // settings page, and saved alongside the login it was typed next to.
   function isTrackedField(el) {
     return el === usernameField || el === passwordField
+  }
+
+  // A saved label and a freshly-read one rarely come back byte-identical: sites
+  // tweak whitespace, capitalization, or a trailing colon/asterisk without changing
+  // what the field actually is. Matching should tolerate that; the label shown to
+  // the user stays whatever was originally captured.
+  function normalizeLabel(label) {
+    return (label || '')
+      .toLowerCase()
+      .replace(/[:*]+$/g, '')
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim()
+      .replace(/\s+/g, ' ')
   }
 
   function getFieldLabel(el) {
@@ -203,9 +232,9 @@
     const a = existingExtras || []
     const b = newExtras || []
     if (a.length !== b.length) return false
-    const byLabel = new Map(a.map((f) => [f.label, f.value]))
+    const byLabel = new Map(a.map((f) => [normalizeLabel(f.label), f.value]))
     for (const f of b) {
-      if (byLabel.get(f.label) !== f.value) return false
+      if (byLabel.get(normalizeLabel(f.label)) !== f.value) return false
     }
     return true
   }
@@ -270,6 +299,7 @@
     const close = () => { savePrompt.host.style.display = 'none' }
     savePrompt.shadow.getElementById('sp-cancel').onclick = close
     savePrompt.shadow.getElementById('sp-save').onclick = async () => {
+      pingActivity()
       const msgEl = savePrompt.shadow.getElementById('sp-msg')
       const result = await chrome.runtime.sendMessage({ action: 'saveCredential', domain, username, password, extraFields })
       if (result && result.locked) {
@@ -378,6 +408,7 @@
     const pw = window.prompt('Vault is locked. Enter your password to unlock:')
     if (!pw) return false
     const result = await chrome.runtime.sendMessage({ action: 'authenticateWithPassword', password: pw })
+    if (result && result.success) pingActivity()
     return !!(result && result.success)
   }
 
@@ -460,6 +491,7 @@
     tag.onclick = (e) => {
       e.preventDefault()
       e.stopPropagation()
+      pingActivity()
       if (fieldType === 'email') {
         showEmailPicker(el)
       } else {
@@ -517,6 +549,7 @@
         item.className = 'item'
         item.textContent = email
         item.onclick = () => {
+          pingActivity()
           field.setAttribute('autocomplete', 'off')
           field.value = email
           field.dispatchEvent(new Event('input', { bubbles: true }))

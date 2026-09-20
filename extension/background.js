@@ -143,6 +143,7 @@ async function credentialsForDomain(domain) {
   const key = await crypto.subtle.importKey('raw', new Uint8Array(bytes), { name: 'AES-GCM', length: 256 }, false, ['decrypt'])
   const out = []
   for (const cred of vault.credentials[domain]) {
+    if (cred.deleted) continue
     try {
       out.push({
         id: cred.id,
@@ -161,6 +162,18 @@ async function encryptField(text, key) {
   const iv = crypto.getRandomValues(new Uint8Array(12))
   const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv }, key, new TextEncoder().encode(text))
   return { iv: Array.from(iv), ciphertext: Array.from(new Uint8Array(ct)) }
+}
+
+// Mirrors content.js's normalizeLabel: a saved label and a freshly-typed one rarely
+// come back byte-identical, so matching tolerates whitespace/case/punctuation drift
+// while the originally-captured label stays what's displayed.
+function normalizeLabel(label) {
+  return (label || '')
+    .toLowerCase()
+    .replace(/[:*]+$/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .replace(/\s+/g, ' ')
 }
 
 async function encryptExtraFields(extraFields, key) {
@@ -235,8 +248,8 @@ async function saveCredential(domain, username, password, extraFields) {
   const mergedExtraFields = existingExtraFields.slice()
   for (const field of (extraFields || [])) {
     if (!field || !field.label || !field.value) continue
-    const idx = mergedExtraFields.findIndex(f => f.label === field.label)
-    if (idx !== -1) mergedExtraFields[idx] = { label: field.label, value: field.value }
+    const idx = mergedExtraFields.findIndex(f => normalizeLabel(f.label) === normalizeLabel(field.label))
+    if (idx !== -1) mergedExtraFields[idx] = { label: mergedExtraFields[idx].label, value: field.value }
     else mergedExtraFields.push({ label: field.label, value: field.value })
   }
 
