@@ -17,13 +17,45 @@
   // that tracker. Falls back to a plain assignment for anything without one
   // (plain HTML pages, older engines) — this can only help, never regress.
   function setNativeValue(el, value) {
-    const proto = el.tagName === 'TEXTAREA' ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype
+    const proto = el.tagName === 'TEXTAREA'
+      ? window.HTMLTextAreaElement.prototype
+      : el.tagName === 'SELECT'
+        ? window.HTMLSelectElement.prototype
+        : window.HTMLInputElement.prototype
     const descriptor = Object.getOwnPropertyDescriptor(proto, 'value')
     if (descriptor && descriptor.set) {
       descriptor.set.call(el, value)
     } else {
       el.value = value
     }
+  }
+
+  // A <select>'s value has to be one of its own <option> values — assigning an
+  // arbitrary string (a saved "United States" against options keyed "US", say)
+  // silently clears the selection instead of picking anything, which is worse
+  // than leaving it untouched. Tries an exact option value match first, then a
+  // normalized match against either the option's value or its visible text
+  // (handles "US" vs "United States", casing, punctuation). Returns whether
+  // anything was actually selected, so callers only dispatch input/change and
+  // mark the field filled when a real match was found.
+  function setSelectValue(el, value) {
+    if (value === undefined || value === null) return false
+    const normTarget = normalizeLabel(String(value))
+    let matchOption = null
+    for (const opt of el.options) {
+      if (opt.value === value) { matchOption = opt; break }
+    }
+    if (!matchOption) {
+      for (const opt of el.options) {
+        if (normalizeLabel(opt.value) === normTarget || normalizeLabel(opt.textContent) === normTarget) {
+          matchOption = opt
+          break
+        }
+      }
+    }
+    if (!matchOption) return false
+    setNativeValue(el, matchOption.value)
+    return true
   }
 
   let currentDomain = window.location.hostname
@@ -226,15 +258,18 @@
     }
     if (cred.extraFields && cred.extraFields.length) {
       const form = (password && password.closest('form')) || document
-      const candidates = form.querySelectorAll('input')
+      const candidates = form.querySelectorAll('input, textarea, select')
       for (const el of candidates) {
         if (isTrackedField(el)) continue
-        if (el.type === 'password' || el.type === 'hidden' || el.value) continue
+        if (el.tagName === 'INPUT' && (el.type === 'password' || el.type === 'hidden')) continue
+        if (el.value) continue
         const match = cred.extraFields.find((f) => normalizeLabel(f.label) === normalizeLabel(getFieldLabel(el)))
         if (match) {
-          setNativeValue(el, match.value)
-          el.dispatchEvent(new Event('input', { bubbles: true }))
-          el.dispatchEvent(new Event('change', { bubbles: true }))
+          const filled = el.tagName === 'SELECT' ? setSelectValue(el, match.value) : (setNativeValue(el, match.value), true)
+          if (filled) {
+            el.dispatchEvent(new Event('input', { bubbles: true }))
+            el.dispatchEvent(new Event('change', { bubbles: true }))
+          }
         }
       }
     }
@@ -277,10 +312,10 @@
   function collectExtraFields(passwordField) {
     if (!passwordField) return []
     const form = passwordField.closest('form') || document
-    const inputs = form.querySelectorAll('input')
+    const fields = form.querySelectorAll('input, textarea, select')
     const extras = []
-    for (const el of inputs) {
-      if (['password', 'hidden', 'submit', 'button', 'checkbox', 'radio'].indexOf(el.type) !== -1) continue
+    for (const el of fields) {
+      if (el.tagName === 'INPUT' && ['password', 'hidden', 'submit', 'button', 'checkbox', 'radio'].indexOf(el.type) !== -1) continue
       if (isTrackedField(el)) continue
       if (matchSignupFieldType(el)) continue
       if (el.offsetParent === null) continue
@@ -473,9 +508,34 @@
   // the lifetime of the page even after the form itself is long gone from the
   // DOM (an SPA that mounts/unmounts a login form repeatedly would otherwise
   // accumulate one such listener, and its retained closure, per mount).
+  // A password field with no wrapping <form> (a custom login widget built out
+  // of plain divs) has no natural boundary to scope a "nearby button" heuristic
+  // to — falling back to "every button on the page belongs to this field" meant
+  // that a page with two SEPARATE formless widgets would fire BOTH widgets'
+  // capture on a click anywhere, since each one's listener treated the whole
+  // document as its own. This walks up from the password field looking for the
+  // smallest ancestor that already contains a button-like control, and uses
+  // that as the pseudo-form boundary instead — the two widgets' own containers
+  // are typically disjoint, so a click inside one no longer falsely belongs to
+  // the other. Capped depth so a field with no reasonable container (badly
+  // flattened markup) doesn't walk all the way up to <body> and lose the
+  // scoping benefit entirely; that rare case still falls back to page-wide,
+  // matching the old behavior, rather than refusing to work at all.
+  function findFormlessContainer(field) {
+    let el = field.parentElement
+    let depth = 0
+    while (el && el !== document.body && depth < 8) {
+      if (el.querySelector('button, input[type="submit"], input[type="button"]')) return el
+      el = el.parentElement
+      depth++
+    }
+    return null
+  }
+
   function wireSubmitCapture(formFields) {
     const password = formFields.password
     const form = password.closest('form')
+    const container = form || findFormlessContainer(password)
 
     const submitHandler = function () { captureAndPrompt(formFields) }
     if (form) form.addEventListener('submit', submitHandler, true)
@@ -491,10 +551,10 @@
       const t = e.target
       if (!t) return
       const isBtn = (t.tagName === 'BUTTON') || (t.tagName === 'INPUT' && (t.type === 'submit' || t.type === 'button'))
-      // If this form has a real <form> element, only react to a button that's
-      // actually inside it — otherwise every wired form's listener would fire
-      // on every button click on the page, not just its own.
-      const belongsToThisForm = form ? form.contains(t) : true
+      // Scoped to the real <form>, or the nearest formless container found
+      // above — only falling all the way back to page-wide when neither
+      // exists, instead of doing that for every formless widget by default.
+      const belongsToThisForm = container ? container.contains(t) : true
       if (isBtn && belongsToThisForm && password.value) {
         setTimeout(() => captureAndPrompt(formFields), 50)
       }
@@ -624,25 +684,29 @@
   // is picked up by detectLoginForm() too, not just the personal-info scan.
   const WATCHED_DYNAMIC_ATTRS = ['name', 'id', 'autocomplete', 'aria-label', 'placeholder', 'type']
 
+  // textarea/select included alongside input now that personal-info discovery
+  // covers them too (see scanAndPopulatePersonalInfoFields).
+  const DISCOVERABLE_FIELDS_SELECTOR = 'input, textarea, select'
+
   const formObserver = new MutationObserver((mutations) => {
     for (const mutation of mutations) {
       if (mutation.type === 'attributes') {
         const el = mutation.target
-        if (el && el.nodeType === 1 && el.tagName === 'INPUT') { scheduleRescan(); return }
+        if (el && el.nodeType === 1 && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT')) { scheduleRescan(); return }
         continue
       }
       for (const node of mutation.addedNodes) {
         if (node.nodeType !== 1) continue
-        if (node.matches && node.matches('input')) { scheduleRescan(); return }
-        if (node.querySelector && node.querySelector('input')) { scheduleRescan(); return }
+        if (node.matches && node.matches(DISCOVERABLE_FIELDS_SELECTOR)) { scheduleRescan(); return }
+        if (node.querySelector && node.querySelector(DISCOVERABLE_FIELDS_SELECTOR)) { scheduleRescan(); return }
       }
       // Removed nodes matter too now — that's what lets cleanupDetachedState()
       // above actually run promptly instead of only whenever something else
       // happens to add a new input later.
       for (const node of mutation.removedNodes) {
         if (node.nodeType !== 1) continue
-        if (node.matches && node.matches('input')) { scheduleRescan(); return }
-        if (node.querySelector && node.querySelector('input')) { scheduleRescan(); return }
+        if (node.matches && node.matches(DISCOVERABLE_FIELDS_SELECTOR)) { scheduleRescan(); return }
+        if (node.querySelector && node.querySelector(DISCOVERABLE_FIELDS_SELECTOR)) { scheduleRescan(); return }
       }
     }
   })
@@ -818,7 +882,10 @@
     const response = await chrome.runtime.sendMessage({ action: 'getPersonalInfoField', fieldType })
     if (response && response.success && response.value) {
       el.setAttribute('autocomplete', 'off')
-      setNativeValue(el, response.value)
+      // A <select> (state/country dropdowns are the common case) only counts
+      // as filled if one of its actual options matched — see setSelectValue.
+      const filled = el.tagName === 'SELECT' ? setSelectValue(el, response.value) : (setNativeValue(el, response.value), true)
+      if (!filled) return false
       el.dispatchEvent(new Event('input', { bubbles: true }))
       el.dispatchEvent(new Event('change', { bubbles: true }))
       filledSignupFields.add(el)
@@ -834,11 +901,14 @@
     const response = await chrome.runtime.sendMessage({ action: 'getPersonalInfoField', fieldType })
     if (response && response.success && response.value) {
       el.setAttribute('autocomplete', 'off')
-      setNativeValue(el, response.value)
-      el.dispatchEvent(new Event('input', { bubbles: true }))
-      el.dispatchEvent(new Event('change', { bubbles: true }))
-      filledSignupFields.add(el)
-      return true
+      const filled = el.tagName === 'SELECT' ? setSelectValue(el, response.value) : (setNativeValue(el, response.value), true)
+      if (filled) {
+        el.dispatchEvent(new Event('input', { bubbles: true }))
+        el.dispatchEvent(new Event('change', { bubbles: true }))
+        filledSignupFields.add(el)
+        return true
+      }
+      return false
     }
     if (response && response.locked) {
       const unlocked = await unlockInline()
@@ -996,15 +1066,23 @@
     await fillPersonalInfoField(el, fieldType)
   }
 
+  // Personal-info fields aren't always plain <input>s — a state/country picker
+  // is very often a <select>, and a "notes"/address-line-2 style field is
+  // sometimes a <textarea>. Both expose the same name/id/autocomplete/label
+  // signals matchSignupFieldType() already reads, so no separate classifier
+  // is needed — only the discovery selectors below needed widening. Custom
+  // comboboxes (a div-based dropdown) and contenteditable fields have no such
+  // standard signal to key off of and are deliberately still out of scope.
   document.addEventListener('focus', (e) => {
-    if (e.target && e.target.tagName === 'INPUT') trySignupAutofill(e.target)
+    const t = e.target
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT')) trySignupAutofill(t)
   }, true)
 
   async function scanAndPopulatePersonalInfoFields() {
-    const inputs = document.querySelectorAll('input')
-    for (let i = 0; i < inputs.length; i++) {
-      const el = inputs[i]
-      if (el.type === 'password' || el.type === 'hidden') continue
+    const fields = document.querySelectorAll('input, textarea, select')
+    for (let i = 0; i < fields.length; i++) {
+      const el = fields[i]
+      if (el.tagName === 'INPUT' && (el.type === 'password' || el.type === 'hidden')) continue
       if (el.offsetParent === null) continue
       const fieldType = matchSignupFieldType(el)
       if (!fieldType) continue
