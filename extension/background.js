@@ -314,6 +314,11 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
     takePendingSave(sender).then(sendResponse)
     return true
   }
+  if (request.action === 'resolvePendingSave') {
+    resolvePendingSave(sender)
+      .then(function () { sendResponse({ success: true }) })
+    return true
+  }
   return false
 })
 
@@ -328,13 +333,20 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
 // Deliberately NOT filtered by domain. A login flow very often redirects through
 // a different hostname before landing on the page that should show the save
 // prompt (login.x.com -> x.com/dashboard, SSO, etc) — matching on domain meant
-// that extremely common case never worked at all. The only scoping left is: the
-// same tab (so two tabs mid-login can't clobber each other), one-shot (the first
-// page load after staging consumes it, whatever domain it's on), and a short TTL
-// (so it can't resurface on some unrelated page the user happens to open in that
-// tab much later). The staged domain always travels with the record and is what
-// actually gets saved — never the domain of the page that picked it up.
-const PENDING_SAVE_TTL_MS = 15000
+// that extremely common case never worked at all. The staged domain always
+// travels with the record and is what actually gets saved — never the domain of
+// the page that picked it up.
+//
+// Not one-shot-on-read either: a multi-hop flow (SSO consent screen, MFA step,
+// another intermediate redirect) means more than one page can load in the same
+// tab before the real destination — consuming the record on the FIRST of those
+// reads would show the prompt on a throwaway interstitial and then lose it for
+// good. Instead the record survives every read within the TTL, and is only
+// deleted when the resulting prompt is actually resolved (Save or Not now
+// clicked — resolvePendingSave) or when the TTL expires. Same tab scoping still
+// prevents two tabs mid-login from clobbering each other, and a fresh submit in
+// the same tab naturally overwrites whatever was staged before it.
+const PENDING_SAVE_TTL_MS = 45000
 
 async function stagePendingSave(sender, domain, username, password, extraFields) {
   const tabId = sender && sender.tab && sender.tab.id
@@ -354,12 +366,24 @@ async function takePendingSave(sender) {
     const stored = await chrome.storage.session.get(key)
     const entry = stored && stored[key]
     if (!entry) return { found: false }
-    await chrome.storage.session.remove(key)  // one-shot: consumed on the first read, any domain
-    if (Date.now() - entry.ts > PENDING_SAVE_TTL_MS) return { found: false }
+    if (Date.now() - entry.ts > PENDING_SAVE_TTL_MS) {
+      await chrome.storage.session.remove(key)
+      return { found: false }
+    }
+    // Deliberately not removed here — see the comment above. Cleared only by
+    // resolvePendingSave() or TTL expiry, so it survives intermediate hops.
     return { found: true, domain: entry.domain, username: entry.username, password: entry.password, extraFields: entry.extraFields }
   } catch (e) {
     return { found: false }
   }
+}
+
+// Called once the user actually acts on the resulting save prompt (Save or Not
+// now) so it stops reappearing on later pages in the same tab within the TTL.
+async function resolvePendingSave(sender) {
+  const tabId = sender && sender.tab && sender.tab.id
+  if (tabId === undefined || tabId === null) return
+  try { await chrome.storage.session.remove('pendingSave_' + tabId) } catch (e) {}
 }
 
 // ---- Inactivity soft/hard lock (driven by the service worker) ----

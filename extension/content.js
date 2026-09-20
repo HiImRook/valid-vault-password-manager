@@ -9,6 +9,23 @@
     try { chrome.runtime.sendMessage({ action: 'activity' }) } catch (e) {}
   }
 
+  // React (and similar frameworks) install their own value tracker over a plain
+  // `el.value = x` assignment, so setting it directly can leave the DOM showing
+  // the new value while the framework's internal state — and anything driven by
+  // its onChange — never sees the change. Calling the native prototype setter
+  // directly, before dispatching the input event, is what actually invalidates
+  // that tracker. Falls back to a plain assignment for anything without one
+  // (plain HTML pages, older engines) — this can only help, never regress.
+  function setNativeValue(el, value) {
+    const proto = el.tagName === 'TEXTAREA' ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype
+    const descriptor = Object.getOwnPropertyDescriptor(proto, 'value')
+    if (descriptor && descriptor.set) {
+      descriptor.set.call(el, value)
+    } else {
+      el.value = value
+    }
+  }
+
   let currentDomain = window.location.hostname
   let dropdown = null
   let dropdownOwnerField = null  // which field the currently-open dropdown belongs to
@@ -198,12 +215,12 @@
     const username = formFields && formFields.username
     const password = formFields && formFields.password
     if (username) {
-      username.value = cred.username
+      setNativeValue(username, cred.username)
       username.dispatchEvent(new Event('input', { bubbles: true }))
       username.dispatchEvent(new Event('change', { bubbles: true }))
     }
     if (password) {
-      password.value = cred.password
+      setNativeValue(password, cred.password)
       password.dispatchEvent(new Event('input', { bubbles: true }))
       password.dispatchEvent(new Event('change', { bubbles: true }))
     }
@@ -215,7 +232,7 @@
         if (el.type === 'password' || el.type === 'hidden' || el.value) continue
         const match = cred.extraFields.find((f) => normalizeLabel(f.label) === normalizeLabel(getFieldLabel(el)))
         if (match) {
-          el.value = match.value
+          setNativeValue(el, match.value)
           el.dispatchEvent(new Event('input', { bubbles: true }))
           el.dispatchEvent(new Event('change', { bubbles: true }))
         }
@@ -341,7 +358,14 @@
         : ''
     }
     savePrompt.host.style.display = 'block'
-    const close = () => { savePrompt.host.style.display = 'none' }
+    // Any real dismissal — cancel, clicking outside, or a successful save —
+    // resolves the underlying pending-save record so it stops reappearing on
+    // later pages in this tab. A locked-vault save attempt does NOT resolve it
+    // (see below), since the user is expected to unlock and click Save again.
+    const close = () => {
+      savePrompt.host.style.display = 'none'
+      try { chrome.runtime.sendMessage({ action: 'resolvePendingSave' }) } catch (e) {}
+    }
     savePrompt.shadow.getElementById('sp-cancel').onclick = close
     savePrompt.shadow.getElementById('sp-save').onclick = async () => {
       pingActivity()
@@ -372,25 +396,39 @@
     showSavePrompt(domain, u, p, !!existing, extras)
   }
 
+  // One logical submission can trigger this three separate ways — the form's
+  // own submit event, Enter in the password field (which usually ALSO fires
+  // submit), and a button-click heuristic — each doing its own redundant
+  // stagePendingSave + existing-credential round trip. This collapses
+  // overlapping calls for the same password field into one; a genuinely later,
+  // separate submission (after the first finishes) is unaffected.
+  const captureInFlight = new WeakSet()
+
   async function captureAndPrompt(formFields) {
     const username = formFields && formFields.username
     const password = formFields && formFields.password
     if (!username && !password) return
-    const u = username ? username.value : ''
-    const p = password ? password.value : ''
-    if (!p) return  // no password, nothing to save
-    const extras = collectExtraFields(password)
-
-    // Stage a copy in background.js BEFORE the async existing-credential lookup
-    // below. A real submit can navigate away — or tear down this whole content
-    // script — before that lookup's promise resolves, silently losing the save
-    // prompt. The staged copy survives navigation; checkPendingSave() picks it
-    // up on whatever page loads next, if this document doesn't get the chance.
+    if (password && captureInFlight.has(password)) return
+    if (password) captureInFlight.add(password)
     try {
-      chrome.runtime.sendMessage({ action: 'stagePendingSave', domain: currentDomain, username: u, password: p, extraFields: extras })
-    } catch (e) {}
+      const u = username ? username.value : ''
+      const p = password ? password.value : ''
+      if (!p) return  // no password, nothing to save
+      const extras = collectExtraFields(password)
 
-    await maybePromptSave(currentDomain, u, p, extras)
+      // Stage a copy in background.js BEFORE the async existing-credential lookup
+      // below. A real submit can navigate away — or tear down this whole content
+      // script — before that lookup's promise resolves, silently losing the save
+      // prompt. The staged copy survives navigation; checkPendingSave() picks it
+      // up on whatever page loads next, if this document doesn't get the chance.
+      try {
+        chrome.runtime.sendMessage({ action: 'stagePendingSave', domain: currentDomain, username: u, password: p, extraFields: extras })
+      } catch (e) {}
+
+      await maybePromptSave(currentDomain, u, p, extras)
+    } finally {
+      if (password) captureInFlight.delete(password)
+    }
   }
 
   // Checked once per page load. If the previous page's submit got cut off by
@@ -523,15 +561,31 @@
   // matched as a whole word/phrase against a normalized signal string (never a
   // raw substring), so "state" doesn't match inside "statement" and "address"
   // doesn't match inside "email address" ahead of the email check.
+  // Multi-word phrases and unambiguous compound/abbreviated forms — safe to
+  // match against ANY signal, including free-text prose (labels, placeholders,
+  // aria-labels), since they're specific enough that incidental collisions are
+  // very unlikely.
   const SIGNUP_FIELD_KEYWORDS = {
     firstName: ['first name', 'given name', 'firstname', 'fname'],
     lastName: ['last name', 'family name', 'surname', 'lastname', 'lname'],
     email: ['email', 'e mail', 'email address'],
     phone: ['phone', 'phone number', 'mobile', 'mobile number', 'cell phone', 'telephone'],
-    'address.street': ['street address', 'address line 1', 'address line1', 'mailing address', 'street'],
+    'address.street': ['street address', 'address line 1', 'address line1', 'mailing address'],
+    'address.zip': ['zip code', 'postal code', 'postcode']
+  }
+
+  // Bare, generic single words — "state", "city", "country", "street", "zip",
+  // "town". These are common enough in ordinary prose ("please state your
+  // reason", "which city do you support?") that trusting them against free-text
+  // label/placeholder/aria-label content risks real false positives. Only
+  // matched against structured, developer-authored identifiers (name/id/
+  // autocomplete), where a bare "state" or "city" is far more likely to
+  // actually mean what it says.
+  const SIGNUP_FIELD_KEYWORDS_STRUCTURED_ONLY = {
+    'address.street': ['street'],
     'address.city': ['city', 'town'],
     'address.state': ['state', 'province'],
-    'address.zip': ['zip code', 'zip', 'postal code', 'postcode'],
+    'address.zip': ['zip'],
     'address.country': ['country']
   }
 
@@ -542,14 +596,20 @@
     return (' ' + normalized + ' ').indexOf(' ' + phrase + ' ') !== -1
   }
 
-  // Every raw signal a field carries that a person (or the reviewer flagging
-  // this gap) would recognize the field by — not just the single "best" one
-  // getFieldLabel picks for display, but all of them, since a fallback match
-  // only needs ONE to hit.
-  function fieldSignalStrings(el) {
+  // Structured, developer-authored identifiers — trustworthy enough for even
+  // generic single-word keywords.
+  function fieldStructuredSignalStrings(el) {
     const out = []
     if (el.name) out.push(el.name)
     if (el.id) out.push(el.id)
+    const autocomplete = el.getAttribute('autocomplete')
+    if (autocomplete) out.push(autocomplete)
+    return out
+  }
+
+  // Free-text, human-facing strings — safe only for specific multi-word phrases.
+  function fieldFreeTextSignalStrings(el) {
+    const out = []
     const ariaLabel = el.getAttribute('aria-label')
     if (ariaLabel) out.push(ariaLabel)
     if (el.placeholder) out.push(el.placeholder)
@@ -560,11 +620,20 @@
   }
 
   function matchSignupFieldTypeByKeywords(el) {
-    const signals = fieldSignalStrings(el).map(normalizeLabel)
+    const structured = fieldStructuredSignalStrings(el).map(normalizeLabel)
+    const freeText = fieldFreeTextSignalStrings(el).map(normalizeLabel)
+    const allSignals = structured.concat(freeText)
+
     for (const fieldType in SIGNUP_FIELD_KEYWORDS) {
-      const keywords = SIGNUP_FIELD_KEYWORDS[fieldType]
-      for (const signal of signals) {
-        for (const keyword of keywords) {
+      for (const signal of allSignals) {
+        for (const keyword of SIGNUP_FIELD_KEYWORDS[fieldType]) {
+          if (normalizedIncludesPhrase(signal, keyword)) return fieldType
+        }
+      }
+    }
+    for (const fieldType in SIGNUP_FIELD_KEYWORDS_STRUCTURED_ONLY) {
+      for (const signal of structured) {
+        for (const keyword of SIGNUP_FIELD_KEYWORDS_STRUCTURED_ONLY[fieldType]) {
           if (normalizedIncludesPhrase(signal, keyword)) return fieldType
         }
       }
@@ -606,7 +675,7 @@
     const response = await chrome.runtime.sendMessage({ action: 'getPersonalInfoField', fieldType })
     if (response && response.success && response.value) {
       el.setAttribute('autocomplete', 'off')
-      el.value = response.value
+      setNativeValue(el, response.value)
       el.dispatchEvent(new Event('input', { bubbles: true }))
       el.dispatchEvent(new Event('change', { bubbles: true }))
       filledSignupFields.add(el)
@@ -622,7 +691,7 @@
     const response = await chrome.runtime.sendMessage({ action: 'getPersonalInfoField', fieldType })
     if (response && response.success && response.value) {
       el.setAttribute('autocomplete', 'off')
-      el.value = response.value
+      setNativeValue(el, response.value)
       el.dispatchEvent(new Event('input', { bubbles: true }))
       el.dispatchEvent(new Event('change', { bubbles: true }))
       filledSignupFields.add(el)
@@ -741,7 +810,7 @@
         item.onclick = () => {
           pingActivity()
           field.setAttribute('autocomplete', 'off')
-          field.value = email
+          setNativeValue(field, email)
           field.dispatchEvent(new Event('input', { bubbles: true }))
           field.dispatchEvent(new Event('change', { bubbles: true }))
           filledSignupFields.add(field)
