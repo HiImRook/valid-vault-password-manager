@@ -145,11 +145,13 @@ async function credentialsForDomain(domain) {
   for (const cred of vault.credentials[domain]) {
     if (cred.deleted) continue
     try {
+      const decUsername = await decryptField(cred.username, key)
       out.push({
         id: cred.id,
-        username: await decryptField(cred.username, key),
+        username: decUsername,
         password: await decryptField(cred.password, key),
-        extraFields: await decryptExtraFields(cred.extraFields, key)
+        extraFields: await decryptExtraFields(cred.extraFields, key),
+        loginType: cred.loginType || inferLoginType(decUsername)
       })
     } catch (e) {
       return { success: false, credentials: [], locked: true }
@@ -195,6 +197,19 @@ async function decryptExtraFields(extraFields, key) {
   return out
 }
 
+// Best-effort classification for records that predate the loginType field
+// (imported/merged from an older vault, or saved before this existed) - the
+// live save path always has a real field-derived type from content.js and
+// this is never used there, only as a fallback when reading such a record.
+function inferLoginType(identifier) {
+  const v = (identifier || '').trim()
+  if (!v) return 'username'
+  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) return 'email'
+  const digits = v.replace(/\D/g, '')
+  if (digits.length >= 7 && /^[+()\-.\s\d]+$/.test(v)) return 'phone'
+  return 'username'
+}
+
 function genId() {
   return 'c_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10)
 }
@@ -221,7 +236,7 @@ async function writeVault(vault) {
 // profile, so they're captured as the user types them and merged in by label: a
 // field seen again on a later visit updates its saved value, a field not seen this
 // time keeps whatever was saved before.
-async function saveCredential(domain, username, password, extraFields) {
+async function saveCredential(domain, username, password, extraFields, loginType) {
   const bytes = await getSessionKeyBytes()
   if (!bytes) return { success: false, locked: true }
   const key = await crypto.subtle.importKey('raw', new Uint8Array(bytes), { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt'])
@@ -233,6 +248,7 @@ async function saveCredential(domain, username, password, extraFields) {
   // if a live credential with the same username exists, update it (dedup), else add
   let existingId = null
   let existingExtraFields = []
+  let existingLoginType = null
   for (const cred of vault.credentials[domain]) {
     if (cred.deleted) continue
     try {
@@ -240,10 +256,15 @@ async function saveCredential(domain, username, password, extraFields) {
       if (u === username) {
         existingId = cred.id
         existingExtraFields = await decryptExtraFields(cred.extraFields, key)
+        existingLoginType = cred.loginType || null
         break
       }
     } catch (e) {}
   }
+  // A caller (the field the login was captured on) is the source of truth
+  // when it has one; otherwise keep whatever this login was already tagged
+  // as rather than letting a fallback re-guess override a real classification.
+  const resolvedLoginType = loginType || existingLoginType || inferLoginType(username)
 
   const mergedExtraFields = existingExtraFields.slice()
   for (const field of (extraFields || [])) {
@@ -260,12 +281,12 @@ async function saveCredential(domain, username, password, extraFields) {
   if (existingId) {
     for (let i = 0; i < vault.credentials[domain].length; i++) {
       if (vault.credentials[domain][i].id === existingId) {
-        vault.credentials[domain][i] = { id: existingId, username: encUser, password: encPass, extraFields: encExtraFields, createdAt: vault.credentials[domain][i].createdAt || now, updatedAt: now }
+        vault.credentials[domain][i] = { id: existingId, username: encUser, password: encPass, extraFields: encExtraFields, loginType: resolvedLoginType, createdAt: vault.credentials[domain][i].createdAt || now, updatedAt: now }
         break
       }
     }
   } else {
-    vault.credentials[domain].push({ id: genId(), username: encUser, password: encPass, extraFields: encExtraFields, createdAt: now, updatedAt: now })
+    vault.credentials[domain].push({ id: genId(), username: encUser, password: encPass, extraFields: encExtraFields, loginType: resolvedLoginType, createdAt: now, updatedAt: now })
   }
   vault.meta = vault.meta || {}
   vault.meta.lastAccess = now
@@ -275,7 +296,7 @@ async function saveCredential(domain, username, password, extraFields) {
 
 chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
   if (request.action === 'saveCredential') {
-    saveCredential(request.domain, request.username, request.password, request.extraFields).then(sendResponse)
+    saveCredential(request.domain, request.username, request.password, request.extraFields, request.loginType).then(sendResponse)
     return true
   }
   if (request.action === 'getCredentialsForDomain') {
@@ -306,7 +327,7 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
     return false
   }
   if (request.action === 'stagePendingSave') {
-    stagePendingSave(sender, request.id, request.domain, request.username, request.password, request.extraFields)
+    stagePendingSave(sender, request.id, request.domain, request.username, request.password, request.extraFields, request.loginType)
       .then(function () { sendResponse({ success: true }) })
     return true
   }
@@ -378,7 +399,7 @@ function withPendingSaveLock(tabId, fn) {
 // (content.js) generates the id and is the only one who ever needs it again
 // (to resolve that specific prompt), so no round trip is needed to hand one
 // back on stage.
-async function stagePendingSave(sender, id, domain, username, password, extraFields) {
+async function stagePendingSave(sender, id, domain, username, password, extraFields, loginType) {
   const tabId = sender && sender.tab && sender.tab.id
   if (tabId === undefined || tabId === null || !id) return
   return withPendingSaveLock(tabId, async () => {
@@ -386,7 +407,7 @@ async function stagePendingSave(sender, id, domain, username, password, extraFie
     try {
       const stored = await chrome.storage.session.get(key)
       const map = (stored && stored[key]) || {}
-      map[id] = { domain, username, password, extraFields, ts: Date.now() }
+      map[id] = { domain, username, password, extraFields, loginType, ts: Date.now() }
       const ids = Object.keys(map)
       if (ids.length > PENDING_SAVE_MAX_PER_TAB) {
         ids.sort((a, b) => map[a].ts - map[b].ts)
@@ -419,7 +440,7 @@ async function takePendingSave(sender) {
       if (changed) await chrome.storage.session.set({ [key]: map })
       if (!oldestId) return { found: false }
       const entry = map[oldestId]
-      return { found: true, id: oldestId, domain: entry.domain, username: entry.username, password: entry.password, extraFields: entry.extraFields }
+      return { found: true, id: oldestId, domain: entry.domain, username: entry.username, password: entry.password, extraFields: entry.extraFields, loginType: entry.loginType }
     } catch (e) {
       return { found: false }
     }

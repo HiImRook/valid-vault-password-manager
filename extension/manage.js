@@ -239,6 +239,11 @@ async function loadAllCredentials() {
       credRow.style.cssText = 'padding:12px 0;border-bottom:1px solid #1a1a1a;'
       credRow.innerHTML =
         '<div style="display:flex;align-items:center;gap:12px;">' +
+        '<select class="credential-logintype small" style="width:auto;">' +
+        '<option value="username">👤 Username</option>' +
+        '<option value="email">📧 Email</option>' +
+        '<option value="phone">📱 Phone</option>' +
+        '</select>' +
         '<div class="credential-username" style="flex:1;">Account ' + (i + 1) + '</div>' +
         '<div class="credential-password" style="width:150px;">••••••••</div>' +
         '<div class="credential-actions">' +
@@ -251,6 +256,32 @@ async function loadAllCredentials() {
 
       credRow.dataset.credId = cred.id
       credRow.dataset.credIndex = i
+
+      const loginTypeEl = credRow.querySelector('.credential-logintype')
+      loginTypeEl.value = cred.loginType || 'username'
+      loginTypeEl.onclick = (e) => e.stopPropagation()
+      loginTypeEl.onchange = async (e) => {
+        e.stopPropagation()
+        let masterKey = session.getMasterKey()
+        if (!masterKey) {
+          const authResult = await promptAuth()
+          if (!authResult.success) {
+            showMsg(msgManage, 'Authentication required to edit', 'error')
+            loginTypeEl.value = cred.loginType || 'username'
+            return
+          }
+          masterKey = authResult.masterKey
+          session.setMasterKey(masterKey)
+        }
+        const result = await passwords.updateCredential(cred.id, { loginType: loginTypeEl.value }, masterKey)
+        if (result.success) {
+          cred.loginType = loginTypeEl.value
+          showMsg(msgManage, 'Account type updated', 'success')
+        } else {
+          showMsg(msgManage, 'Update failed: ' + result.error, 'error')
+          loginTypeEl.value = cred.loginType || 'username'
+        }
+      }
       
       credRow.querySelector('.btn-show').onclick = async (e) => {
         e.stopPropagation()

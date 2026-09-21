@@ -127,6 +127,27 @@
     'input[placeholder*="login" i]'
   ]
 
+  // Classifies what KIND of identifier a field is asking for, from the field's
+  // own attributes (type, autocomplete, name/id/placeholder) - never from the
+  // typed value, so it's stable whether the field is empty or filled. Used both
+  // to tag a credential at save time and to target the right saved credential
+  // (and the right field) at fill time.
+  function classifyLoginType(el) {
+    if (!el) return 'username'
+    const type = (el.type || '').toLowerCase()
+    if (type === 'email') return 'email'
+    if (type === 'tel') return 'phone'
+    const autocomplete = (el.getAttribute('autocomplete') || '').toLowerCase()
+    if (autocomplete === 'email') return 'email'
+    if (autocomplete === 'tel' || autocomplete.indexOf('tel-') === 0) return 'phone'
+    const hay = ((el.name || '') + ' ' + (el.id || '') + ' ' + (el.placeholder || '')).toLowerCase()
+    if (/email/.test(hay)) return 'email'
+    if (/phone|mobile/.test(hay) || /\btel\b/.test(hay)) return 'phone'
+    return 'username'
+  }
+
+  const LOGIN_TYPE_ICON = { email: '📧', phone: '📱', username: '👤' }
+
   function detectLoginForm(skipPasswordFields) {
     const pwFields = document.querySelectorAll('input[type="password"]')
     if (pwFields.length === 0) return null
@@ -245,11 +266,28 @@
     itemsContainer.innerHTML = ''
 
     if (response.success && response.credentials.length > 0) {
-      for (const cred of response.credentials) {
+      // Prefer accounts whose stored loginType matches what THIS field is
+      // asking for (an email input, a phone input, plain text) - relevant on
+      // sites where one domain has both an email-login and a phone-login
+      // account saved. Doesn't hide the rest, just orders the likely match
+      // to the top; a stable sort so credentials of the same type keep
+      // whatever order the background script returned them in.
+      const targetType = classifyLoginType(field)
+      const ranked = response.credentials
+        .map((cred, i) => ({ cred, i }))
+        .sort((a, b) => {
+          const aMatch = (a.cred.loginType || 'username') === targetType ? 0 : 1
+          const bMatch = (b.cred.loginType || 'username') === targetType ? 0 : 1
+          return aMatch - bMatch || a.i - b.i
+        })
+        .map((x) => x.cred)
+
+      for (const cred of ranked) {
+        const icon = LOGIN_TYPE_ICON[cred.loginType || 'username'] || LOGIN_TYPE_ICON.username
         const item = document.createElement('div')
         item.className = 'item'
         item.innerHTML = `
-          <div class="username">${escapeHtml(cred.username)}</div>
+          <div class="username">${icon} ${escapeHtml(cred.username)}</div>
           <div class="password-dots">••••••••</div>
         `
         item.onclick = () => fillCredentials(cred, formFields)
@@ -409,7 +447,7 @@
     return { host, shadow }
   }
 
-  function showSavePrompt(domain, username, password, isUpdate, extraFields, pendingId) {
+  function showSavePrompt(domain, username, password, isUpdate, extraFields, pendingId, loginType) {
     if (!savePrompt) savePrompt = createSavePrompt()
     savePrompt.shadow.getElementById('sp-title').textContent = isUpdate ? 'Update saved password?' : 'Save to Valid Vault?'
     savePrompt.shadow.getElementById('sp-domain').textContent = domain
@@ -438,7 +476,7 @@
     savePrompt.shadow.getElementById('sp-save').onclick = async () => {
       pingActivity()
       const msgEl = savePrompt.shadow.getElementById('sp-msg')
-      const result = await chrome.runtime.sendMessage({ action: 'saveCredential', domain, username, password, extraFields })
+      const result = await chrome.runtime.sendMessage({ action: 'saveCredential', domain, username, password, extraFields, loginType })
       if (result && result.locked) {
         if (msgEl) msgEl.textContent = 'Vault is locked. Click the Valid Vault icon to unlock, then click Save again.'
         return
@@ -458,7 +496,7 @@
   // checkPendingSave() can be resolving a save that was staged on a DIFFERENT
   // page than the one currently loaded (a redirect mid-login) — the credential
   // must always be saved under the domain it was actually typed on.
-  async function maybePromptSave(domain, u, p, extras, pendingId) {
+  async function maybePromptSave(domain, u, p, extras, pendingId, loginType) {
     let existing = null
     try {
       const result = await chrome.runtime.sendMessage({ action: 'getCredentialsForDomain', domain })
@@ -470,7 +508,7 @@
       if (pendingId) { try { chrome.runtime.sendMessage({ action: 'resolvePendingSave', id: pendingId }) } catch (e) {} }
       return
     }
-    showSavePrompt(domain, u, p, !!existing, extras, pendingId)
+    showSavePrompt(domain, u, p, !!existing, extras, pendingId, loginType)
   }
 
   // One logical submission can trigger this three separate ways — the form's
@@ -492,6 +530,7 @@
       const p = password ? password.value : ''
       if (!p) return  // no password, nothing to save
       const extras = collectExtraFields(password)
+      const loginType = classifyLoginType(username)
 
       // Own id per capture (generated here, not round-tripped from background)
       // so two submissions in the same tab within the TTL window stage as two
@@ -504,10 +543,10 @@
       // prompt. The staged copy survives navigation; checkPendingSave() picks it
       // up on whatever page loads next, if this document doesn't get the chance.
       try {
-        chrome.runtime.sendMessage({ action: 'stagePendingSave', id: pendingId, domain: currentDomain, username: u, password: p, extraFields: extras })
+        chrome.runtime.sendMessage({ action: 'stagePendingSave', id: pendingId, domain: currentDomain, username: u, password: p, extraFields: extras, loginType })
       } catch (e) {}
 
-      await maybePromptSave(currentDomain, u, p, extras, pendingId)
+      await maybePromptSave(currentDomain, u, p, extras, pendingId, loginType)
     } finally {
       if (password) captureInFlight.delete(password)
     }
@@ -529,7 +568,7 @@
     // enough that its record hasn't expired) — that counts as the person
     // being present, even though nothing on this exact page was clicked yet.
     pingActivity()
-    await maybePromptSave(pending.domain, pending.username, pending.password, pending.extraFields, pending.id)
+    await maybePromptSave(pending.domain, pending.username, pending.password, pending.extraFields, pending.id, pending.loginType)
   }
 
   // formFields is captured once, per form, in this closure — every listener

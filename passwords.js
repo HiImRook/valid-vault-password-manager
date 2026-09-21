@@ -5,6 +5,18 @@ function generateId() {
   return crypto.randomUUID()
 }
 
+// Best-effort fallback for records with no stored loginType (older vaults,
+// or a record synced in before this field existed). The extension's live
+// capture path always derives a real one from the actual form field; this
+// guess only ever surfaces for pre-existing data.
+function inferLoginType(identifier) {
+  const v = (identifier || '').trim()
+  if (!v) return 'username'
+  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) return 'email'
+  if (v.replace(/\D/g, '').length >= 7 && /^[+()\-.\s\d]+$/.test(v)) return 'phone'
+  return 'username'
+}
+
 async function ensureVault() {
   const existing = await getPasswordVault()
   if (existing) return { success: true }
@@ -26,7 +38,7 @@ function isLive(cred) {
   return !cred.deleted
 }
 
-async function saveCredential(domain, username, password, masterKey) {
+async function saveCredential(domain, username, password, masterKey, loginType) {
   await ensureVault()
   const vault = await getPasswordVault()
 
@@ -38,13 +50,17 @@ async function saveCredential(domain, username, password, masterKey) {
   }
 
   const existing = []
+  let existingLoginType = null
   for (const cred of vault.credentials[domain]) {
     if (cred.deleted) {
       existing.push(cred)
       continue
     }
     const existingUsername = await decrypt(cred.username, masterKey)
-    if (existingUsername === username) continue
+    if (existingUsername === username) {
+      existingLoginType = cred.loginType || null
+      continue
+    }
     existing.push(cred)
   }
 
@@ -53,6 +69,7 @@ async function saveCredential(domain, username, password, masterKey) {
     id,
     username: encUsername,
     password: encPassword,
+    loginType: loginType || existingLoginType || inferLoginType(username),
     createdAt: Date.now(),
     updatedAt: Date.now()
   })
@@ -77,10 +94,12 @@ async function getCredentials(domain, masterKey) {
   for (const cred of domainCreds) {
     if (cred.deleted) continue
     try {
+      const decUsername = await decrypt(cred.username, masterKey)
       decrypted.push({
         id: cred.id,
-        username: await decrypt(cred.username, masterKey),
+        username: decUsername,
         password: await decrypt(cred.password, masterKey),
+        loginType: cred.loginType || inferLoginType(decUsername),
         createdAt: cred.createdAt,
         updatedAt: cred.updatedAt
       })
@@ -123,6 +142,9 @@ async function updateCredential(credentialId, updates, masterKey) {
       }
       if (updates.password) {
         creds[index].password = await encrypt(updates.password, masterKey)
+      }
+      if (updates.loginType) {
+        creds[index].loginType = updates.loginType
       }
       creds[index].updatedAt = Date.now()
       vault.meta.lastAccess = Date.now()
@@ -203,6 +225,7 @@ async function reEncryptVault(vault, oldKey, newKey) {
         id: cred.id,
         username: await encrypt(username, newKey),
         password: await encrypt(password, newKey),
+        loginType: cred.loginType,
         createdAt: cred.createdAt,
         updatedAt: cred.updatedAt
       })

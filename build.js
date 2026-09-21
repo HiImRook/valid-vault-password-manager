@@ -741,7 +741,26 @@ window.unlockPw = async function() {
 window.showSaveCredential = function() {
   if (!vault.session.hasMasterKey()) { log('Login required', 'error'); return }
   var de = document.getElementById('vault-domain'); var domain = (de && de.value) || 'example.com'
-  showModal('<h3>Add Credential</h3><input type="text" id="modal-domain" value="' + domain + '" placeholder="domain"><input type="text" id="modal-login" placeholder="username"><input type="password" id="modal-password-cred" placeholder="password"><div style="margin-top:16px;"><button onclick="saveCredential()">Save</button><button onclick="hideModal()" class="secondary">Cancel</button></div>')
+  showModal('<h3>Add Credential</h3><input type="text" id="modal-domain" value="' + domain + '" placeholder="domain"><input type="text" id="modal-login" placeholder="username"><input type="password" id="modal-password-cred" placeholder="password"><select id="modal-login-type" style="margin-top:8px;width:100%;"><option value="username">Type: Username</option><option value="email">Type: Email</option><option value="phone">Type: Phone</option></select><div style="margin-top:16px;"><button onclick="saveCredentialFromModal()">Save</button><button onclick="hideModal()" class="secondary">Cancel</button></div>')
+}
+
+window.saveCredentialFromModal = async function() {
+  var masterKey = vault.session.getMasterKey()
+  if (!masterKey) { log('Login required', 'error'); return }
+  var domain = (document.getElementById('modal-domain') || {}).value
+  var username = (document.getElementById('modal-login') || {}).value
+  var password = (document.getElementById('modal-password-cred') || {}).value
+  var loginType = (document.getElementById('modal-login-type') || {}).value
+  if (!domain || !username || !password) { log('All fields required', 'error'); return }
+  var result = await vault.passwords.saveCredential(domain, username, password, masterKey, loginType)
+  if (result && result.success) {
+    hideModal()
+    credCache = {}
+    renderCredentials()
+    log('Credential saved')
+  } else {
+    log((result && result.error) || 'Save failed', 'error')
+  }
 }
 
 function credEsc(s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') }
@@ -772,8 +791,9 @@ window.renderCredentials = async function() {
     for (var j = 0; j < res.credentials.length; j++) {
       var c = res.credentials[j]
       var cid = credEsc(c.id)
+      var typeIcon = c.loginType === 'email' ? '📧' : (c.loginType === 'phone' ? '📱' : '👤')
       html += '<div style="padding:10px 0 14px 20px;">'
-      html += '<div style="color:var(--text);font-size:13px;margin-bottom:6px;word-break:break-all;">' + credEsc(c.username) + '</div>'
+      html += '<div style="color:var(--text);font-size:13px;margin-bottom:6px;word-break:break-all;">' + typeIcon + ' ' + credEsc(c.username) + '</div>'
       html += '<div style="display:flex;align-items:center;gap:8px;">'
       html += '<span id="pw-' + cid + '" data-shown="0" style="color:var(--text-dim);font-size:13px;font-family:monospace;flex:1;word-break:break-all;">' + '&#8226;'.repeat(8) + '</span>'
       html += '<button class="small secondary" data-act="toggle-pw" data-cid="' + cid + '">Show</button>'

@@ -41,6 +41,18 @@ const credentialsList = document.getElementById('credentials-list')
 const addDomain = document.getElementById('add-domain')
 const addUsername = document.getElementById('add-username')
 const addPassword = document.getElementById('add-password')
+const addLoginType = document.getElementById('add-login-type')
+
+const LOGIN_TYPE_ICON = { email: '📧', phone: '📱', username: '👤' }
+// Best guess to preselect the type dropdown from what was just typed - the
+// person can always override it before saving.
+function guessLoginType(identifier) {
+  const v = (identifier || '').trim()
+  if (!v) return 'username'
+  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) return 'email'
+  if (v.replace(/\D/g, '').length >= 7 && /^[+()\-.\s\d]+$/.test(v)) return 'phone'
+  return 'username'
+}
 const msgUnlocked = document.getElementById('msg-unlocked')
 const msgAdd = document.getElementById('msg-add')
 
@@ -158,8 +170,9 @@ async function loadCurrentSite() {
     for (const cred of result.credentials) {
       const item = document.createElement('div')
       item.className = 'credential-item'
-      item.innerHTML = 
-        '<div class="credential-domain">' + escapeHtml(cred.username) + '</div>' +
+      const typeIcon = LOGIN_TYPE_ICON[cred.loginType || 'username'] || LOGIN_TYPE_ICON.username
+      item.innerHTML =
+        '<div class="credential-domain">' + typeIcon + ' ' + escapeHtml(cred.username) + '</div>' +
         '<div class="credential-user">••••••••</div>' +
         '<div class="credential-actions">' +
         '<button class="small secondary btn-show">👁️ Show</button>' +
@@ -360,7 +373,14 @@ if (btnAdd) btnAdd.onclick = async () => {
   addDomain.value = activeDomain
   addUsername.value = ''
   addPassword.value = ''
+  if (addLoginType) addLoginType.value = 'username'
   showView(viewAdd)
+}
+
+if (addUsername && addLoginType) {
+  addUsername.addEventListener('input', () => {
+    addLoginType.value = guessLoginType(addUsername.value)
+  })
 }
 
 if (btnCancel) btnCancel.onclick = () => {
@@ -378,7 +398,8 @@ if (btnSave) btnSave.onclick = async () => {
     return
   }
   
-  const result = await passwords.saveCredential(domain, username, password, mk)
+  const loginType = addLoginType ? addLoginType.value : undefined
+  const result = await passwords.saveCredential(domain, username, password, mk, undefined, loginType)
   if (result.success) {
     showView(viewUnlocked)
     await loadCurrentSite()
