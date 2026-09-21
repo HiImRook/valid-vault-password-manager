@@ -61,20 +61,41 @@ async function decryptExtraFields(extraFields, masterKey) {
   return out
 }
 
+// Mirrors background.js's normalizeLabel: a saved label and a freshly-typed
+// one rarely come back byte-identical, so matching tolerates whitespace/case/
+// punctuation drift while the originally-captured label stays what's shown.
+function normalizeLabel(label) {
+  return (label || '')
+    .toLowerCase()
+    .replace(/[:*]+$/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .replace(/\s+/g, ' ')
+}
+
 async function saveCredential(domain, username, password, masterKey, extraFields, loginType) {
   await ensureVault()
   const vault = await getPasswordVault()
-
-  const encUsername = await encrypt(username, masterKey)
-  const encPassword = await encrypt(password, masterKey)
-  const encExtraFields = await encryptExtraFields(extraFields, masterKey)
 
   if (!vault.credentials[domain]) {
     vault.credentials[domain] = []
   }
 
+  // If a live credential with this username already exists, this is a
+  // resave (submit-triggered "Update saved password?", or a manual re-add
+  // through the popup) rather than a brand-new login: its id stays stable
+  // (anything that referenced it - Manage's edit/delete by id - shouldn't
+  // see it change on a resave), its createdAt is preserved, and any extra
+  // fields it already had are merged with the newly-passed ones by label
+  // rather than being replaced outright. A field seen again updates its
+  // saved value; a field not on THIS particular save keeps whatever was
+  // saved before - matching background.js's real capture-path behavior,
+  // which this manual/import path had drifted from.
   const existing = []
+  let existingId = null
+  let existingCreatedAt = null
   let existingLoginType = null
+  let existingExtraFields = []
   for (const cred of vault.credentials[domain]) {
     if (cred.deleted) {
       existing.push(cred)
@@ -82,25 +103,40 @@ async function saveCredential(domain, username, password, masterKey, extraFields
     }
     const existingUsername = await decrypt(cred.username, masterKey)
     if (existingUsername === username) {
+      existingId = cred.id
+      existingCreatedAt = cred.createdAt
       existingLoginType = cred.loginType || null
+      existingExtraFields = await decryptExtraFields(cred.extraFields, masterKey)
       continue
     }
     existing.push(cred)
   }
 
-  const id = generateId()
+  const mergedExtraFields = existingExtraFields.slice()
+  for (const field of (extraFields || [])) {
+    if (!field || !field.label || !field.value) continue
+    const idx = mergedExtraFields.findIndex((f) => normalizeLabel(f.label) === normalizeLabel(field.label))
+    if (idx !== -1) mergedExtraFields[idx] = { label: mergedExtraFields[idx].label, value: field.value }
+    else mergedExtraFields.push({ label: field.label, value: field.value })
+  }
+
+  const encUsername = await encrypt(username, masterKey)
+  const encPassword = await encrypt(password, masterKey)
+  const encExtraFields = await encryptExtraFields(mergedExtraFields, masterKey)
+  const now = Date.now()
+  const id = existingId || generateId()
   existing.push({
     id,
     username: encUsername,
     password: encPassword,
     extraFields: encExtraFields,
     loginType: loginType || existingLoginType || inferLoginType(username),
-    createdAt: Date.now(),
-    updatedAt: Date.now()
+    createdAt: existingCreatedAt || now,
+    updatedAt: now
   })
 
   vault.credentials[domain] = existing
-  vault.meta.lastAccess = Date.now()
+  vault.meta.lastAccess = now
 
   await setPasswordVault(vault)
   return { success: true, id }
