@@ -5,6 +5,37 @@ function generateId() {
   return crypto.randomUUID()
 }
 
+// The phone never displays or edits extraFields (that stays an extension-only
+// feature by design), but a synced-in credential still carries them - and
+// re-keying that credential (a master-password change, or the reEncryptVault
+// step inside a QR/pairing merge when the phone's vault is the older one)
+// re-encrypts every field under a new key. Without these, that record would
+// come out the other side with no extraFields property at all - the data
+// isn't "unsupported", it's gone. These exist purely to carry it through
+// intact; nothing on the phone reads the decrypted contents.
+async function encryptExtraFields(extraFields, key) {
+  const out = []
+  for (const field of extraFields || []) {
+    if (!field || !field.label || field.value === undefined || field.value === null || field.value === '') continue
+    out.push({
+      label: await encrypt(field.label, key),
+      value: await encrypt(field.value, key)
+    })
+  }
+  return out
+}
+
+async function decryptExtraFields(extraFields, key) {
+  const out = []
+  for (const field of extraFields || []) {
+    out.push({
+      label: await decrypt(field.label, key),
+      value: await decrypt(field.value, key)
+    })
+  }
+  return out
+}
+
 // Best-effort fallback for records with no stored loginType (older vaults,
 // or a record synced in before this field existed). The extension's live
 // capture path always derives a real one from the actual form field; this
@@ -221,10 +252,12 @@ async function reEncryptVault(vault, oldKey, newKey) {
       }
       const username = await decrypt(cred.username, oldKey)
       const password = await decrypt(cred.password, oldKey)
+      const extraFieldsPlain = await decryptExtraFields(cred.extraFields, oldKey)
       list.push({
         id: cred.id,
         username: await encrypt(username, newKey),
         password: await encrypt(password, newKey),
+        extraFields: await encryptExtraFields(extraFieldsPlain, newKey),
         loginType: cred.loginType,
         createdAt: cred.createdAt,
         updatedAt: cred.updatedAt
