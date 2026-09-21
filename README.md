@@ -6,6 +6,10 @@ A local, encrypted, QR code portable password manager. No cloud, no accounts, no
 
 ---
 
+> ✅ **Website Credentials Save Fix and Autofill Hardening - v0.6.2**
+>
+> Resolves v0.6.1's top-priority gap: Website Credentials now reliably saves new logins from real signup flows, fixed at the root (per-form state instead of shared globals). Also closes out a long list of autofill correctness issues found across several rounds of independent code review - the submit/navigation save race, false-positive field classification, React/framework compatibility, duplicate save prompts, detached-form listener leaks, formless-widget button ownership, and `<select>`/`<textarea>` support. See [CHANGELOG.md](CHANGELOG.md) for full details.
+
 > ✅ **Autofill Injection Foundation - v0.6.1**
 >
 > The extension now reads Personal Info and Website Credentials to autofill page forms - Personal Info fields populate on load, email fields are click-to-pick since a profile can hold several ranked emails, and a visible field tag marks anything matched. Fixed a `VersionError` bug that had silently broken background vault access, and a popup/background race that could drop the session key on a fast tab switch. Website Credentials still doesn't reliably save new logins from a real signup flow - see [CHANGELOG.md](CHANGELOG.md) for the known gap.
@@ -61,11 +65,12 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 - The extension can also be unlocked inline, directly on a page, when a tagged field is clicked while locked - password-only, since a WebAuthn platform credential can't be triggered from a page's own origin
 
 **Autofill (Extension):**
-- Personal Info fields (name, phone, address) auto-populate matched, empty fields on page load
+- Personal Info fields (name, phone, address) auto-populate matched, empty fields on page load, now including `<select>` and `<textarea>` fields (a state/country dropdown is matched by its actual option, never a blind value assignment)
 - Email fields are click-to-pick from a small on-field picker listing every saved, ranked email, never auto-filled silently
 - Website Credentials show a picker of saved usernames for the current site; injection only, no password reveal - that's the site's own UI if it has one
 - A visible field tag marks anything Valid Vault has matched
-- Foundation is working end to end; matching quality and reliably saving new logins from real signup flows are still being hardened
+- Website Credentials reliably saves new logins from real signup flows, including submit-triggered navigation, cross-domain SSO/MFA redirects, and multi-form pages
+- Custom div-based comboboxes and `contenteditable` fields remain unsupported; matching quality on unusual sites is still being hardened
 
 **Sync and Backup:**
 - Live QR sync - stream your vault or your key as a one-way fountain QR, scan it on the other device
@@ -86,7 +91,7 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 - Android via Capacitor, with native plugins for biometric auth and file saving
 - Vendored, self-contained code only, no Google SDKs in the scan path
 
-## Current Status: v0.6.1 - Active Testing
+## Current Status: v0.6.2 - Active Testing
 
 **Completed:**
 * ✅ Master key wrap architecture, verify-by-unwrap, no stored hashes
@@ -97,10 +102,12 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 * ✅ Website Credentials, Web Credentials, and Personal Info, all encrypted, all synced together
 * ✅ Sovereign QR scanner, inline unlock overlays, seconds-based auto-lock
 * ✅ Autofill injection foundation - Personal Info and Website Credentials autofill working end to end
+* ✅ Website Credentials reliably saves new logins from real signup flows, including cross-domain and multi-step ones
+* ✅ Personal Info autofill and per-site extra fields extended to `<select>` and `<textarea>`
 
 **In Development:**
-* 📋 Website Credentials reliably saving new logins captured from real signup flows - a known regression is currently rolled back and unresolved
 * 📋 `loginType` field (username/email/phone) on Website Credentials for more reliable matching
+* 📋 Custom div-based combobox and `contenteditable` field support
 * 📋 Continued field testing of sync, backup, and native file saving across Android versions
 * 📋 Per-method auth edit and delete on the phone Manage tab
 
@@ -132,6 +139,7 @@ Because importing a key now persists, the same vault file genuinely works the sa
 - Domain names are currently stored as plaintext object keys. Single-blob vault encryption is planned.
 - Physical access to an unlocked device is outside the threat model.
 - Auto-lock is a foreground inactivity timer; exact timing while backgrounded is subject to OS suspension.
+- A captured save-prompt is tracked per browser tab, not per destination page, for up to 45 seconds - deliberately, so it survives a cross-domain SSO/MFA redirect. The tradeoff is a narrow window where an unrelated page loaded in that same tab could recover the same prompt.
 - Live QR transport is protected by physical privacy, not by a handshake.
 
 ## Quick Start - Forks and Experimentation Highly Encouraged!
@@ -213,7 +221,3 @@ Copyright (c) 2025-2026 by Rook
 ## Acknowledgements
 
 Built and maintained by Rook.
-
----
-
-**"Your passwords. Your device. Your keys. Nothing given is nothing leaked."**

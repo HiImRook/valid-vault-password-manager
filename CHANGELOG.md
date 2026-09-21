@@ -5,6 +5,31 @@ All notable changes to Local Vault will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.2] - 2026-09-20
+ 
+This release resolves the top-priority gap left open by v0.6.1: Website Credentials now reliably saves new logins from real signup flows. It also closes out a long list of correctness and robustness issues in the autofill/injection layer found across several rounds of independent code review, each one verified against the actual code and against real browser behavior (Playwright + Chromium) before shipping.
+ 
+### Fixed
+- **Website Credentials save regression, resolved.** Root cause was `detectLoginForm()`/`matchSignupFieldType()` sharing mutable global state (`usernameField`/`passwordField`) across forms. Wiring a second form - via the page's own dynamic content, or the extension's MutationObserver picking up a form added after load - could silently repoint a first, already-wired form's listeners at the wrong fields. Both now use per-form closures instead of shared globals; verified against a real two-form page.
+- **Submit-triggered navigation losing the save prompt.** A real form submit can navigate away (or tear the content script down) before the async "is this already saved" check resolves. Captured credentials are now staged in `background.js` synchronously and recovered on whatever page loads next in the same tab - including across cross-domain SSO/MFA redirects and multi-hop flows (consent screens, MFA steps) that used to lose the prompt partway through. A race between staging and resolving that record is closed via per-tab serialization.
+- **False-positive personal-info classification.** A bare keyword like "state" could match inside unrelated free text ("please state your case"). Bare single-word keywords (state, city, zip, etc.) are now only checked against structured signals (`name`/`id`/`autocomplete`), never free text (labels, placeholders, `aria-label`).
+- **Autofill silently failing on React/Vue-style controlled inputs.** Filling a field now calls the native `value` property setter before dispatching `input`, so a framework's own value tracker actually picks up the change instead of the DOM and the framework's state disagreeing.
+- **Duplicate save prompts from one submission.** A form's own submit event, Enter in the password field, and a nearby-button-click heuristic could each independently trigger capture for the same login. An in-flight guard now collapses overlapping triggers into a single capture.
+- **Fields that gain their identifying attributes after insertion** (a framework setting `name`/`id`/`autocomplete`/`aria-label`/`placeholder`/`type` once hydration or a multi-step form advances) are now reclassified when that happens, instead of staying unrecognized for the life of the page.
+- **Detached SPA forms and personal-info fields no longer leak.** An unmounted login step or a closed modal used to leave its listeners - including a document-level click listener - and its floating field-tag icon alive indefinitely. Both are now torn down within one debounce cycle of the field leaving the DOM.
+- **Two separate formless login widgets on one page no longer both react to one click.** A password field with no wrapping `<form>` had no natural boundary for the "nearby button" heuristic, so every formless widget treated the whole page as its own. Button ownership is now scoped to the smallest containing element that already holds a button.
+- **Personal Info autofill and per-site extra-field capture now support `<select>` and `<textarea>`,** not just `<input>`. A state/country dropdown is filled by matching its actual option value or visible text, never a blind value assignment that would silently clear the selection on a mismatch.
+- **Activity tracking was incomplete.** Ordinary typing, passive autofill, opening the credential dropdown, and recovering a pending save across a redirect didn't reset the inactivity timer, so the vault could lock mid-use while someone was clearly still there. All four now count as activity, throttled to one ping every few seconds to avoid message spam.
+
+### Known Gaps
+- Pending-save recovery is scoped to the browser tab, not the destination page or domain, and expires after 45 seconds. This is a deliberate tradeoff, not an oversight: it's what lets the save prompt survive a cross-domain SSO/MFA redirect at all, at the cost of a narrow window where an unrelated page in the same tab could read a stale entry. Not planned to change without an actual page-identity signal to key off of instead.
+- The formless-widget button-ownership heuristic can still misattribute a button on unusually flattened markup where two unrelated widgets happen to share their nearest button-containing ancestor. A narrow edge case, not the general multi-widget bug from v0.6.1, which is fixed.
+- Custom div-based comboboxes and `contenteditable` fields remain unsupported - there's no standard attribute signal to classify them the way `<input>`/`<textarea>`/`<select>` are.
+- `loginType` (username vs. email vs. phone) on Website Credentials remains scoped but not built.
+
+### Notes
+- Every fix in this release was verified with Playwright-in-Chromium tests and/or direct unit tests of the storage logic - following directly from the lesson of the v0.6.1 regression, which shipped without that level of verification.
+
 ## [0.6.1] - 2026-09-18
 
 This release adds real autofill injection to the extension - reading Personal Info and Website Credentials to populate page forms - built the safe way, with background.js holding the session key and content.js only ever receiving plaintext values it explicitly asked for.
