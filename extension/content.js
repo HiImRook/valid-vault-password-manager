@@ -208,7 +208,7 @@
         }
       </style>
       <div class="dropdown" id="dropdown">
-        <div class="header">🔐 Local Vault</div>
+        <div class="header">🔐 Valid Vault</div>
         <div id="items"></div>
       </div>
     `
@@ -258,7 +258,7 @@
 
       const manage = document.createElement('div')
       manage.className = 'manage'
-      manage.textContent = 'Manage in Local Vault...'
+      manage.textContent = 'Manage in Valid Vault...'
       manage.onclick = () => chrome.runtime.sendMessage({ action: 'openManage' })
       itemsContainer.appendChild(manage)
     } else {

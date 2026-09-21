@@ -17,7 +17,7 @@ function createFrameCollector() {
 
   function addFrame(frameText) {
     if (!frameText.startsWith(FRAME_PREFIX + ':')) {
-      return { success: false, error: 'Not a Local Vault frame' }
+      return { success: false, error: 'Not a Valid Vault frame' }
     }
     const withoutPrefix = frameText.slice(FRAME_PREFIX.length + 1)
     const firstColon = withoutPrefix.indexOf(':')

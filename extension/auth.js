@@ -11,7 +11,7 @@ import {
 } from './crypto.js'
 import { getAuth, setAuth } from './store.js'
 
-const RP_NAME = 'Local Vault'
+const RP_NAME = 'Valid Vault'
 const RP_ID = location.hostname
 const PRF_INFO = 'valid-vault-prf-wrap-v2'
 const LEGACY_FINGERPRINT_SECRET = 'valid-vault-fingerprint-auth-v1'
