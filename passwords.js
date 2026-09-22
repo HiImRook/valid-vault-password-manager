@@ -18,13 +18,28 @@ function isLive(cred) {
 }
 
 function isValidVaultTree(value) {
-  return !!(value &&
-    typeof value === 'object' &&
-    value.meta &&
-    typeof value.meta === 'object' &&
-    value.credentials &&
-    typeof value.credentials === 'object' &&
-    !Array.isArray(value.credentials))
+  if (!value || typeof value !== 'object') return false
+  if (!value.meta || typeof value.meta !== 'object') return false
+  if (!value.credentials || typeof value.credentials !== 'object') return false
+  if (Array.isArray(value.credentials)) return false
+
+  for (const [domain, credentials] of Object.entries(value.credentials)) {
+    if (typeof domain !== 'string' || !Array.isArray(credentials)) return false
+
+    for (const credential of credentials) {
+      if (!credential || typeof credential !== 'object') return false
+      if (typeof credential.id !== 'string') return false
+      if (credential.deleted !== undefined && typeof credential.deleted !== 'boolean') return false
+      if (!credential.deleted && (
+        typeof credential.username !== 'string' ||
+        typeof credential.password !== 'string'
+      )) {
+        return false
+      }
+    }
+  }
+
+  return true
 }
 
 async function decryptLegacyExtraFields(extraFields, masterKey) {
@@ -64,6 +79,7 @@ async function decryptLegacyTree(legacyTree, masterKey) {
       const extraFields = await decryptLegacyExtraFields(cred.extraFields, masterKey)
       const loginType = (await readLegacyLoginType(cred.loginType, masterKey)) || inferLoginType(username)
       list.push({
+        ...cred,
         id: cred.id,
         username,
         password,
@@ -90,6 +106,10 @@ async function encryptTree(tree, masterKey) {
   return encrypt(JSON.stringify(tree), masterKey)
 }
 
+function vaultFingerprint(tree) {
+  return JSON.stringify(tree)
+}
+
 async function decryptTree(blob, masterKey) {
   const json = await decrypt(blob, masterKey)
   const parsed = JSON.parse(json)
@@ -107,18 +127,29 @@ async function decryptAnyRowToTree(row, masterKey) {
     }
   }
   if (row.schemaVersion === 2) {
+    if (!row.blob) throw new Error('Vault blob is missing')
     return decryptTree(row.blob, masterKey)
+  }
+  if (row.schemaVersion !== undefined) {
+    throw new Error('Unsupported vault schema version')
   }
   const legacyTree = { meta: row.meta || {}, credentials: row.credentials || {} }
   return decryptLegacyTree(legacyTree, masterKey)
 }
 
 async function finalizeMigration(masterKey) {
+  const journal = await getVaultMigrationJournal()
   const written = await getPasswordVault()
+  let writtenTree
   try {
-    await decryptTree(written.blob, masterKey)
+    writtenTree = await decryptTree(written.blob, masterKey)
   } catch (error) {
     await rollbackMigration(masterKey, 'Vault migration failed verification and was reverted')
+    return { migrated: false, status: 'rolled-back' }
+  }
+
+  if (journal && journal.expected && vaultFingerprint(writtenTree) !== journal.expected) {
+    await rollbackMigration(masterKey, 'Vault migration verification failed and was reverted')
     return { migrated: false, status: 'rolled-back' }
   }
 
@@ -158,11 +189,16 @@ async function migrateLegacyVault(masterKey) {
     return { migrated: false, status: 'already-current' }
   }
 
+  if (current.schemaVersion !== undefined) {
+    throw new Error('Unsupported vault schema version')
+  }
+
   const legacyTree = { meta: current.meta || {}, credentials: current.credentials || {} }
   const plainTree = await decryptLegacyTree(legacyTree, masterKey)
   const encryptedBackup = await encrypt(JSON.stringify(current), masterKey)
+  const expected = vaultFingerprint(plainTree)
 
-  await setVaultMigrationJournal({ status: 'prepared', backup: encryptedBackup, createdAt: Date.now() })
+  await setVaultMigrationJournal({ status: 'prepared', backup: encryptedBackup, expected, createdAt: Date.now() })
 
   const blob = await encryptTree(plainTree, masterKey)
   await setPasswordVault({ id: 'vault', schemaVersion: 2, blob })
