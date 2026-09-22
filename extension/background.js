@@ -1,4 +1,4 @@
-import { saveCredential as passwordsSaveCredential } from './passwords.js'
+import { saveCredential as passwordsSaveCredential, getCredentials as passwordsGetCredentials } from './passwords.js'
 
 async function getAuthRecord() {
   return new Promise(function (resolve) {
@@ -127,6 +127,15 @@ async function personalInfoAllEmails() {
   if (!profile) return { success: true, emails: [] }
   const emails = (profile.emails || []).slice().sort((a, b) => a.position - b.position).map(e => e.value)
   return { success: true, emails: emails }
+}
+
+async function credentialsForDomainViaShared(domain) {
+  const bytes = await getSessionKeyBytes()
+  if (!bytes) return { success: false, credentials: [], locked: true }
+  const key = await crypto.subtle.importKey('raw', new Uint8Array(bytes), { name: 'AES-GCM', length: 256 }, false, ['decrypt'])
+  const result = await passwordsGetCredentials(domain, key)
+  if (!result.success) return { success: false, credentials: [], locked: true }
+  return result
 }
 
 async function credentialsForDomain(domain) {
@@ -285,7 +294,7 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
     return true
   }
   if (request.action === 'getCredentialsForDomain') {
-    credentialsForDomain(request.domain).then(sendResponse)
+    credentialsForDomainViaShared(request.domain).then(sendResponse)
     return true
   }
   if (request.action === 'getPersonalInfoField') {
