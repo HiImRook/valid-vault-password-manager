@@ -5,10 +5,6 @@ function generateId() {
   return crypto.randomUUID()
 }
 
-// Best-effort fallback for records with no stored loginType (older vaults,
-// or a manual add through the popup that didn't classify one). The live
-// capture path in content.js always derives this from the actual field, so
-// this guess only ever surfaces for pre-existing data.
 function inferLoginType(identifier) {
   const v = (identifier || '').trim()
   if (!v) return 'username'
@@ -61,9 +57,6 @@ async function decryptExtraFields(extraFields, masterKey) {
   return out
 }
 
-// Mirrors background.js's normalizeLabel: a saved label and a freshly-typed
-// one rarely come back byte-identical, so matching tolerates whitespace/case/
-// punctuation drift while the originally-captured label stays what's shown.
 function normalizeLabel(label) {
   return (label || '')
     .toLowerCase()
@@ -81,16 +74,6 @@ async function saveCredential(domain, username, password, masterKey, extraFields
     vault.credentials[domain] = []
   }
 
-  // If a live credential with this username already exists, this is a
-  // resave (submit-triggered "Update saved password?", or a manual re-add
-  // through the popup) rather than a brand-new login: its id stays stable
-  // (anything that referenced it - Manage's edit/delete by id - shouldn't
-  // see it change on a resave), its createdAt is preserved, and any extra
-  // fields it already had are merged with the newly-passed ones by label
-  // rather than being replaced outright. A field seen again updates its
-  // saved value; a field not on THIS particular save keeps whatever was
-  // saved before - matching background.js's real capture-path behavior,
-  // which this manual/import path had drifted from.
   const existing = []
   let existingId = null
   let existingCreatedAt = null

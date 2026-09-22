@@ -1,3 +1,5 @@
+import { saveCredential as passwordsSaveCredential } from './passwords.js'
+
 async function getAuthRecord() {
   return new Promise(function (resolve) {
     const req = indexedDB.open('ValidVault')
@@ -13,12 +15,6 @@ async function getAuthRecord() {
   })
 }
 
-// Mirrors auth.js's authenticatePassword exactly, but runs here because this is the
-// only content-script-reachable place with correct access to the real vault storage.
-// A content script's IndexedDB is scoped to the PAGE's origin (e.g. tubitv.com), not
-// the extension's, so importing auth.js into a content script would silently read an
-// empty, unrelated database. This function does the same PBKDF2 unwrap, just in the
-// context that actually has the real 'ValidVault' data.
 async function authenticateWithPassword(password) {
   const auth = await getAuthRecord()
   if (!auth || !auth.passwordWrappedKey) return { success: false, error: 'No password set' }
@@ -166,9 +162,6 @@ async function encryptField(text, key) {
   return { iv: Array.from(iv), ciphertext: Array.from(new Uint8Array(ct)) }
 }
 
-// Mirrors content.js's normalizeLabel: a saved label and a freshly-typed one rarely
-// come back byte-identical, so matching tolerates whitespace/case/punctuation drift
-// while the originally-captured label stays what's displayed.
 function normalizeLabel(label) {
   return (label || '')
     .toLowerCase()
@@ -197,10 +190,6 @@ async function decryptExtraFields(extraFields, key) {
   return out
 }
 
-// Best-effort classification for records that predate the loginType field
-// (imported/merged from an older vault, or saved before this existed) - the
-// live save path always has a real field-derived type from content.js and
-// this is never used there, only as a fallback when reading such a record.
 function inferLoginType(identifier) {
   const v = (identifier || '').trim()
   if (!v) return 'username'
@@ -229,13 +218,13 @@ async function writeVault(vault) {
   })
 }
 
-// Extra fields are anything on the login/signup form that isn't the username or
-// password, and isn't a Personal Info field either (name, phone, address, email
-// stay a settings-driven autofill source, never captured per-site). Things like an
-// account number belong to that one site's credential, not to a generic autofill
-// profile, so they're captured as the user types them and merged in by label: a
-// field seen again on a later visit updates its saved value, a field not seen this
-// time keeps whatever was saved before.
+async function saveCredentialViaShared(domain, username, password, extraFields, loginType) {
+  const bytes = await getSessionKeyBytes()
+  if (!bytes) return { success: false, locked: true }
+  const key = await crypto.subtle.importKey('raw', new Uint8Array(bytes), { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt'])
+  return passwordsSaveCredential(domain, username, password, key, extraFields, loginType)
+}
+
 async function saveCredential(domain, username, password, extraFields, loginType) {
   const bytes = await getSessionKeyBytes()
   if (!bytes) return { success: false, locked: true }
@@ -245,7 +234,6 @@ async function saveCredential(domain, username, password, extraFields, loginType
   if (!vault.credentials) vault.credentials = {}
   if (!vault.credentials[domain]) vault.credentials[domain] = []
 
-  // if a live credential with the same username exists, update it (dedup), else add
   let existingId = null
   let existingExtraFields = []
   let existingLoginType = null
@@ -261,9 +249,6 @@ async function saveCredential(domain, username, password, extraFields, loginType
       }
     } catch (e) {}
   }
-  // A caller (the field the login was captured on) is the source of truth
-  // when it has one; otherwise keep whatever this login was already tagged
-  // as rather than letting a fallback re-guess override a real classification.
   const resolvedLoginType = loginType || existingLoginType || inferLoginType(username)
 
   const mergedExtraFields = existingExtraFields.slice()
@@ -296,7 +281,7 @@ async function saveCredential(domain, username, password, extraFields, loginType
 
 chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
   if (request.action === 'saveCredential') {
-    saveCredential(request.domain, request.username, request.password, request.extraFields, request.loginType).then(sendResponse)
+    saveCredentialViaShared(request.domain, request.username, request.password, request.extraFields, request.loginType).then(sendResponse)
     return true
   }
   if (request.action === 'getCredentialsForDomain') {
@@ -343,62 +328,17 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
   return false
 })
 
-// ---- Pending save (survives a submit-triggered navigation) ----
-//
-// A form submit captures username/password synchronously, but checking whether
-// that credential is already saved is async — and a real submit can navigate
-// (or tear the content script down) before that check resolves, losing the save
-// prompt entirely. Staging the capture here, keyed by tab, lets whatever page
-// loads next in that same tab pick the prompt back up.
-//
-// Deliberately NOT filtered by domain. A login flow very often redirects through
-// a different hostname before landing on the page that should show the save
-// prompt (login.x.com -> x.com/dashboard, SSO, etc) — matching on domain meant
-// that extremely common case never worked at all. The staged domain always
-// travels with the record and is what actually gets saved — never the domain of
-// the page that picked it up.
-//
-// Not one-shot-on-read either: a multi-hop flow (SSO consent screen, MFA step,
-// another intermediate redirect) means more than one page can load in the same
-// tab before the real destination — consuming the record on the FIRST of those
-// reads would show the prompt on a throwaway interstitial and then lose it for
-// good. Instead the record survives every read within the TTL, and is only
-// deleted when the resulting prompt is actually resolved (Save or Not now
-// clicked — resolvePendingSave) or when the TTL expires. Same tab scoping still
-// prevents two tabs mid-login from clobbering each other, and a fresh submit in
-// the same tab naturally overwrites whatever was staged before it.
 const PENDING_SAVE_TTL_MS = 45000
-// Cap on how many un-resolved captures one tab can stage at once. Keeps a tab
-// left open with several abandoned form submissions from growing this
-// unboundedly; the oldest entry is dropped to make room for a new one.
 const PENDING_SAVE_MAX_PER_TAB = 5
 
-// stagePendingSave/takePendingSave/resolvePendingSave are each read-modify-write
-// on the same chrome.storage.session key. The onMessage listener invokes them
-// in the order their messages arrive, but each one awaits storage I/O before
-// writing back — so two calls for the same tab, invoked back to back, could
-// otherwise interleave (e.g. resolvePendingSave's read landing before
-// stagePendingSave's write has actually committed, so the resolve finds
-// nothing to remove and the just-staged record is stuck until TTL expiry).
-// This chains all three onto one per-tab promise queue so each call's full
-// body finishes before the next one for that tab starts, regardless of how
-// their internal awaits would otherwise interleave.
 const tabPendingSaveLocks = new Map()
 function withPendingSaveLock(tabId, fn) {
   const prevTail = tabPendingSaveLocks.get(tabId) || Promise.resolve()
   const result = prevTail.then(fn, fn)
-  // Keep the chain alive even if fn throws, so one failure doesn't wedge
-  // every later operation for this tab.
   tabPendingSaveLocks.set(tabId, result.then(() => {}, () => {}))
   return result
 }
 
-// Each tab holds a MAP of id -> entry (not a single record), so two
-// submissions in the same tab within the TTL window stage as two independent
-// records instead of the second silently overwriting the first. The caller
-// (content.js) generates the id and is the only one who ever needs it again
-// (to resolve that specific prompt), so no round trip is needed to hand one
-// back on stage.
 async function stagePendingSave(sender, id, domain, username, password, extraFields, loginType) {
   const tabId = sender && sender.tab && sender.tab.id
   if (tabId === undefined || tabId === null || !id) return
@@ -418,10 +358,6 @@ async function stagePendingSave(sender, id, domain, username, password, extraFie
   })
 }
 
-// Returns the OLDEST still-live entry (FIFO), so a page that resolves it in
-// order surfaces earlier captures before later ones. Expired entries are
-// pruned from the map as a side effect, but a live entry is never deleted
-// here — only resolvePendingSave() or TTL expiry removes one.
 async function takePendingSave(sender) {
   const tabId = sender && sender.tab && sender.tab.id
   if (tabId === undefined || tabId === null) return { found: false }
@@ -447,10 +383,6 @@ async function takePendingSave(sender) {
   })
 }
 
-// Called once the user actually acts on the resulting save prompt (Save or Not
-// now), or once maybePromptSave() determines nothing needs saving, so that
-// specific record stops reappearing. Other still-pending entries in the same
-// tab are untouched.
 async function resolvePendingSave(sender, id) {
   const tabId = sender && sender.tab && sender.tab.id
   if (tabId === undefined || tabId === null || !id) return
@@ -467,7 +399,6 @@ async function resolvePendingSave(sender, id) {
   })
 }
 
-// ---- Inactivity soft/hard lock (driven by the service worker) ----
 
 async function getLockSettings() {
   let soft = 5, hard = 20
@@ -501,15 +432,13 @@ async function markActivity() {
 
 async function checkInactivity() {
   const stored = await chrome.storage.session.get(['masterKeyBytes', 'lastActivity'])
-  if (!stored || !stored.masterKeyBytes) return  // already locked
+  if (!stored || !stored.masterKeyBytes) return
   const last = stored.lastActivity || Date.now()
   const elapsed = Date.now() - last
   const { softMs, hardMs } = await getLockSettings()
   if (elapsed >= hardMs) {
-    // hard lock: wipe key + soft flag
     try { await chrome.storage.session.remove(['masterKeyBytes', 'softLocked']) } catch (e) {}
   } else if (elapsed >= softMs) {
-    // soft lock: wipe live key but set soft flag IF a PIN exists to resume
     if (await authHasPin()) {
       try {
         await chrome.storage.session.remove('masterKeyBytes')
@@ -526,7 +455,6 @@ chrome.alarms.onAlarm.addListener(function (alarm) {
   if (alarm.name === 'inactivityCheck') checkInactivity()
 })
 
-// any message counts as activity
 chrome.runtime.onMessage.addListener(function (request) {
   if (request && request.action === 'activity') markActivity()
   return false
