@@ -6,6 +6,10 @@ A local, encrypted, QR code portable password manager. No cloud, no accounts, no
 
 ---
 
+> ✅ **Single-Blob Vault Encryption and Migration Hardening - v0.6.3**
+>
+> Website Credentials now live behind one AES-GCM encrypted blob instead of per-credential encryption, so domain names, credential IDs, timestamps, login types, usernames, passwords, and per-site extra fields are no longer readable from the Website Credentials database row at rest. Existing vaults migrate automatically on first unlock, backed by an encrypted short-lived recovery journal and a full-tree fingerprint check after conversion, with automatic rollback if anything doesn't match. Devices must now import the same master key before syncing; a mismatched key fails clearly instead of being silently reconciled. See [CHANGELOG.md](CHANGELOG.md) for full details.
+
 > ✅ **Website Credentials Save Fix and Autofill Hardening - v0.6.2**
 >
 > Resolves v0.6.1's top-priority gap: Website Credentials now reliably saves new logins from real signup flows, fixed at the root (per-form state instead of shared globals). Also closes out a long list of autofill correctness issues found across several rounds of independent code review - the submit/navigation save race, false-positive field classification, React/framework compatibility, duplicate save prompts, detached-form listener leaks, formless-widget button ownership, and `<select>`/`<textarea>` support. See [CHANGELOG.md](CHANGELOG.md) for full details.
@@ -70,6 +74,7 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 - Website Credentials show a picker of saved usernames for the current site; injection only, no password reveal - that's the site's own UI if it has one
 - A visible field tag marks anything Valid Vault has matched
 - Website Credentials reliably saves new logins from real signup flows, including submit-triggered navigation, cross-domain SSO/MFA redirects, and multi-form pages
+- Each saved login now classifies its `loginType` (username, email, or phone) for more reliable matching
 - Custom div-based comboboxes and `contenteditable` fields remain unsupported; matching quality on unusual sites is still being hardened
 
 **Sync and Backup:**
@@ -78,9 +83,11 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 - Encrypted vault backup - save directly to Downloads or share the file, inert without the matching master key
 - Encrypted key backup - export the master key wrapped under a passphrase and three security questions, high-iteration KDF, never stored
 - Logins, Web Credentials, and Personal Info all travel together through the same export/import/QR flow, merged by timestamp with tombstoned deletes
+- Syncing now requires both devices to already share the same master key; a mismatched key fails with a clear error instead of being silently reconciled
 
 **Vault:**
-- Per-credential AES-GCM encryption
+- Website Credentials are encrypted as one AES-GCM vault blob rather than per-credential, so domain names, credential IDs, and login types are no longer readable at rest
+- Web Credentials and Personal Info remain individually AES-GCM encrypted, per credential
 - Website Credentials - logins grouped by site, multiple usernames per site supported, matched by username on merge
 - Web Credentials - category-organized secrets like Wi-Fi passwords or license keys, view/edit/delete
 - Personal Info - one profile per vault: name, phone, address, and ranked emails, used as an autofill source only, never stored per-site
@@ -91,7 +98,7 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 - Android via Capacitor, with native plugins for biometric auth and file saving
 - Vendored, self-contained code only, no Google SDKs in the scan path
 
-## Current Status: v0.6.2 - Active Testing
+## Current Status: v0.6.3 - Active Testing
 
 **Completed:**
 * ✅ Master key wrap architecture, verify-by-unwrap, no stored hashes
@@ -104,9 +111,10 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 * ✅ Autofill injection foundation - Personal Info and Website Credentials autofill working end to end
 * ✅ Website Credentials reliably saves new logins from real signup flows, including cross-domain and multi-step ones
 * ✅ Personal Info autofill and per-site extra fields extended to `<select>` and `<textarea>`
+* ✅ `loginType` field (username/email/phone) on Website Credentials for more reliable matching
+* ✅ Website Credentials encrypted as a single AES-GCM vault blob, with automatic migration, an encrypted recovery journal, and full-tree fingerprint verification for existing vaults
 
 **In Development:**
-* 📋 `loginType` field (username/email/phone) on Website Credentials for more reliable matching
 * 📋 Custom div-based combobox and `contenteditable` field support
 * 📋 Continued field testing of sync, backup, and native file saving across Android versions
 * 📋 Per-method auth edit and delete on the phone Manage tab
@@ -117,6 +125,8 @@ Master key transport is deliberate. The primary path is a live QR stream: one de
 
 Because importing a key now persists, the same vault file genuinely works the same way everywhere: set a password in Chrome, export the vault, import the key and the vault into Firefox with the same password, add a credential there, export again, and Chrome picks up the change on its next import. No server, no account, just timestamp-based merge.
 
+Since Website Credentials moved to single-blob encryption, merging requires both devices to already hold the same master key. If the local and incoming keys don't match, sync now fails with a clear error rather than silently picking one key or reconciling the difference.
+
 ## Security Model
 
 **Encryption at rest:**
@@ -124,6 +134,7 @@ Because importing a key now persists, the same vault file genuinely works the sa
 - On Android, the master key is additionally wrapped by a hardware Keystore key gated on device authentication
 - Exported key files are wrapped at a higher iteration count, gated by a passphrase and security questions that are never stored
 - No verification hashes are stored; the AES-GCM auth tag is the only verifier
+- Website Credentials are stored as a single encrypted blob, so no domain name, credential ID, timestamp, login type, username, password, or extra field is readable from the raw database row
 
 **No Google in the scan path.** The scanner uses the web camera and a vendored jsQR decoder, which runs entirely on device.
 
@@ -136,11 +147,11 @@ Because importing a key now persists, the same vault file genuinely works the sa
 **No competitor-targeting logic exists or is planned.** Autofill competes on being fully local and already-unlocked in memory, not on hiding another password manager's UI.
 
 **Design boundaries:**
-- Domain names are currently stored as plaintext object keys. Single-blob vault encryption is planned.
-- Physical access to an unlocked device is outside the threat model.
-- Auto-lock is a foreground inactivity timer; exact timing while backgrounded is subject to OS suspension.
-- A captured save-prompt is tracked per browser tab, not per destination page, for up to 45 seconds - deliberately, so it survives a cross-domain SSO/MFA redirect. The tradeoff is a narrow window where an unrelated page loaded in that same tab could recover the same prompt.
-- Live QR transport is protected by physical privacy, not by a handshake.
+- Website Credentials migrate to single-blob encryption automatically on first unlock; older vaults are read once, converted, verified, and backed up under an encrypted recovery journal during that migration
+- Physical access to an unlocked device is outside the threat model
+- Auto-lock is a foreground inactivity timer; exact timing while backgrounded is subject to OS suspension
+- A captured save-prompt is tracked per browser tab, not per destination page, for up to 45 seconds - deliberately, so it survives a cross-domain SSO/MFA redirect. The tradeoff is a narrow window where an unrelated page loaded in that same tab could recover the same prompt
+- Live QR transport is protected by physical privacy, not by a handshake
 
 ## Quick Start - Forks and Experimentation Highly Encouraged!
 
@@ -170,6 +181,9 @@ There are no stored password hashes. Authentication is the act of deriving a wra
 
 **Persistent Key Import:**
 Importing a master key re-wraps it under the browser's existing password (and fingerprint, if enrolled), so it becomes that browser's key going forward instead of reverting on the next unlock. This is the piece that makes the same vault file usable across Chrome, Firefox, and other browsers with one shared master key.
+
+**Single-Blob Vault Encryption:**
+The Website Credentials tree (meta plus every domain's credentials) is serialized once and encrypted as one AES-GCM blob, instead of encrypting each field independently. A legacy vault converts on first unlock: the old row is decrypted into a plaintext tree, backed up encrypted under a short-lived migration journal, re-encrypted as the new blob, and verified by comparing a full-tree fingerprint of what was converted against what was written back, with automatic rollback from the encrypted backup if anything doesn't match.
 
 **Safe Autofill Injection:**
 background.js holds the session key and does all decryption; content.js, running in the visited page's own origin, only ever receives the specific plaintext value it asked for (a name, a saved login) and never the master key itself. Inline unlock on a locked page is password-only, since a WebAuthn platform credential is bound to the extension's own origin and can't be triggered from a page's origin.

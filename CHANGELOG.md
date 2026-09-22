@@ -5,6 +5,34 @@ All notable changes to Local Vault will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.3] - 2026-09-22
+
+This release replaces per-credential encryption for Website Credentials with single-blob vault encryption, closing the last major gap in what's readable from the raw database at rest. It also closes out three real migration-safety gaps found across independent code review before shipping, and completes the `loginType` classification work scoped since v0.6.0.
+
+### Added
+- **`loginType` field on Website Credentials.** Each saved login now classifies as username, email, or phone, so autofill and the credential picker can target the right field type reliably instead of guessing from a generic login string.
+- **Single-blob vault encryption for Website Credentials.** The vault row is now `{schemaVersion: 2, blob: {iv, ciphertext}}`, encrypting the whole `{meta, credentials}` tree as one AES-GCM ciphertext. Domain names, credential IDs, timestamps, login types, usernames, passwords, and per-site extra fields are no longer readable as plaintext from the Website Credentials IndexedDB row.
+- **Automatic migration on first unlock.** A legacy row is decrypted, backed up encrypted (not plaintext) in a short-lived `vaultMigration` journal, converted to the new tree, and verified before the journal clears. An interrupted migration is detected and rolled back from that encrypted backup on the next unlock instead of being silently treated as done.
+
+### Fixed
+- **Unsupported or malformed vault rows could be misread as an empty legacy vault.** `decryptAnyRowToTree()` and `migrateLegacyVault()` now throw on any `schemaVersion` other than `2` or `undefined`, and a `schemaVersion: 2` row missing its `blob` now throws instead of passing `undefined` into decrypt. Previously either case could fall through to the legacy path and, on a later write, silently overwrite real data with an empty tree.
+- **Decrypted vault-tree validation only checked the top-level shape.** `isValidVaultTree()` now validates every domain's credential list: each entry needs a string `id`, `deleted` (if present) must actually be a boolean rather than any truthy value, and live (non-tombstoned) credentials need string `username`/`password`. A malformed blob now fails validation immediately instead of crashing later in `getAllDomains()`, `saveCredential()`, or `mergeVaults()`.
+- **Legacy migration discarded unknown credential fields.** `decryptLegacyTree()` now spreads the original record before overwriting only the fields it actually decrypts (`username`, `password`, `extraFields`, `loginType`, `createdAt`, `updatedAt`, `id`), so a future or unrecognized field on an old credential survives conversion instead of being silently dropped.
+- **Migration verification only proved the blob could decrypt, not that conversion preserved the data.** `finalizeMigration()` now compares a full-tree fingerprint of the plaintext tree, computed right after conversion, against the same fingerprint of the tree decrypted back from the written blob, rolling back on any mismatch the same way it already does for a decrypt/shape failure. The expected fingerprint is stored in the migration journal, so this check also covers a migration resumed after an interrupted run, not just the happy path.
+
+### Changed
+- **Pairing and sync no longer reconcile two different master keys.** Importing the same master key on both devices before syncing was already the intended behavior; the old reconciliation path was leftover early-stage logic and is removed. A mismatched key now fails clearly instead of one device's key silently winning.
+- **`mergeVaults()` operates on already-decrypted plaintext trees** and no longer needs a master key itself.
+- **`getAllDomains()` now returns `{success: false, locked: true}` when called with no key**, instead of assuming it can list domains unencrypted.
+
+### Known Gaps
+- Custom div-based comboboxes and `contenteditable` fields remain unsupported by autofill. I feel like this is too rare of an edge case, but will consider any feedback on the matter.
+- Every credential read now decrypts the full Website Credentials tree. This is the accepted tradeoff of single-blob storage; a decrypted-tree cache has not been added, since it hasn't been needed in real use yet.
+
+### Notes
+- Every hardening fix in this release was verified across multiple rounds of independent code review before shipping, following the same practice established in v0.6.2.
+- test.html and www/index.html were rebuilt from build.js to include all of the above.
+
 ## [0.6.2] - 2026-09-20
  
 This release resolves the top-priority gap left open by v0.6.1: Website Credentials now reliably saves new logins from real signup flows. It also closes out a long list of correctness and robustness issues in the autofill/injection layer found across several rounds of independent code review, each one verified against the actual code and against real browser behavior (Playwright + Chromium) before shipping.
