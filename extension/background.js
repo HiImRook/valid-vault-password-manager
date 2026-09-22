@@ -51,22 +51,6 @@ async function getSessionKeyBytes() {
   return null
 }
 
-async function getVault() {
-  return new Promise(function (resolve) {
-    const req = indexedDB.open('ValidVault')
-    req.onsuccess = function () {
-      const db = req.result
-      try {
-        const tx = db.transaction('passwords', 'readonly')
-        const get = tx.objectStore('passwords').get('vault')
-        get.onsuccess = function () { resolve(get.result || null) }
-        get.onerror = function () { resolve(null) }
-      } catch (e) { resolve(null) }
-    }
-    req.onerror = function () { resolve(null) }
-  })
-}
-
 async function decryptField(field, key) {
   const iv = new Uint8Array(field.iv)
   const ct = new Uint8Array(field.ciphertext)
@@ -138,154 +122,11 @@ async function credentialsForDomainViaShared(domain) {
   return result
 }
 
-async function credentialsForDomain(domain) {
-  const bytes = await getSessionKeyBytes()
-  if (!bytes) return { success: false, credentials: [], locked: true }
-  const vault = await getVault()
-  if (!vault || !vault.credentials || !vault.credentials[domain]) {
-    return { success: true, credentials: [] }
-  }
-  const key = await crypto.subtle.importKey('raw', new Uint8Array(bytes), { name: 'AES-GCM', length: 256 }, false, ['decrypt'])
-  const out = []
-  for (const cred of vault.credentials[domain]) {
-    if (cred.deleted) continue
-    try {
-      const decUsername = await decryptField(cred.username, key)
-      out.push({
-        id: cred.id,
-        username: decUsername,
-        password: await decryptField(cred.password, key),
-        extraFields: await decryptExtraFields(cred.extraFields, key),
-        loginType: cred.loginType || inferLoginType(decUsername)
-      })
-    } catch (e) {
-      return { success: false, credentials: [], locked: true }
-    }
-  }
-  return { success: true, credentials: out }
-}
-
-async function encryptField(text, key) {
-  const iv = crypto.getRandomValues(new Uint8Array(12))
-  const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv }, key, new TextEncoder().encode(text))
-  return { iv: Array.from(iv), ciphertext: Array.from(new Uint8Array(ct)) }
-}
-
-function normalizeLabel(label) {
-  return (label || '')
-    .toLowerCase()
-    .replace(/[:*]+$/g, '')
-    .replace(/[^a-z0-9]+/g, ' ')
-    .trim()
-    .replace(/\s+/g, ' ')
-}
-
-async function encryptExtraFields(extraFields, key) {
-  const out = []
-  for (const field of extraFields || []) {
-    if (!field || !field.label || !field.value) continue
-    out.push({ label: await encryptField(field.label, key), value: await encryptField(field.value, key) })
-  }
-  return out
-}
-
-async function decryptExtraFields(extraFields, key) {
-  const out = []
-  for (const field of extraFields || []) {
-    try {
-      out.push({ label: await decryptField(field.label, key), value: await decryptField(field.value, key) })
-    } catch (e) {}
-  }
-  return out
-}
-
-function inferLoginType(identifier) {
-  const v = (identifier || '').trim()
-  if (!v) return 'username'
-  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) return 'email'
-  const digits = v.replace(/\D/g, '')
-  if (digits.length >= 7 && /^[+()\-.\s\d]+$/.test(v)) return 'phone'
-  return 'username'
-}
-
-function genId() {
-  return 'c_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10)
-}
-
-async function writeVault(vault) {
-  return new Promise(function (resolve) {
-    const req = indexedDB.open('ValidVault')
-    req.onsuccess = function () {
-      try {
-        const tx = req.result.transaction('passwords', 'readwrite')
-        tx.objectStore('passwords').put(vault)
-        tx.oncomplete = function () { resolve(true) }
-        tx.onerror = function () { resolve(false) }
-      } catch (e) { resolve(false) }
-    }
-    req.onerror = function () { resolve(false) }
-  })
-}
-
 async function saveCredentialViaShared(domain, username, password, extraFields, loginType) {
   const bytes = await getSessionKeyBytes()
   if (!bytes) return { success: false, locked: true }
   const key = await crypto.subtle.importKey('raw', new Uint8Array(bytes), { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt'])
   return passwordsSaveCredential(domain, username, password, key, extraFields, loginType)
-}
-
-async function saveCredential(domain, username, password, extraFields, loginType) {
-  const bytes = await getSessionKeyBytes()
-  if (!bytes) return { success: false, locked: true }
-  const key = await crypto.subtle.importKey('raw', new Uint8Array(bytes), { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt'])
-  let vault = await getVault()
-  if (!vault) vault = { id: 'vault', meta: { createdAt: Date.now(), lastAccess: Date.now() }, credentials: {} }
-  if (!vault.credentials) vault.credentials = {}
-  if (!vault.credentials[domain]) vault.credentials[domain] = []
-
-  let existingId = null
-  let existingExtraFields = []
-  let existingLoginType = null
-  for (const cred of vault.credentials[domain]) {
-    if (cred.deleted) continue
-    try {
-      const u = await decryptField(cred.username, key)
-      if (u === username) {
-        existingId = cred.id
-        existingExtraFields = await decryptExtraFields(cred.extraFields, key)
-        existingLoginType = cred.loginType || null
-        break
-      }
-    } catch (e) {}
-  }
-  const resolvedLoginType = loginType || existingLoginType || inferLoginType(username)
-
-  const mergedExtraFields = existingExtraFields.slice()
-  for (const field of (extraFields || [])) {
-    if (!field || !field.label || !field.value) continue
-    const idx = mergedExtraFields.findIndex(f => normalizeLabel(f.label) === normalizeLabel(field.label))
-    if (idx !== -1) mergedExtraFields[idx] = { label: mergedExtraFields[idx].label, value: field.value }
-    else mergedExtraFields.push({ label: field.label, value: field.value })
-  }
-
-  const encUser = await encryptField(username, key)
-  const encPass = await encryptField(password, key)
-  const encExtraFields = await encryptExtraFields(mergedExtraFields, key)
-  const now = Date.now()
-  if (existingId) {
-    for (let i = 0; i < vault.credentials[domain].length; i++) {
-      if (vault.credentials[domain][i].id === existingId) {
-        vault.credentials[domain][i] = { id: existingId, username: encUser, password: encPass, extraFields: encExtraFields, loginType: resolvedLoginType, createdAt: vault.credentials[domain][i].createdAt || now, updatedAt: now }
-        break
-      }
-    }
-  } else {
-    vault.credentials[domain].push({ id: genId(), username: encUser, password: encPass, extraFields: encExtraFields, loginType: resolvedLoginType, createdAt: now, updatedAt: now })
-  }
-  vault.meta = vault.meta || {}
-  vault.meta.lastAccess = now
-  const ok = await writeVault(vault)
-  return { success: ok }
 }
 
 chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
