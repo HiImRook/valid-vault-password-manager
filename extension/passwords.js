@@ -49,10 +49,12 @@ async function encryptExtraFields(extraFields, masterKey) {
 async function decryptExtraFields(extraFields, masterKey) {
   const out = []
   for (const field of extraFields || []) {
-    out.push({
-      label: await decrypt(field.label, masterKey),
-      value: await decrypt(field.value, masterKey)
-    })
+    try {
+      out.push({
+        label: await decrypt(field.label, masterKey),
+        value: await decrypt(field.value, masterKey)
+      })
+    } catch (error) {}
   }
   return out
 }
