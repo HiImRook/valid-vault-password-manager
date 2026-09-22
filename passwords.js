@@ -38,6 +38,16 @@ function inferLoginType(identifier) {
   return 'username'
 }
 
+async function readLoginType(stored, masterKey) {
+  if (!stored) return null
+  if (typeof stored === 'string') return stored
+  try {
+    return await decrypt(stored, masterKey)
+  } catch (error) {
+    return null
+  }
+}
+
 async function ensureVault() {
   const existing = await getPasswordVault()
   if (existing) return { success: true }
@@ -71,7 +81,10 @@ async function saveCredential(domain, username, password, masterKey, loginType) 
   }
 
   const existing = []
+  let existingId = null
+  let existingCreatedAt = null
   let existingLoginType = null
+  let existingExtraFields = null
   for (const cred of vault.credentials[domain]) {
     if (cred.deleted) {
       existing.push(cred)
@@ -79,24 +92,30 @@ async function saveCredential(domain, username, password, masterKey, loginType) 
     }
     const existingUsername = await decrypt(cred.username, masterKey)
     if (existingUsername === username) {
-      existingLoginType = cred.loginType || null
+      existingId = cred.id
+      existingCreatedAt = cred.createdAt
+      existingLoginType = await readLoginType(cred.loginType, masterKey)
+      existingExtraFields = cred.extraFields || null
       continue
     }
     existing.push(cred)
   }
 
-  const id = generateId()
+  const resolvedLoginType = loginType || existingLoginType || inferLoginType(username)
+  const now = Date.now()
+  const id = existingId || generateId()
   existing.push({
     id,
     username: encUsername,
     password: encPassword,
-    loginType: loginType || existingLoginType || inferLoginType(username),
-    createdAt: Date.now(),
-    updatedAt: Date.now()
+    ...(existingExtraFields ? { extraFields: existingExtraFields } : {}),
+    loginType: await encrypt(resolvedLoginType, masterKey),
+    createdAt: existingCreatedAt || now,
+    updatedAt: now
   })
 
   vault.credentials[domain] = existing
-  vault.meta.lastAccess = Date.now()
+  vault.meta.lastAccess = now
 
   await setPasswordVault(vault)
   return { success: true, id }
@@ -120,7 +139,7 @@ async function getCredentials(domain, masterKey) {
         id: cred.id,
         username: decUsername,
         password: await decrypt(cred.password, masterKey),
-        loginType: cred.loginType || inferLoginType(decUsername),
+        loginType: (await readLoginType(cred.loginType, masterKey)) || inferLoginType(decUsername),
         createdAt: cred.createdAt,
         updatedAt: cred.updatedAt
       })
@@ -165,7 +184,7 @@ async function updateCredential(credentialId, updates, masterKey) {
         creds[index].password = await encrypt(updates.password, masterKey)
       }
       if (updates.loginType) {
-        creds[index].loginType = updates.loginType
+        creds[index].loginType = await encrypt(updates.loginType, masterKey)
       }
       creds[index].updatedAt = Date.now()
       vault.meta.lastAccess = Date.now()
@@ -243,12 +262,13 @@ async function reEncryptVault(vault, oldKey, newKey) {
       const username = await decrypt(cred.username, oldKey)
       const password = await decrypt(cred.password, oldKey)
       const extraFieldsPlain = await decryptExtraFields(cred.extraFields, oldKey)
+      const loginTypePlain = await readLoginType(cred.loginType, oldKey)
       list.push({
         id: cred.id,
         username: await encrypt(username, newKey),
         password: await encrypt(password, newKey),
         extraFields: await encryptExtraFields(extraFieldsPlain, newKey),
-        loginType: cred.loginType,
+        loginType: loginTypePlain ? await encrypt(loginTypePlain, newKey) : undefined,
         createdAt: cred.createdAt,
         updatedAt: cred.updatedAt
       })

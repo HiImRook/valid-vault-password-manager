@@ -68,6 +68,16 @@ function normalizeLabel(label) {
     .replace(/\s+/g, ' ')
 }
 
+async function readLoginType(stored, masterKey) {
+  if (!stored) return null
+  if (typeof stored === 'string') return stored
+  try {
+    return await decrypt(stored, masterKey)
+  } catch (error) {
+    return null
+  }
+}
+
 async function saveCredential(domain, username, password, masterKey, extraFields, loginType) {
   await ensureVault()
   const vault = await getPasswordVault()
@@ -90,7 +100,7 @@ async function saveCredential(domain, username, password, masterKey, extraFields
     if (existingUsername === username) {
       existingId = cred.id
       existingCreatedAt = cred.createdAt
-      existingLoginType = cred.loginType || null
+      existingLoginType = await readLoginType(cred.loginType, masterKey)
       existingExtraFields = await decryptExtraFields(cred.extraFields, masterKey)
       continue
     }
@@ -105,9 +115,11 @@ async function saveCredential(domain, username, password, masterKey, extraFields
     else mergedExtraFields.push({ label: field.label, value: field.value })
   }
 
+  const resolvedLoginType = loginType || existingLoginType || inferLoginType(username)
   const encUsername = await encrypt(username, masterKey)
   const encPassword = await encrypt(password, masterKey)
   const encExtraFields = await encryptExtraFields(mergedExtraFields, masterKey)
+  const encLoginType = await encrypt(resolvedLoginType, masterKey)
   const now = Date.now()
   const id = existingId || generateId()
   existing.push({
@@ -115,7 +127,7 @@ async function saveCredential(domain, username, password, masterKey, extraFields
     username: encUsername,
     password: encPassword,
     extraFields: encExtraFields,
-    loginType: loginType || existingLoginType || inferLoginType(username),
+    loginType: encLoginType,
     createdAt: existingCreatedAt || now,
     updatedAt: now
   })
@@ -146,7 +158,7 @@ async function getCredentials(domain, masterKey) {
         username: decUsername,
         password: await decrypt(cred.password, masterKey),
         extraFields: await decryptExtraFields(cred.extraFields, masterKey),
-        loginType: cred.loginType || inferLoginType(decUsername),
+        loginType: (await readLoginType(cred.loginType, masterKey)) || inferLoginType(decUsername),
         createdAt: cred.createdAt,
         updatedAt: cred.updatedAt
       })
@@ -194,7 +206,7 @@ async function updateCredential(credentialId, updates, masterKey) {
         creds[index].extraFields = await encryptExtraFields(updates.extraFields, masterKey)
       }
       if (updates.loginType) {
-        creds[index].loginType = updates.loginType
+        creds[index].loginType = await encrypt(updates.loginType, masterKey)
       }
       creds[index].updatedAt = Date.now()
       vault.meta.lastAccess = Date.now()
@@ -272,12 +284,13 @@ async function reEncryptVault(vault, oldKey, newKey) {
       const username = await decrypt(cred.username, oldKey)
       const password = await decrypt(cred.password, oldKey)
       const extraFieldsPlain = await decryptExtraFields(cred.extraFields, oldKey)
+      const loginTypePlain = await readLoginType(cred.loginType, oldKey)
       list.push({
         id: cred.id,
         username: await encrypt(username, newKey),
         password: await encrypt(password, newKey),
         extraFields: await encryptExtraFields(extraFieldsPlain, newKey),
-        loginType: cred.loginType,
+        loginType: loginTypePlain ? await encrypt(loginTypePlain, newKey) : undefined,
         createdAt: cred.createdAt,
         updatedAt: cred.updatedAt
       })
