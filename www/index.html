@@ -493,7 +493,7 @@ return {
 
 const storeModule = (function() {
 const DB_NAME = 'ValidVault'
-const DB_VERSION = 1
+const DB_VERSION = 2
 
 let db = null
 
@@ -523,6 +523,10 @@ async function openDB() {
       
       if (!database.objectStoreNames.contains('wallets')) {
         database.createObjectStore('wallets', { keyPath: 'id' })
+      }
+
+      if (!database.objectStoreNames.contains('vaultMigration')) {
+        database.createObjectStore('vaultMigration', { keyPath: 'id' })
       }
     }
   })
@@ -585,9 +589,21 @@ async function setWalletVault(vaultData) {
   return put('wallets', { id: 'vault', ...vaultData })
 }
 
+async function getVaultMigrationJournal() {
+  return get('vaultMigration', 'single-blob-migration')
+}
+
+async function setVaultMigrationJournal(journal) {
+  return put('vaultMigration', { id: 'single-blob-migration', ...journal })
+}
+
+async function clearVaultMigrationJournal() {
+  return remove('vaultMigration', 'single-blob-migration')
+}
+
 async function clearAll() {
   const database = await openDB()
-  const stores = ['auth', 'passwords', 'wallets']
+  const stores = ['auth', 'passwords', 'wallets', 'vaultMigration']
 
   await Promise.all(stores.map(storeName => new Promise((resolve, reject) => {
     const tx = database.transaction(storeName, 'readwrite')
@@ -607,6 +623,9 @@ return {
   setPasswordVault,
   getWalletVault,
   setWalletVault,
+  getVaultMigrationJournal,
+  setVaultMigrationJournal,
+  clearVaultMigrationJournal,
   clearAll
 }
 })();
@@ -829,34 +848,9 @@ return {
 
 const passwordsModule = (function() {
 const { encrypt, decrypt } = cryptoModule
-const { getPasswordVault, setPasswordVault } = storeModule
+const { getPasswordVault, setPasswordVault, getVaultMigrationJournal, setVaultMigrationJournal, clearVaultMigrationJournal } = storeModule
 function generateId() {
   return crypto.randomUUID()
-}
-
-async function encryptExtraFields(extraFields, key) {
-  const out = []
-  for (const field of extraFields || []) {
-    if (!field || !field.label || field.value === undefined || field.value === null || field.value === '') continue
-    out.push({
-      label: await encrypt(field.label, key),
-      value: await encrypt(field.value, key)
-    })
-  }
-  return out
-}
-
-async function decryptExtraFields(extraFields, key) {
-  const out = []
-  for (const field of extraFields || []) {
-    try {
-      out.push({
-        label: await decrypt(field.label, key),
-        value: await decrypt(field.value, key)
-      })
-    } catch (error) {}
-  }
-  return out
 }
 
 function inferLoginType(identifier) {
@@ -867,7 +861,34 @@ function inferLoginType(identifier) {
   return 'username'
 }
 
-async function readLoginType(stored, masterKey) {
+function isLive(cred) {
+  return !cred.deleted
+}
+
+function isValidVaultTree(value) {
+  return !!(value &&
+    typeof value === 'object' &&
+    value.meta &&
+    typeof value.meta === 'object' &&
+    value.credentials &&
+    typeof value.credentials === 'object' &&
+    !Array.isArray(value.credentials))
+}
+
+async function decryptLegacyExtraFields(extraFields, masterKey) {
+  const out = []
+  for (const field of extraFields || []) {
+    try {
+      out.push({
+        label: await decrypt(field.label, masterKey),
+        value: await decrypt(field.value, masterKey)
+      })
+    } catch (error) {}
+  }
+  return out
+}
+
+async function readLegacyLoginType(stored, masterKey) {
   if (!stored) return null
   if (typeof stored === 'string') return stored
   try {
@@ -877,36 +898,147 @@ async function readLoginType(stored, masterKey) {
   }
 }
 
-async function ensureVault() {
-  const existing = await getPasswordVault()
-  if (existing) return { success: true }
-
-  const vault = {
-    meta: {
-      version: 1,
-      createdAt: Date.now(),
-      lastAccess: Date.now()
-    },
-    credentials: {}
+async function decryptLegacyTree(legacyTree, masterKey) {
+  const credentials = {}
+  for (const domain of Object.keys(legacyTree.credentials || {})) {
+    const list = []
+    for (const cred of legacyTree.credentials[domain]) {
+      if (cred.deleted) {
+        list.push(cred)
+        continue
+      }
+      const username = await decrypt(cred.username, masterKey)
+      const password = await decrypt(cred.password, masterKey)
+      const extraFields = await decryptLegacyExtraFields(cred.extraFields, masterKey)
+      const loginType = (await readLegacyLoginType(cred.loginType, masterKey)) || inferLoginType(username)
+      list.push({
+        id: cred.id,
+        username,
+        password,
+        extraFields,
+        loginType,
+        createdAt: cred.createdAt,
+        updatedAt: cred.updatedAt
+      })
+    }
+    credentials[domain] = list
   }
 
-  await setPasswordVault(vault)
+  return {
+    meta: {
+      version: 2,
+      createdAt: legacyTree.meta.createdAt || Date.now(),
+      lastAccess: Date.now()
+    },
+    credentials
+  }
+}
+
+async function encryptTree(tree, masterKey) {
+  return encrypt(JSON.stringify(tree), masterKey)
+}
+
+async function decryptTree(blob, masterKey) {
+  const json = await decrypt(blob, masterKey)
+  const parsed = JSON.parse(json)
+  if (!isValidVaultTree(parsed)) {
+    throw new Error('Vault data has an unexpected shape')
+  }
+  return parsed
+}
+
+async function decryptAnyRowToTree(row, masterKey) {
+  if (!row) {
+    return {
+      meta: { version: 2, createdAt: Date.now(), lastAccess: Date.now() },
+      credentials: {}
+    }
+  }
+  if (row.schemaVersion === 2) {
+    return decryptTree(row.blob, masterKey)
+  }
+  const legacyTree = { meta: row.meta || {}, credentials: row.credentials || {} }
+  return decryptLegacyTree(legacyTree, masterKey)
+}
+
+async function finalizeMigration(masterKey) {
+  const written = await getPasswordVault()
+  try {
+    await decryptTree(written.blob, masterKey)
+  } catch (error) {
+    await rollbackMigration(masterKey, 'Vault migration failed verification and was reverted')
+    return { migrated: false, status: 'rolled-back' }
+  }
+
+  await clearVaultMigrationJournal()
+  return { migrated: true, status: 'complete' }
+}
+
+async function rollbackMigration(masterKey, message) {
+  const journal = await getVaultMigrationJournal()
+  if (journal && journal.backup) {
+    const legacyRowJson = await decrypt(journal.backup, masterKey)
+    const legacyRow = JSON.parse(legacyRowJson)
+    await setPasswordVault(legacyRow)
+  }
+  await clearVaultMigrationJournal()
+  throw new Error(message)
+}
+
+async function migrateLegacyVault(masterKey) {
+  const journal = await getVaultMigrationJournal()
+  if (journal) {
+    return finalizeMigration(masterKey)
+  }
+
+  const current = await getPasswordVault()
+
+  if (!current) {
+    const tree = {
+      meta: { version: 2, createdAt: Date.now(), lastAccess: Date.now() },
+      credentials: {}
+    }
+    await setPasswordVault({ id: 'vault', schemaVersion: 2, blob: await encryptTree(tree, masterKey) })
+    return { migrated: false, status: 'created' }
+  }
+
+  if (current.schemaVersion === 2) {
+    return { migrated: false, status: 'already-current' }
+  }
+
+  const legacyTree = { meta: current.meta || {}, credentials: current.credentials || {} }
+  const plainTree = await decryptLegacyTree(legacyTree, masterKey)
+  const encryptedBackup = await encrypt(JSON.stringify(current), masterKey)
+
+  await setVaultMigrationJournal({ status: 'prepared', backup: encryptedBackup, createdAt: Date.now() })
+
+  const blob = await encryptTree(plainTree, masterKey)
+  await setPasswordVault({ id: 'vault', schemaVersion: 2, blob })
+
+  return finalizeMigration(masterKey)
+}
+
+async function readVaultTree(masterKey) {
+  await migrateLegacyVault(masterKey)
+  const row = await getPasswordVault()
+  return decryptTree(row.blob, masterKey)
+}
+
+async function writeVaultTree(tree, masterKey) {
+  const blob = await encryptTree(tree, masterKey)
+  await setPasswordVault({ id: 'vault', schemaVersion: 2, blob })
+}
+
+async function ensureVault(masterKey) {
+  await migrateLegacyVault(masterKey)
   return { success: true }
 }
 
-function isLive(cred) {
-  return !cred.deleted
-}
-
 async function saveCredential(domain, username, password, masterKey, loginType) {
-  await ensureVault()
-  const vault = await getPasswordVault()
+  const tree = await readVaultTree(masterKey)
 
-  const encUsername = await encrypt(username, masterKey)
-  const encPassword = await encrypt(password, masterKey)
-
-  if (!vault.credentials[domain]) {
-    vault.credentials[domain] = []
+  if (!tree.credentials[domain]) {
+    tree.credentials[domain] = []
   }
 
   const existing = []
@@ -914,16 +1046,15 @@ async function saveCredential(domain, username, password, masterKey, loginType) 
   let existingCreatedAt = null
   let existingLoginType = null
   let existingExtraFields = null
-  for (const cred of vault.credentials[domain]) {
+  for (const cred of tree.credentials[domain]) {
     if (cred.deleted) {
       existing.push(cred)
       continue
     }
-    const existingUsername = await decrypt(cred.username, masterKey)
-    if (existingUsername === username) {
+    if (cred.username === username) {
       existingId = cred.id
       existingCreatedAt = cred.createdAt
-      existingLoginType = await readLoginType(cred.loginType, masterKey)
+      existingLoginType = cred.loginType || null
       existingExtraFields = cred.extraFields || null
       continue
     }
@@ -935,58 +1066,65 @@ async function saveCredential(domain, username, password, masterKey, loginType) 
   const id = existingId || generateId()
   existing.push({
     id,
-    username: encUsername,
-    password: encPassword,
+    username,
+    password,
     ...(existingExtraFields ? { extraFields: existingExtraFields } : {}),
-    loginType: await encrypt(resolvedLoginType, masterKey),
+    loginType: resolvedLoginType,
     createdAt: existingCreatedAt || now,
     updatedAt: now
   })
 
-  vault.credentials[domain] = existing
-  vault.meta.lastAccess = now
+  tree.credentials[domain] = existing
+  tree.meta.lastAccess = now
 
-  await setPasswordVault(vault)
+  await writeVaultTree(tree, masterKey)
   return { success: true, id }
 }
 
 async function getCredentials(domain, masterKey) {
-  await ensureVault()
-  const vault = await getPasswordVault()
+  let tree
+  try {
+    tree = await readVaultTree(masterKey)
+  } catch (error) {
+    return { success: false, error: 'Decryption failed' }
+  }
 
-  const domainCreds = vault.credentials[domain]
+  const domainCreds = tree.credentials[domain]
   if (!domainCreds || domainCreds.length === 0) {
     return { success: true, credentials: [] }
   }
 
-  const decrypted = []
+  const result = []
   for (const cred of domainCreds) {
     if (cred.deleted) continue
-    try {
-      const decUsername = await decrypt(cred.username, masterKey)
-      decrypted.push({
-        id: cred.id,
-        username: decUsername,
-        password: await decrypt(cred.password, masterKey),
-        loginType: (await readLoginType(cred.loginType, masterKey)) || inferLoginType(decUsername),
-        createdAt: cred.createdAt,
-        updatedAt: cred.updatedAt
-      })
-    } catch (error) {
-      return { success: false, error: 'Decryption failed' }
-    }
+    result.push({
+      id: cred.id,
+      username: cred.username,
+      password: cred.password,
+      loginType: cred.loginType || inferLoginType(cred.username),
+      createdAt: cred.createdAt,
+      updatedAt: cred.updatedAt
+    })
   }
 
-  return { success: true, credentials: decrypted }
+  return { success: true, credentials: result }
 }
 
-async function getAllDomains() {
-  await ensureVault()
-  const vault = await getPasswordVault()
+async function getAllDomains(masterKey) {
+  if (!masterKey) {
+    return { success: false, locked: true, domains: [] }
+  }
+
+  let tree
+  try {
+    tree = await readVaultTree(masterKey)
+  } catch (error) {
+    return { success: false, error: 'Decryption failed' }
+  }
 
   const domains = []
-  for (const domain of Object.keys(vault.credentials)) {
-    const hasLive = vault.credentials[domain].some(isLive)
+  for (const domain of Object.keys(tree.credentials)) {
+    const hasLive = tree.credentials[domain].some(isLive)
     if (hasLive) domains.push(domain)
   }
 
@@ -994,31 +1132,26 @@ async function getAllDomains() {
 }
 
 async function updateCredential(credentialId, updates, masterKey) {
-  const vault = await getPasswordVault()
-  if (!vault) return { success: false, error: 'No vault' }
+  let tree
+  try {
+    tree = await readVaultTree(masterKey)
+  } catch (error) {
+    return { success: false, error: 'Decryption failed' }
+  }
 
-  for (const domain of Object.keys(vault.credentials)) {
-    const creds = vault.credentials[domain]
-    function matchesId(candidate) {
-      return candidate.id === credentialId
-    }
-    const index = creds.findIndex(matchesId)
+  for (const domain of Object.keys(tree.credentials)) {
+    const creds = tree.credentials[domain]
+    const index = creds.findIndex((candidate) => candidate.id === credentialId)
 
     if (index !== -1) {
       if (creds[index].deleted) return { success: false, error: 'Credential deleted' }
-      if (updates.username) {
-        creds[index].username = await encrypt(updates.username, masterKey)
-      }
-      if (updates.password) {
-        creds[index].password = await encrypt(updates.password, masterKey)
-      }
-      if (updates.loginType) {
-        creds[index].loginType = await encrypt(updates.loginType, masterKey)
-      }
+      if (updates.username) creds[index].username = updates.username
+      if (updates.password) creds[index].password = updates.password
+      if (updates.loginType) creds[index].loginType = updates.loginType
       creds[index].updatedAt = Date.now()
-      vault.meta.lastAccess = Date.now()
+      tree.meta.lastAccess = Date.now()
 
-      await setPasswordVault(vault)
+      await writeVaultTree(tree, masterKey)
       return { success: true }
     }
   }
@@ -1026,16 +1159,17 @@ async function updateCredential(credentialId, updates, masterKey) {
   return { success: false, error: 'Credential not found' }
 }
 
-async function deleteCredential(credentialId) {
-  const vault = await getPasswordVault()
-  if (!vault) return { success: false, error: 'No vault' }
+async function deleteCredential(credentialId, masterKey) {
+  let tree
+  try {
+    tree = await readVaultTree(masterKey)
+  } catch (error) {
+    return { success: false, error: 'Decryption failed' }
+  }
 
-  for (const domain of Object.keys(vault.credentials)) {
-    const creds = vault.credentials[domain]
-    function matchesId(candidate) {
-      return candidate.id === credentialId
-    }
-    const index = creds.findIndex(matchesId)
+  for (const domain of Object.keys(tree.credentials)) {
+    const creds = tree.credentials[domain]
+    const index = creds.findIndex((candidate) => candidate.id === credentialId)
 
     if (index !== -1) {
       creds[index] = {
@@ -1045,8 +1179,8 @@ async function deleteCredential(credentialId) {
         updatedAt: Date.now()
       }
 
-      vault.meta.lastAccess = Date.now()
-      await setPasswordVault(vault)
+      tree.meta.lastAccess = Date.now()
+      await writeVaultTree(tree, masterKey)
       return { success: true }
     }
   }
@@ -1063,10 +1197,7 @@ async function autofill(domain, credentialId, masterKey) {
   }
 
   if (credentialId) {
-    function matchesAutofillId(candidate) {
-      return candidate.id === credentialId
-    }
-    const cred = result.credentials.find(matchesAutofillId)
+    const cred = result.credentials.find((candidate) => candidate.id === credentialId)
     if (cred) return { success: true, username: cred.username, password: cred.password }
     return { success: false, error: 'Credential not found' }
   }
@@ -1075,71 +1206,33 @@ async function autofill(domain, credentialId, masterKey) {
   return { success: true, username: cred.username, password: cred.password }
 }
 
-async function reEncryptVault(vault, oldKey, newKey) {
-  const out = {
-    meta: { version: vault.meta.version, createdAt: vault.meta.createdAt, lastAccess: vault.meta.lastAccess },
-    credentials: {}
-  }
-
-  for (const domain of Object.keys(vault.credentials)) {
-    const list = []
-    for (const cred of vault.credentials[domain]) {
-      if (cred.deleted) {
-        list.push(cred)
-        continue
-      }
-      const username = await decrypt(cred.username, oldKey)
-      const password = await decrypt(cred.password, oldKey)
-      const extraFieldsPlain = await decryptExtraFields(cred.extraFields, oldKey)
-      const loginTypePlain = await readLoginType(cred.loginType, oldKey)
-      list.push({
-        id: cred.id,
-        username: await encrypt(username, newKey),
-        password: await encrypt(password, newKey),
-        extraFields: await encryptExtraFields(extraFieldsPlain, newKey),
-        loginType: loginTypePlain ? await encrypt(loginTypePlain, newKey) : undefined,
-        createdAt: cred.createdAt,
-        updatedAt: cred.updatedAt
-      })
-    }
-    out.credentials[domain] = list
-  }
-
-  return out
-}
-
-async function mergeVaults(localVault, incomingVault, masterKey) {
+function mergeVaults(localTree, incomingTree) {
   const merged = {
     meta: {
-      version: localVault.meta.version,
-      createdAt: Math.min(localVault.meta.createdAt, incomingVault.meta.createdAt),
+      version: 2,
+      createdAt: Math.min(localTree.meta.createdAt, incomingTree.meta.createdAt),
       lastAccess: Date.now()
     },
     credentials: {}
   }
 
   const domains = new Set([
-    ...Object.keys(localVault.credentials),
-    ...Object.keys(incomingVault.credentials)
+    ...Object.keys(localTree.credentials),
+    ...Object.keys(incomingTree.credentials)
   ])
 
   for (const domain of domains) {
-    const localCreds = localVault.credentials[domain] || []
-    const incomingCreds = incomingVault.credentials[domain] || []
+    const localCreds = localTree.credentials[domain] || []
+    const incomingCreds = incomingTree.credentials[domain] || []
 
-    const byUsername = new Map()
-
-    async function keyFor(cred) {
+    function keyFor(cred) {
       if (cred.deleted) return 'tomb:' + cred.id
-      try {
-        return 'user:' + (await decrypt(cred.username, masterKey))
-      } catch (error) {
-        return 'id:' + cred.id
-      }
+      return 'user:' + cred.username
     }
 
+    const byUsername = new Map()
     for (const cred of [...localCreds, ...incomingCreds]) {
-      const key = await keyFor(cred)
+      const key = keyFor(cred)
       const existing = byUsername.get(key)
       if (!existing || cred.updatedAt > existing.updatedAt) {
         byUsername.set(key, cred)
@@ -1174,7 +1267,12 @@ return {
   getAllDomains,
   updateCredential,
   deleteCredential,
-  autofill
+  autofill,
+  mergeVaults,
+  migrateLegacyVault,
+  readVaultTree,
+  writeVaultTree,
+  decryptAnyRowToTree
 }
 })();
 
@@ -1722,8 +1820,25 @@ return {
 })();
 
 const pairingModule = (function() {
-const { getPasswordVault, setPasswordVault, getAuth, setAuth } = storeModule
+const { getPasswordVault, getAuth, setAuth } = storeModule
 const { createBackupSignature, verifyBackupSignature } = cryptoModule
+const { mergeVaults, decryptAnyRowToTree, writeVaultTree } = passwordsModule
+async function masterKeyRawBytes(masterKey) {
+  if (masterKey instanceof CryptoKey) {
+    return new Uint8Array(await crypto.subtle.exportKey('raw', masterKey))
+  }
+  return new Uint8Array(masterKey)
+}
+
+async function sameMasterKey(a, b) {
+  const bytesA = await masterKeyRawBytes(a)
+  const bytesB = await masterKeyRawBytes(b)
+  if (bytesA.length !== bytesB.length) return false
+  let diff = 0
+  for (let i = 0; i < bytesA.length; i++) diff |= bytesA[i] ^ bytesB[i]
+  return diff === 0
+}
+
 const PAIRING_TIMEOUT = 60000
 
 function generatePairingCode() {
@@ -1919,7 +2034,8 @@ async function prepareTransfer(masterKey, sharedKey) {
     return { success: false, error: 'No vault to transfer' }
   }
 
-  const passwordCount = Object.values(vault.credentials || {}).flat().length
+  const transferTree = await decryptAnyRowToTree(vault, masterKey)
+  const passwordCount = Object.values(transferTree.credentials || {}).flat().length
 
   const wrappedMasterKey = await wrapMasterKeyForTransfer(masterKey, sharedKey)
 
@@ -2021,40 +2137,30 @@ async function applyIncomingVault(payloadText, sharedKey, localMasterKey) {
   }
 
   const incomingMasterKey = await unwrapMasterKeyFromTransfer(data.wrappedMasterKey, sharedKey)
-  const incomingVault = data.vault
-  const localVault = await getPasswordVault()
+  const incomingRow = data.vault
+  const localRow = await getPasswordVault()
 
-  if (!localVault) {
-    incomingVault.meta.lastAccess = Date.now()
-    await setPasswordVault(incomingVault)
-    const count = Object.values(incomingVault.credentials || {}).flat().filter(function (c) { return !c.deleted }).length
+  if (!localRow) {
+    const incomingTree = await decryptAnyRowToTree(incomingRow, incomingMasterKey)
+    incomingTree.meta.lastAccess = Date.now()
+    await writeVaultTree(incomingTree, incomingMasterKey)
+    const count = Object.values(incomingTree.credentials || {}).flat().filter(function (c) { return !c.deleted }).length
     return { success: true, count, masterKey: incomingMasterKey, requiresAuthSetup: true }
   }
 
-  const localCreatedAt = localVault.meta.createdAt
-  const incomingCreatedAt = incomingVault.meta.createdAt
-
-  let sharedMasterKey
-  let localForMerge
-  let incomingForMerge
-
-  if (incomingCreatedAt <= localCreatedAt) {
-    sharedMasterKey = incomingMasterKey
-    localForMerge = await reEncryptVault(localVault, localMasterKey, sharedMasterKey)
-    incomingForMerge = incomingVault
-  } else {
-    sharedMasterKey = localMasterKey
-    localForMerge = localVault
-    incomingForMerge = await reEncryptVault(incomingVault, incomingMasterKey, sharedMasterKey)
+  if (!(await sameMasterKey(localMasterKey, incomingMasterKey))) {
+    return { success: false, error: 'Master key mismatch — import the same master key on both devices before syncing' }
   }
 
-  const merged = await mergeVaults(localForMerge, incomingForMerge, sharedMasterKey)
-  merged.meta.createdAt = Math.min(localCreatedAt, incomingCreatedAt)
+  const localTree = await decryptAnyRowToTree(localRow, localMasterKey)
+  const incomingTree = await decryptAnyRowToTree(incomingRow, incomingMasterKey)
+
+  const merged = mergeVaults(localTree, incomingTree)
   merged.meta.lastAccess = Date.now()
-  await setPasswordVault(merged)
+  await writeVaultTree(merged, localMasterKey)
 
   const count = Object.values(merged.credentials || {}).flat().filter(function (c) { return !c.deleted }).length
-  return { success: true, count, masterKey: sharedMasterKey }
+  return { success: true, count, masterKey: localMasterKey }
 }
 
 async function receiveTransfer(transferData, sharedKey, localMasterKey) {
@@ -2075,12 +2181,13 @@ async function receiveTransfer(transferData, sharedKey, localMasterKey) {
     return { success: false, error: verification.error }
   }
 
-  const incomingVault = data.vault
-  const localVault = await getPasswordVault()
+  const incomingRow = data.vault
+  const localRow = await getPasswordVault()
 
-  if (!localVault) {
-    incomingVault.meta.lastAccess = Date.now()
-    await setPasswordVault(incomingVault)
+  if (!localRow) {
+    const incomingTree = await decryptAnyRowToTree(incomingRow, masterKey)
+    incomingTree.meta.lastAccess = Date.now()
+    await writeVaultTree(incomingTree, masterKey)
     return {
       success: true,
       masterKey,
@@ -2090,34 +2197,23 @@ async function receiveTransfer(transferData, sharedKey, localMasterKey) {
     }
   }
 
-  const localCreatedAt = localVault.meta.createdAt
-  const incomingCreatedAt = incomingVault.meta.createdAt
-
-  let sharedMasterKey
-  let localForMerge
-  let incomingForMerge
-
-  if (incomingCreatedAt <= localCreatedAt) {
-    sharedMasterKey = masterKey
-    localForMerge = await reEncryptVault(localVault, localMasterKey, sharedMasterKey)
-    incomingForMerge = incomingVault
-  } else {
-    sharedMasterKey = localMasterKey
-    localForMerge = localVault
-    incomingForMerge = await reEncryptVault(incomingVault, masterKey, sharedMasterKey)
+  if (!(await sameMasterKey(localMasterKey, masterKey))) {
+    return { success: false, error: 'Master key mismatch — import the same master key on both devices before syncing' }
   }
 
-  const merged = await mergeVaults(localForMerge, incomingForMerge, sharedMasterKey)
-  merged.meta.createdAt = Math.min(localCreatedAt, incomingCreatedAt)
+  const localTree = await decryptAnyRowToTree(localRow, localMasterKey)
+  const incomingTree = await decryptAnyRowToTree(incomingRow, masterKey)
+
+  const merged = mergeVaults(localTree, incomingTree)
   merged.meta.lastAccess = Date.now()
-  await setPasswordVault(merged)
+  await writeVaultTree(merged, localMasterKey)
 
   const mergedCount = Object.values(merged.credentials || {}).flat().filter(function (c) { return !c.deleted }).length
 
   return {
     success: true,
-    masterKey: sharedMasterKey,
-    sharedMasterKey: sharedMasterKey,
+    masterKey: localMasterKey,
+    sharedMasterKey: localMasterKey,
     imported: { passwordCount: mergedCount },
     requiresAuthSetup: true
   }
@@ -2140,6 +2236,7 @@ return {
   decryptTransfer,
   verifyTransfer,
   receiveTransfer,
+  applyIncomingVault,
   deriveSharedKey,
   derivePinFromSharedKey,
   isExpired
@@ -12899,7 +12996,7 @@ document.addEventListener('DOMContentLoaded', function() {
   startLockMonitor()
 })
 
-// ---- Global lock monitor: catches a timeout no matter which page/tab is open ----
+
 function showMenuLockOverlay() {
   var el = document.getElementById('menu-lock-overlay')
   if (el) { el.classList.remove('hidden'); el.style.display = 'flex' }
@@ -12983,7 +13080,7 @@ function openWebsite() {
   window.open('https://hiimrook.github.io/valid-vault-password-manager/', '_blank')
 }
 
-// ---- Native biometric bridge (Android Capacitor plugin) ----
+
 function nativeBiometric() {
   try {
     if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.BiometricVault) {
@@ -13053,7 +13150,7 @@ async function updateStatus() {
     document.getElementById('status-fingerprint').className = 'status ' + (status.hasFingerprint ? 'active' : 'inactive')
     document.getElementById('status-password').className = 'status ' + (status.hasPassword ? 'active' : 'inactive')
     document.getElementById('status-session').className = 'status ' + (unlocked ? 'active' : 'inactive')
-    // hamburger only visible when unlocked
+    
     var ham = document.querySelector('.hamburger')
     if (ham) ham.style.display = unlocked ? '' : 'none'
     var menu = document.getElementById('menu-dropdown')
@@ -13094,11 +13191,11 @@ async function loadAutoLock() {
   try { el.value = await getAutoLockSeconds() } catch (e) {}
 }
 
-// ---- Inactivity auto-lock timer ----
-// Design: high-frequency events (touchmove/mousemove/scroll) must NOT each
-// trigger an async IndexedDB read + timer rebuild — that races and produces
-// exactly the "spazzy"/ignores-activity symptom. Instead, every event just
-// bumps a cheap synchronous timestamp; a single poller checks it.
+
+
+
+
+
 var lastActivityAt = Date.now()
 var cachedAutoLockMs = 60000
 var pollTimer = null
@@ -13128,9 +13225,9 @@ function startInactivityPoll() {
   }, 1000)
 }
 
-// Called once on unlock and whenever the setting changes — refreshes the
-// cached timeout and resets the activity clock, but does NOT touch storage
-// on every tap/scroll the way the old per-event version did.
+
+
+
 async function restartInactivityTimer() {
   noteActivity()
   await refreshAutoLockCache()
@@ -13166,7 +13263,7 @@ async function loadKeyNickname() {
   try { el.value = await window.getKeyNickname() } catch (e) {}
 }
 
-// ---- Export/Import key modals ----
+
 function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') }
 
 function questionFieldsHtml(qIdx) {
@@ -13222,7 +13319,7 @@ window.submitImportKey = async function() {
   await doImportKey(window._importFileObj, pass, answers)
 }
 
-// ---- View routing ----
+
 window.showPhoneView = function(name) {
   ;['view-setup','view-locked','view-softlock','view-unlocked'].forEach(function(v){
     var el = document.getElementById(v)
@@ -13237,7 +13334,7 @@ window.showPhoneView = function(name) {
 function fieldVal(setupId, manageId) {
   var s = document.getElementById(setupId)
   var m = document.getElementById(manageId)
-  // prefer whichever is visible/non-empty
+  
   if (m && m.offsetParent !== null && m.value) return { el: m, val: m.value }
   if (s && s.offsetParent !== null && s.value) return { el: s, val: s.value }
   if (m && m.value) return { el: m, val: m.value }
@@ -13290,7 +13387,7 @@ function refreshSetupButtons(status) {
 
 function setupMsg(m) { var el = document.getElementById('setup-msg'); if (el) el.textContent = m }
 
-// ---- Setup enroll handlers ----
+
 window.enrollFp = async function() {
   if (!(await requireVaultOrError())) return
   var bv = nativeBiometric()
@@ -13298,15 +13395,15 @@ window.enrollFp = async function() {
     anyMsg('Fingerprint is not available on this device. Use password or PIN.')
     return
   }
-  // Need a master key to wrap. If vault is fresh and unlocked from a prior enroll, use it;
-  // otherwise require another method first so there is a master key to bind.
+  
+  
   var mkBytes = await masterKeyBytesFromSession()
   var auth = await vault.store.getAuth() || {}
   if (!mkBytes) {
     if (auth.fingerprintNative || auth.passwordWrappedKey || auth.pinWrappedKey) {
       anyMsg('Unlock first to add fingerprint.')
     } else {
-      // brand new vault: generate a master key via the crypto module by enrolling nothing else yet
+      
       anyMsg('Set a password or PIN first, then add fingerprint.')
     }
     return
@@ -13335,7 +13432,7 @@ function isManageActive() {
 async function requireVaultOrError() {
   var mk = vault.session.getMasterKey()
   if (mk) return true
-  // No live master key. On the manage screen this means post-nuke/locked -> send to main.
+  
   if (isManageActive()) {
     var auth = {}
     try { auth = await vault.store.getAuth() || {} } catch (e) {}
@@ -13372,7 +13469,7 @@ window.finishSetup = async function() {
   routeView()
 }
 
-// ---- Unlock handlers (hard + soft) ----
+
 window.unlockFp = async function() {
   var bv = nativeBiometric()
   var auth = await vault.store.getAuth() || {}
@@ -13389,7 +13486,7 @@ window.unlockFp = async function() {
       return
     }
   }
-  // fallback to web path (extension parity / non-native)
+  
   var result = await vault.auth.authenticateFingerprint()
   if (result.success) {
     vault.session.setMasterKey(result.masterKey)
@@ -13443,7 +13540,7 @@ window.renderCredentials = async function() {
   var listEl = document.getElementById('credentials-list')
   if (!listEl) return
   if (!masterKey) { listEl.innerHTML = '<p style="color:var(--text-dim);font-size:13px;">Unlock to view credentials.</p>'; return }
-  var domRes = await vault.passwords.getAllDomains()
+  var domRes = await vault.passwords.getAllDomains(masterKey)
   if (!domRes.success || !domRes.domains.length) { listEl.innerHTML = '<p style="color:var(--text-dim);font-size:13px;">No credentials saved yet.</p>'; return }
   var domains = domRes.domains.slice().sort()
   var html = ''
@@ -13500,7 +13597,7 @@ async function getCredById(cid) {
   if (credCache[cid]) return credCache[cid]
   var masterKey = vault.session.getMasterKey()
   if (!masterKey) return null
-  var domRes = await vault.passwords.getAllDomains()
+  var domRes = await vault.passwords.getAllDomains(masterKey)
   if (!domRes.success) return null
   for (var i = 0; i < domRes.domains.length; i++) {
     var res = await vault.passwords.getCredentials(domRes.domains[i], masterKey)
@@ -13532,7 +13629,8 @@ window.deleteCred = function(cid, domain) {
 window.confirmDeleteCred = async function() {
   var cid = window._pendingDeleteCid
   if (!cid) { hideModal(); return }
-  var result = await vault.passwords.deleteCredential(cid)
+  var masterKey = vault.session.getMasterKey()
+  var result = await vault.passwords.deleteCredential(cid, masterKey)
   hideModal()
   if (result && result.success) { delete credCache[cid]; log('Credential deleted', 'success'); credCache = {}; renderCredentials() }
   else { log('Delete failed', 'error') }
@@ -13558,7 +13656,7 @@ window.confirmClearAll = async function() {
   try { var bv = nativeBiometric(); if (bv) await bv.remove() } catch (e) {}
   await vault.session.lockAll()
   hideModal()
-  // return to the main screen; with no vault, routeView lands on the setup/enroll screen
+  
   var menuPage = document.getElementById('page-menu')
   var mainPage = document.getElementById('page-main')
   if (menuPage) menuPage.classList.remove('active')
@@ -13635,7 +13733,7 @@ async function streamPhoneFountain(payload, label) {
   renderNext()
   phoneFountainTimer = setInterval(renderNext, 300)
 
-  // auto-shutoff timeout + visible countdown
+  
   var seconds = await getQrTimeoutSeconds()
   var remaining = seconds
   if (timerEl) timerEl.textContent = 'Auto-closes in ' + remaining + 's'
@@ -13692,7 +13790,7 @@ window.importSync = async function() {
   var stream = null
   var raf = null
 
-  // build the in-box camera view
+  
   var origHtml = box.innerHTML
   box.innerHTML = ''
   box.style.padding = '0'
@@ -13777,17 +13875,19 @@ async function handlePhoneImported(payloadText) {
   if (data.kind === 'vault') {
     if (!vault.session.hasMasterKey()) { log('QR sync not enabled. Import master key first', 'error'); return }
     var masterKey = vault.session.getMasterKey()
-    var localVault = await vault.store.getPasswordVault()
-    var incoming = data.vault
-    if (!localVault) {
-      await vault.store.setPasswordVault(incoming)
+    var localRow = await vault.store.getPasswordVault()
+    var incomingRow = data.vault
+    if (!localRow) {
+      var freshTree = await vault.passwords.decryptAnyRowToTree(incomingRow, masterKey)
+      await vault.passwords.writeVaultTree(freshTree, masterKey)
       log('Vault imported.', 'success')
       return
     }
-    var merged = await vault.passwords.mergeVaults(localVault, incoming, masterKey)
-    merged.meta.createdAt = Math.min(localVault.meta.createdAt, incoming.meta.createdAt)
+    var localTree = await vault.passwords.decryptAnyRowToTree(localRow, masterKey)
+    var incomingTree = await vault.passwords.decryptAnyRowToTree(incomingRow, masterKey)
+    var merged = vault.passwords.mergeVaults(localTree, incomingTree)
     merged.meta.lastAccess = Date.now()
-    await vault.store.setPasswordVault(merged)
+    await vault.passwords.writeVaultTree(merged, masterKey)
     var count = Object.values(merged.credentials || {}).flat().filter(function(c) { return !c.deleted }).length
     log('Sync complete. ' + count + ' logins.', 'success')
     return
@@ -13795,9 +13895,9 @@ async function handlePhoneImported(payloadText) {
   log('Unrecognized code', 'error')
 }
 
-// ============ Offline Export / Import (encrypted files, no new dependency) ============
 
-var EXPORT_ITERATIONS = 1000000  // high, offline file guard
+
+var EXPORT_ITERATIONS = 1000000  
 
 var SECURITY_QUESTIONS = [
   'Name of your first pet',
@@ -13820,17 +13920,17 @@ function pickThreeQuestions() {
     idx.push(SECURITY_QUESTIONS.indexOf(pool[r]))
     pool.splice(r, 1)
   }
-  return idx  // array of 3 indices into SECURITY_QUESTIONS
+  return idx  
 }
 
-// combine passphrase + the three answers into one secret (order fixed by question index).
-// capitalization + spaces preserved (no normalization) so they matter, as designed.
+
+
 function combineSecret(passphrase, questionIdx, answers) {
   var parts = [passphrase]
   for (var i = 0; i < questionIdx.length; i++) {
     parts.push(String(questionIdx[i]) + ':' + answers[i])
   }
-  return parts.join(' ')  // null-join, unlikely to collide
+  return parts.join(' ')  
 }
 
 function syncMsg(text, kind) {
@@ -13933,7 +14033,7 @@ function readFileText(cb) {
   input.click()
 }
 
-// ---- Export Key ----
+
 window.exportKey = async function() {
   var masterKey = await ensurePhoneUnlocked()
   if (!masterKey) return
@@ -13971,7 +14071,7 @@ async function doExportKey(qIdx, passphrase, answers) {
   } catch (e) { setExportMsg('Export failed: ' + (e && e.message ? e.message : e)) }
 }
 
-// ---- Import Key ----
+
 window.importKey = function() {
   readFileText(function(text) {
     if (!text) { log('No file selected', 'error'); return }
@@ -13999,12 +14099,12 @@ async function doImportKey(fileObj, passphrase, answers) {
   }
 }
 
-// ---- Export Vault (already-encrypted vault to a file) ----
+
 window.exportVault = async function() {
   showModal('<h3>Export Vault</h3><p style="color:var(--text-dim);font-size:13px;">Save the encrypted vault to a file.</p><div class="row" style="margin-top:16px;"><button onclick="chooseDownloadVault()">Download</button><button onclick="chooseShareVault()" class="secondary">Share</button></div><div class="row" style="margin-top:10px;"><button onclick="hideModal()" class="secondary">Cancel</button></div>')
 }
 
-// ---- Import Vault (restore/merge from a file) ----
+
 window.importVault = function() {
   readFileText(async function(text) {
     if (!text) { syncMsg('No file selected', 'error'); return }
@@ -14013,24 +14113,26 @@ window.importVault = function() {
       if (fileObj.format !== 'valid-vault-vault') { syncMsg('Not a Valid Vault backup file', 'error'); return }
       var masterKey = await ensurePhoneUnlocked()
       if (!masterKey) { syncMsg('Unlock your vault before syncing', 'error'); return }
-      var localVault = await vault.store.getPasswordVault()
-      var incoming = fileObj.vault
-      if (!localVault) {
-        await vault.store.setPasswordVault(incoming)
+      var localRow = await vault.store.getPasswordVault()
+      var incomingRow = fileObj.vault
+      if (!localRow) {
+        var freshTree = await vault.passwords.decryptAnyRowToTree(incomingRow, masterKey)
+        await vault.passwords.writeVaultTree(freshTree, masterKey)
         syncMsg('Vault restored.', 'success')
         return
       }
-      var merged = await vault.passwords.mergeVaults(localVault, incoming, masterKey)
-      merged.meta.createdAt = Math.min(localVault.meta.createdAt, incoming.meta.createdAt)
+      var localTree = await vault.passwords.decryptAnyRowToTree(localRow, masterKey)
+      var incomingTree = await vault.passwords.decryptAnyRowToTree(incomingRow, masterKey)
+      var merged = vault.passwords.mergeVaults(localTree, incomingTree)
       merged.meta.lastAccess = Date.now()
-      await vault.store.setPasswordVault(merged)
+      await vault.passwords.writeVaultTree(merged, masterKey)
       var count = Object.values(merged.credentials || {}).flat().filter(function(c){ return !c.deleted }).length
       syncMsg('Vault merged. ' + count + ' logins.', 'success')
     } catch (e) { syncMsg('Import failed: ' + (e && e.message ? e.message : e), 'error') }
   })
 }
 
-// ---- Key nickname ----
+
 window.getKeyNickname = async function() {
   var auth = await vault.store.getAuth() || {}
   return auth.keyNickname || 'My Master Key'

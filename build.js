@@ -60,6 +60,9 @@ return {
   setPasswordVault,
   getWalletVault,
   setWalletVault,
+  getVaultMigrationJournal,
+  setVaultMigrationJournal,
+  clearVaultMigrationJournal,
   clearAll
 }
 })();
@@ -93,7 +96,7 @@ return {
 
 const passwordsModule = (function() {
 const { encrypt, decrypt } = cryptoModule
-const { getPasswordVault, setPasswordVault } = storeModule
+const { getPasswordVault, setPasswordVault, getVaultMigrationJournal, setVaultMigrationJournal, clearVaultMigrationJournal } = storeModule
 ${passwords}
 return {
   ensureVault,
@@ -102,7 +105,12 @@ return {
   getAllDomains,
   updateCredential,
   deleteCredential,
-  autofill
+  autofill,
+  mergeVaults,
+  migrateLegacyVault,
+  readVaultTree,
+  writeVaultTree,
+  decryptAnyRowToTree
 }
 })();
 
@@ -141,8 +149,9 @@ return {
 })();
 
 const pairingModule = (function() {
-const { getPasswordVault, setPasswordVault, getAuth, setAuth } = storeModule
+const { getPasswordVault, getAuth, setAuth } = storeModule
 const { createBackupSignature, verifyBackupSignature } = cryptoModule
+const { mergeVaults, decryptAnyRowToTree, writeVaultTree } = passwordsModule
 ${pairing}
 return {
   generatePairingCode,
@@ -158,6 +167,7 @@ return {
   decryptTransfer,
   verifyTransfer,
   receiveTransfer,
+  applyIncomingVault,
   deriveSharedKey,
   derivePinFromSharedKey,
   isExpired
@@ -228,7 +238,7 @@ document.addEventListener('DOMContentLoaded', function() {
   startLockMonitor()
 })
 
-// ---- Global lock monitor: catches a timeout no matter which page/tab is open ----
+
 function showMenuLockOverlay() {
   var el = document.getElementById('menu-lock-overlay')
   if (el) { el.classList.remove('hidden'); el.style.display = 'flex' }
@@ -312,7 +322,7 @@ function openWebsite() {
   window.open('https://hiimrook.github.io/valid-vault-password-manager/', '_blank')
 }
 
-// ---- Native biometric bridge (Android Capacitor plugin) ----
+
 function nativeBiometric() {
   try {
     if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.BiometricVault) {
@@ -382,7 +392,7 @@ async function updateStatus() {
     document.getElementById('status-fingerprint').className = 'status ' + (status.hasFingerprint ? 'active' : 'inactive')
     document.getElementById('status-password').className = 'status ' + (status.hasPassword ? 'active' : 'inactive')
     document.getElementById('status-session').className = 'status ' + (unlocked ? 'active' : 'inactive')
-    // hamburger only visible when unlocked
+    
     var ham = document.querySelector('.hamburger')
     if (ham) ham.style.display = unlocked ? '' : 'none'
     var menu = document.getElementById('menu-dropdown')
@@ -423,11 +433,11 @@ async function loadAutoLock() {
   try { el.value = await getAutoLockSeconds() } catch (e) {}
 }
 
-// ---- Inactivity auto-lock timer ----
-// Design: high-frequency events (touchmove/mousemove/scroll) must NOT each
-// trigger an async IndexedDB read + timer rebuild — that races and produces
-// exactly the "spazzy"/ignores-activity symptom. Instead, every event just
-// bumps a cheap synchronous timestamp; a single poller checks it.
+
+
+
+
+
 var lastActivityAt = Date.now()
 var cachedAutoLockMs = 60000
 var pollTimer = null
@@ -457,9 +467,9 @@ function startInactivityPoll() {
   }, 1000)
 }
 
-// Called once on unlock and whenever the setting changes — refreshes the
-// cached timeout and resets the activity clock, but does NOT touch storage
-// on every tap/scroll the way the old per-event version did.
+
+
+
 async function restartInactivityTimer() {
   noteActivity()
   await refreshAutoLockCache()
@@ -495,7 +505,7 @@ async function loadKeyNickname() {
   try { el.value = await window.getKeyNickname() } catch (e) {}
 }
 
-// ---- Export/Import key modals ----
+
 function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') }
 
 function questionFieldsHtml(qIdx) {
@@ -551,7 +561,7 @@ window.submitImportKey = async function() {
   await doImportKey(window._importFileObj, pass, answers)
 }
 
-// ---- View routing ----
+
 window.showPhoneView = function(name) {
   ;['view-setup','view-locked','view-softlock','view-unlocked'].forEach(function(v){
     var el = document.getElementById(v)
@@ -566,7 +576,7 @@ window.showPhoneView = function(name) {
 function fieldVal(setupId, manageId) {
   var s = document.getElementById(setupId)
   var m = document.getElementById(manageId)
-  // prefer whichever is visible/non-empty
+  
   if (m && m.offsetParent !== null && m.value) return { el: m, val: m.value }
   if (s && s.offsetParent !== null && s.value) return { el: s, val: s.value }
   if (m && m.value) return { el: m, val: m.value }
@@ -619,7 +629,7 @@ function refreshSetupButtons(status) {
 
 function setupMsg(m) { var el = document.getElementById('setup-msg'); if (el) el.textContent = m }
 
-// ---- Setup enroll handlers ----
+
 window.enrollFp = async function() {
   if (!(await requireVaultOrError())) return
   var bv = nativeBiometric()
@@ -627,15 +637,15 @@ window.enrollFp = async function() {
     anyMsg('Fingerprint is not available on this device. Use password or PIN.')
     return
   }
-  // Need a master key to wrap. If vault is fresh and unlocked from a prior enroll, use it;
-  // otherwise require another method first so there is a master key to bind.
+  
+  
   var mkBytes = await masterKeyBytesFromSession()
   var auth = await vault.store.getAuth() || {}
   if (!mkBytes) {
     if (auth.fingerprintNative || auth.passwordWrappedKey || auth.pinWrappedKey) {
       anyMsg('Unlock first to add fingerprint.')
     } else {
-      // brand new vault: generate a master key via the crypto module by enrolling nothing else yet
+      
       anyMsg('Set a password or PIN first, then add fingerprint.')
     }
     return
@@ -664,7 +674,7 @@ function isManageActive() {
 async function requireVaultOrError() {
   var mk = vault.session.getMasterKey()
   if (mk) return true
-  // No live master key. On the manage screen this means post-nuke/locked -> send to main.
+  
   if (isManageActive()) {
     var auth = {}
     try { auth = await vault.store.getAuth() || {} } catch (e) {}
@@ -701,7 +711,7 @@ window.finishSetup = async function() {
   routeView()
 }
 
-// ---- Unlock handlers (hard + soft) ----
+
 window.unlockFp = async function() {
   var bv = nativeBiometric()
   var auth = await vault.store.getAuth() || {}
@@ -718,7 +728,7 @@ window.unlockFp = async function() {
       return
     }
   }
-  // fallback to web path (extension parity / non-native)
+  
   var result = await vault.auth.authenticateFingerprint()
   if (result.success) {
     vault.session.setMasterKey(result.masterKey)
@@ -772,7 +782,7 @@ window.renderCredentials = async function() {
   var listEl = document.getElementById('credentials-list')
   if (!listEl) return
   if (!masterKey) { listEl.innerHTML = '<p style="color:var(--text-dim);font-size:13px;">Unlock to view credentials.</p>'; return }
-  var domRes = await vault.passwords.getAllDomains()
+  var domRes = await vault.passwords.getAllDomains(masterKey)
   if (!domRes.success || !domRes.domains.length) { listEl.innerHTML = '<p style="color:var(--text-dim);font-size:13px;">No credentials saved yet.</p>'; return }
   var domains = domRes.domains.slice().sort()
   var html = ''
@@ -829,7 +839,7 @@ async function getCredById(cid) {
   if (credCache[cid]) return credCache[cid]
   var masterKey = vault.session.getMasterKey()
   if (!masterKey) return null
-  var domRes = await vault.passwords.getAllDomains()
+  var domRes = await vault.passwords.getAllDomains(masterKey)
   if (!domRes.success) return null
   for (var i = 0; i < domRes.domains.length; i++) {
     var res = await vault.passwords.getCredentials(domRes.domains[i], masterKey)
@@ -861,7 +871,8 @@ window.deleteCred = function(cid, domain) {
 window.confirmDeleteCred = async function() {
   var cid = window._pendingDeleteCid
   if (!cid) { hideModal(); return }
-  var result = await vault.passwords.deleteCredential(cid)
+  var masterKey = vault.session.getMasterKey()
+  var result = await vault.passwords.deleteCredential(cid, masterKey)
   hideModal()
   if (result && result.success) { delete credCache[cid]; log('Credential deleted', 'success'); credCache = {}; renderCredentials() }
   else { log('Delete failed', 'error') }
@@ -887,7 +898,7 @@ window.confirmClearAll = async function() {
   try { var bv = nativeBiometric(); if (bv) await bv.remove() } catch (e) {}
   await vault.session.lockAll()
   hideModal()
-  // return to the main screen; with no vault, routeView lands on the setup/enroll screen
+  
   var menuPage = document.getElementById('page-menu')
   var mainPage = document.getElementById('page-main')
   if (menuPage) menuPage.classList.remove('active')
@@ -964,7 +975,7 @@ async function streamPhoneFountain(payload, label) {
   renderNext()
   phoneFountainTimer = setInterval(renderNext, 300)
 
-  // auto-shutoff timeout + visible countdown
+  
   var seconds = await getQrTimeoutSeconds()
   var remaining = seconds
   if (timerEl) timerEl.textContent = 'Auto-closes in ' + remaining + 's'
@@ -1021,7 +1032,7 @@ window.importSync = async function() {
   var stream = null
   var raf = null
 
-  // build the in-box camera view
+  
   var origHtml = box.innerHTML
   box.innerHTML = ''
   box.style.padding = '0'
@@ -1106,17 +1117,19 @@ async function handlePhoneImported(payloadText) {
   if (data.kind === 'vault') {
     if (!vault.session.hasMasterKey()) { log('QR sync not enabled. Import master key first', 'error'); return }
     var masterKey = vault.session.getMasterKey()
-    var localVault = await vault.store.getPasswordVault()
-    var incoming = data.vault
-    if (!localVault) {
-      await vault.store.setPasswordVault(incoming)
+    var localRow = await vault.store.getPasswordVault()
+    var incomingRow = data.vault
+    if (!localRow) {
+      var freshTree = await vault.passwords.decryptAnyRowToTree(incomingRow, masterKey)
+      await vault.passwords.writeVaultTree(freshTree, masterKey)
       log('Vault imported.', 'success')
       return
     }
-    var merged = await vault.passwords.mergeVaults(localVault, incoming, masterKey)
-    merged.meta.createdAt = Math.min(localVault.meta.createdAt, incoming.meta.createdAt)
+    var localTree = await vault.passwords.decryptAnyRowToTree(localRow, masterKey)
+    var incomingTree = await vault.passwords.decryptAnyRowToTree(incomingRow, masterKey)
+    var merged = vault.passwords.mergeVaults(localTree, incomingTree)
     merged.meta.lastAccess = Date.now()
-    await vault.store.setPasswordVault(merged)
+    await vault.passwords.writeVaultTree(merged, masterKey)
     var count = Object.values(merged.credentials || {}).flat().filter(function(c) { return !c.deleted }).length
     log('Sync complete. ' + count + ' logins.', 'success')
     return
@@ -1124,9 +1137,9 @@ async function handlePhoneImported(payloadText) {
   log('Unrecognized code', 'error')
 }
 
-// ============ Offline Export / Import (encrypted files, no new dependency) ============
 
-var EXPORT_ITERATIONS = 1000000  // high, offline file guard
+
+var EXPORT_ITERATIONS = 1000000  
 
 var SECURITY_QUESTIONS = [
   'Name of your first pet',
@@ -1149,17 +1162,17 @@ function pickThreeQuestions() {
     idx.push(SECURITY_QUESTIONS.indexOf(pool[r]))
     pool.splice(r, 1)
   }
-  return idx  // array of 3 indices into SECURITY_QUESTIONS
+  return idx  
 }
 
-// combine passphrase + the three answers into one secret (order fixed by question index).
-// capitalization + spaces preserved (no normalization) so they matter, as designed.
+
+
 function combineSecret(passphrase, questionIdx, answers) {
   var parts = [passphrase]
   for (var i = 0; i < questionIdx.length; i++) {
     parts.push(String(questionIdx[i]) + ':' + answers[i])
   }
-  return parts.join('\u0000')  // null-join, unlikely to collide
+  return parts.join('\u0000')  
 }
 
 function syncMsg(text, kind) {
@@ -1262,7 +1275,7 @@ function readFileText(cb) {
   input.click()
 }
 
-// ---- Export Key ----
+
 window.exportKey = async function() {
   var masterKey = await ensurePhoneUnlocked()
   if (!masterKey) return
@@ -1300,7 +1313,7 @@ async function doExportKey(qIdx, passphrase, answers) {
   } catch (e) { setExportMsg('Export failed: ' + (e && e.message ? e.message : e)) }
 }
 
-// ---- Import Key ----
+
 window.importKey = function() {
   readFileText(function(text) {
     if (!text) { log('No file selected', 'error'); return }
@@ -1328,12 +1341,12 @@ async function doImportKey(fileObj, passphrase, answers) {
   }
 }
 
-// ---- Export Vault (already-encrypted vault to a file) ----
+
 window.exportVault = async function() {
   showModal('<h3>Export Vault</h3><p style="color:var(--text-dim);font-size:13px;">Save the encrypted vault to a file.</p><div class="row" style="margin-top:16px;"><button onclick="chooseDownloadVault()">Download</button><button onclick="chooseShareVault()" class="secondary">Share</button></div><div class="row" style="margin-top:10px;"><button onclick="hideModal()" class="secondary">Cancel</button></div>')
 }
 
-// ---- Import Vault (restore/merge from a file) ----
+
 window.importVault = function() {
   readFileText(async function(text) {
     if (!text) { syncMsg('No file selected', 'error'); return }
@@ -1342,24 +1355,26 @@ window.importVault = function() {
       if (fileObj.format !== 'valid-vault-vault') { syncMsg('Not a Valid Vault backup file', 'error'); return }
       var masterKey = await ensurePhoneUnlocked()
       if (!masterKey) { syncMsg('Unlock your vault before syncing', 'error'); return }
-      var localVault = await vault.store.getPasswordVault()
-      var incoming = fileObj.vault
-      if (!localVault) {
-        await vault.store.setPasswordVault(incoming)
+      var localRow = await vault.store.getPasswordVault()
+      var incomingRow = fileObj.vault
+      if (!localRow) {
+        var freshTree = await vault.passwords.decryptAnyRowToTree(incomingRow, masterKey)
+        await vault.passwords.writeVaultTree(freshTree, masterKey)
         syncMsg('Vault restored.', 'success')
         return
       }
-      var merged = await vault.passwords.mergeVaults(localVault, incoming, masterKey)
-      merged.meta.createdAt = Math.min(localVault.meta.createdAt, incoming.meta.createdAt)
+      var localTree = await vault.passwords.decryptAnyRowToTree(localRow, masterKey)
+      var incomingTree = await vault.passwords.decryptAnyRowToTree(incomingRow, masterKey)
+      var merged = vault.passwords.mergeVaults(localTree, incomingTree)
       merged.meta.lastAccess = Date.now()
-      await vault.store.setPasswordVault(merged)
+      await vault.passwords.writeVaultTree(merged, masterKey)
       var count = Object.values(merged.credentials || {}).flat().filter(function(c){ return !c.deleted }).length
       syncMsg('Vault merged. ' + count + ' logins.', 'success')
     } catch (e) { syncMsg('Import failed: ' + (e && e.message ? e.message : e), 'error') }
   })
 }
 
-// ---- Key nickname ----
+
 window.getKeyNickname = async function() {
   var auth = await vault.store.getAuth() || {}
   return auth.keyNickname || 'My Master Key'

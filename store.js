@@ -1,5 +1,5 @@
 const DB_NAME = 'ValidVault'
-const DB_VERSION = 1
+const DB_VERSION = 2
 
 let db = null
 
@@ -29,6 +29,10 @@ async function openDB() {
       
       if (!database.objectStoreNames.contains('wallets')) {
         database.createObjectStore('wallets', { keyPath: 'id' })
+      }
+
+      if (!database.objectStoreNames.contains('vaultMigration')) {
+        database.createObjectStore('vaultMigration', { keyPath: 'id' })
       }
     }
   })
@@ -91,9 +95,21 @@ async function setWalletVault(vaultData) {
   return put('wallets', { id: 'vault', ...vaultData })
 }
 
+async function getVaultMigrationJournal() {
+  return get('vaultMigration', 'single-blob-migration')
+}
+
+async function setVaultMigrationJournal(journal) {
+  return put('vaultMigration', { id: 'single-blob-migration', ...journal })
+}
+
+async function clearVaultMigrationJournal() {
+  return remove('vaultMigration', 'single-blob-migration')
+}
+
 async function clearAll() {
   const database = await openDB()
-  const stores = ['auth', 'passwords', 'wallets']
+  const stores = ['auth', 'passwords', 'wallets', 'vaultMigration']
 
   await Promise.all(stores.map(storeName => new Promise((resolve, reject) => {
     const tx = database.transaction(storeName, 'readwrite')
@@ -114,5 +130,8 @@ export {
   setPasswordVault,
   getWalletVault,
   setWalletVault,
+  getVaultMigrationJournal,
+  setVaultMigrationJournal,
+  clearVaultMigrationJournal,
   clearAll
 }

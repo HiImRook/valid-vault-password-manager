@@ -1,5 +1,5 @@
 const DB_NAME = 'ValidVault'
-const DB_VERSION = 3
+const DB_VERSION = 4
 
 let db = null
 
@@ -37,6 +37,10 @@ async function openDB() {
 
       if (!database.objectStoreNames.contains('personalInfo')) {
         database.createObjectStore('personalInfo', { keyPath: 'id' })
+      }
+
+      if (!database.objectStoreNames.contains('vaultMigration')) {
+        database.createObjectStore('vaultMigration', { keyPath: 'id' })
       }
     }
   })
@@ -115,9 +119,21 @@ async function setPersonalInfo(profileData) {
   return put('personalInfo', { id: 'profile', ...profileData })
 }
 
+async function getVaultMigrationJournal() {
+  return get('vaultMigration', 'single-blob-migration')
+}
+
+async function setVaultMigrationJournal(journal) {
+  return put('vaultMigration', { id: 'single-blob-migration', ...journal })
+}
+
+async function clearVaultMigrationJournal() {
+  return remove('vaultMigration', 'single-blob-migration')
+}
+
 async function clearAll() {
   const database = await openDB()
-  const stores = ['auth', 'passwords', 'wallets', 'webcreds', 'personalInfo']
+  const stores = ['auth', 'passwords', 'wallets', 'webcreds', 'personalInfo', 'vaultMigration']
   
   for (const storeName of stores) {
     const tx = database.transaction(storeName, 'readwrite')
@@ -141,5 +157,8 @@ export {
   setWebCredsVault,
   getPersonalInfo,
   setPersonalInfo,
+  getVaultMigrationJournal,
+  setVaultMigrationJournal,
+  clearVaultMigrationJournal,
   clearAll
 }

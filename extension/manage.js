@@ -11,7 +11,7 @@ import { createEncoder, createDecoder } from './fountain.js'
 import { generateSalt, deriveKeyFromSecret, masterKeyToCryptoKey, wrapMasterKey, unwrapMasterKey } from './crypto.js'
 import { getPasswordVault, setPasswordVault } from './store.js'
 
-// ---- Restore master key from shared session storage (popup <-> manage page) ----
+
 async function restoreMasterKeyFromSession() {
   try {
     const r = await chrome.storage.session.get('masterKeyBytes')
@@ -26,7 +26,7 @@ async function restoreMasterKeyFromSession() {
 }
 
 
-// ---- Manage page inline unlock overlay ----
+
 const lockOverlay = document.getElementById('manage-lock-overlay')
 const btnManageUnlockFp = document.getElementById('btn-manage-unlock-fp')
 const btnManageUnlockPw = document.getElementById('btn-manage-unlock-pw')
@@ -76,22 +76,22 @@ if (inputManagePassword) {
   inputManagePassword.onkeydown = (e) => { if (e.key === 'Enter' && btnManageUnlockPw) btnManageUnlockPw.click() }
 }
 
-// ---- Activity tracking to reset the inactivity timeout ----
+
 function attachActivityListeners() {
-  // Attach to the whole page, not just .content, so the sidebar tabs
-  // (a sibling of .content) also count as activity, not just the panel body.
+  
+  
   const bump = () => { session.resetActivity() }
   document.body.addEventListener('click', bump, true)
   document.body.addEventListener('input', bump, true)
   document.body.addEventListener('keydown', bump, true)
-  // Desktop: mouse movement also counts (browser-throttled, negligible cost).
+  
   document.body.addEventListener('mousemove', bump, true)
-  // Phone/touch scope: tap/scroll stands in for mouse movement on touch devices.
+  
   document.body.addEventListener('touchstart', bump, true)
   document.body.addEventListener('touchmove', bump, true)
 }
 
-// ---- Global lock monitor: catches a timeout no matter which tab is open ----
+
 async function checkAndShowLockOverlay() {
   if (session.hasMasterKey()) { hideLockOverlay(); return }
   const restored = await restoreMasterKeyFromSession()
@@ -194,7 +194,7 @@ async function loadAllCredentials() {
     }
     return
   }
-  const domainsResult = await passwords.getAllDomains()
+  const domainsResult = await passwords.getAllDomains(session.getMasterKey())
   if (!domainsResult.success || domainsResult.domains.length === 0) {
     credentialsList.innerHTML = '<div style="padding:24px;text-align:center;color:#666;">No saved credentials</div>'
     return
@@ -365,7 +365,7 @@ async function loadAllCredentials() {
         if (result.success) {
           const credential = result.credentials.find(c => c.id === cred.id)
           if (credential && confirm('Delete credential for ' + credential.username + ' on ' + domain + '?')) {
-            const delResult = await passwords.deleteCredential(cred.id)
+            const delResult = await passwords.deleteCredential(cred.id, masterKey)
             if (delResult.success) {
               showMsg(msgManage, 'Credential deleted', 'success')
               loadAllCredentials()
@@ -385,9 +385,9 @@ async function loadAllCredentials() {
   }
 }
 
-// Anything a signup or login form asked for beyond the login and password itself,
-// like an account number, lives here: saved for and under that one site's
-// credential, never in the Personal Info autofill profile.
+
+
+
 function renderExtraFields(container, credential, masterKey) {
   container.style.display = 'block'
   container.innerHTML = ''
@@ -612,9 +612,9 @@ const personalInfoContent = document.getElementById('personalinfo-content')
 
 var personalInfoUnlocked = false
 
-// Viewing only needs a normal unlock (fingerprint or password). Editing anything
-// requires the master password specifically, never fingerprint, since this data
-// covers real identity fields the user asked to gate more tightly than a login.
+
+
+
 async function promptPasswordOnly() {
   const pw = window.prompt('Enter your master password to make this change:')
   if (!pw) return { success: false }
@@ -803,7 +803,7 @@ async function deleteEmail(emailId) {
 async function promptAuth() {
   const status = await auth.initAuth()
 
-  // Editing requires a HARD unlock: fingerprint or password (never PIN).
+  
   if (status.hasFingerprint) {
     const result = await auth.authenticateFingerprint()
     if (result.success) return { success: true, masterKey: result.masterKey }
@@ -965,19 +965,19 @@ async function init() {
 }
 
 
-// ===================== SYNC (phone-parity) =====================
+
 const msgSync = document.getElementById('msg-sync')
 const EXPORT_ITERATIONS = 1000000
 
 function syncMsg(t, kind) { showMsg(msgSync, t, kind || 'success') }
 
-// ---- QR stream timeout (persisted in auth record) ----
+
 async function getQrTimeoutSeconds() {
   try { const a = await store.getAuth() || {}; if (a.qrStreamTimeout) return a.qrStreamTimeout } catch (e) {}
   return 30
 }
 
-// ---- Fountain streaming (Share) ----
+
 let shareFountainTimer = null, shareCountdownTimer = null, shareShutoffTimer = null
 function stopShareFountain() {
   if (shareFountainTimer) { clearInterval(shareFountainTimer); shareFountainTimer = null }
@@ -1034,7 +1034,7 @@ const _btnShareKey = document.getElementById('btn-share-key'); if (_btnShareKey)
 }
 const _btnStopShare = document.getElementById('btn-stop-share'); if (_btnStopShare) _btnStopShare.onclick = stopShare
 
-// ---- Backup files ----
+
 function downloadFile(filename, text) {
   try {
     const blob = new Blob([text], { type: 'application/json' })
@@ -1085,7 +1085,7 @@ const _btnExportVault = document.getElementById('btn-export-vault'); if (_btnExp
   if (!vaultData && !webCredsData && !personalInfoData) { syncMsg('Nothing to export yet', 'error'); return }
   let nickname = ''
   try { const a = await store.getAuth() || {}; nickname = (a.keyNickname || '').trim() } catch (e) {}
-  // filesystem-safe, but preserve the user's exact capitalization
+  
   const safeName = nickname ? '-' + nickname.replace(/[\\/:*?"<>|]+/g, '').replace(/\s+/g, '-') : ''
   const fname = 'valid-vault-backup' + safeName + '.vault'
   if (downloadFile(fname, JSON.stringify({ format: 'valid-vault-vault', version: 1, vault: vaultData, webcreds: webCredsData, personalInfo: personalInfoData })))
@@ -1101,14 +1101,17 @@ const _btnImportVault = document.getElementById('btn-import-vault'); if (_btnImp
       const mk = session.getMasterKey()
       if (!mk) { syncMsg('Unlock first', 'error'); return }
       if (fileObj.vault) {
-        const local = await getPasswordVault()
-        const incoming = fileObj.vault
-        if (!local) { await setPasswordVault(incoming) }
-        else {
-          const merged = await passwords.mergeVaults(local, incoming, mk)
-          merged.meta.createdAt = Math.min(local.meta.createdAt, incoming.meta.createdAt)
+        const localRow = await getPasswordVault()
+        const incomingRow = fileObj.vault
+        if (!localRow) {
+          const incomingTree = await passwords.decryptAnyRowToTree(incomingRow, mk)
+          await passwords.writeVaultTree(incomingTree, mk)
+        } else {
+          const localTree = await passwords.decryptAnyRowToTree(localRow, mk)
+          const incomingTree = await passwords.decryptAnyRowToTree(incomingRow, mk)
+          const merged = passwords.mergeVaults(localTree, incomingTree)
           merged.meta.lastAccess = Date.now()
-          await setPasswordVault(merged)
+          await passwords.writeVaultTree(merged, mk)
         }
       }
       if (fileObj.webcreds) {
@@ -1145,7 +1148,7 @@ const _btnImportKey = document.getElementById('btn-import-key'); if (_btnImportK
   })
 }
 
-// export/import key modals (simple prompt-based to keep it lean)
+
 async function showExportKeyModal(qIdx) {
   const pass = window.prompt('Set an export passphrase (12+ chars, letter/number/symbol, capitalization matters):')
   if (!pass) return
@@ -1228,7 +1231,7 @@ async function persistImportedKey(importedKey) {
   syncMsg('Master key imported and made permanent. This device now stays in sync using this vault.', 'success')
 }
 
-// ---- Scan (getUserMedia + jsQR, in-box) ----
+
 let scanActive = false
 const _qrScanBox = document.getElementById('qr-scan-box'); if (_qrScanBox) _qrScanBox.onclick = async function () {
   if (scanActive) return
@@ -1292,14 +1295,17 @@ async function handleImported(payloadText) {
     const mk = session.getMasterKey()
     if (!mk) { syncMsg('QR sync not enabled. Import master key first', 'error'); return }
     if (data.vault) {
-      const local = await getPasswordVault()
-      const incoming = data.vault
-      if (!local) { await setPasswordVault(incoming) }
-      else {
-        const merged = await passwords.mergeVaults(local, incoming, mk)
-        merged.meta.createdAt = Math.min(local.meta.createdAt, incoming.meta.createdAt)
+      const localRow = await getPasswordVault()
+      const incomingRow = data.vault
+      if (!localRow) {
+        const incomingTree = await passwords.decryptAnyRowToTree(incomingRow, mk)
+        await passwords.writeVaultTree(incomingTree, mk)
+      } else {
+        const localTree = await passwords.decryptAnyRowToTree(localRow, mk)
+        const incomingTree = await passwords.decryptAnyRowToTree(incomingRow, mk)
+        const merged = passwords.mergeVaults(localTree, incomingTree)
         merged.meta.lastAccess = Date.now()
-        await setPasswordVault(merged)
+        await passwords.writeVaultTree(merged, mk)
       }
     }
     if (data.webcreds) {

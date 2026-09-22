@@ -1,6 +1,22 @@
-import { getPasswordVault, setPasswordVault, getAuth, setAuth } from './store.js'
+import { getPasswordVault, getAuth, setAuth } from './store.js'
 import { createBackupSignature, verifyBackupSignature } from './crypto.js'
-import { mergeVaults, reEncryptVault } from './passwords.js'
+import { mergeVaults, decryptAnyRowToTree, writeVaultTree } from './passwords.js'
+
+async function masterKeyRawBytes(masterKey) {
+  if (masterKey instanceof CryptoKey) {
+    return new Uint8Array(await crypto.subtle.exportKey('raw', masterKey))
+  }
+  return new Uint8Array(masterKey)
+}
+
+async function sameMasterKey(a, b) {
+  const bytesA = await masterKeyRawBytes(a)
+  const bytesB = await masterKeyRawBytes(b)
+  if (bytesA.length !== bytesB.length) return false
+  let diff = 0
+  for (let i = 0; i < bytesA.length; i++) diff |= bytesA[i] ^ bytesB[i]
+  return diff === 0
+}
 
 const PAIRING_TIMEOUT = 60000
 
@@ -197,7 +213,8 @@ async function prepareTransfer(masterKey, sharedKey) {
     return { success: false, error: 'No vault to transfer' }
   }
 
-  const passwordCount = Object.values(vault.credentials || {}).flat().length
+  const transferTree = await decryptAnyRowToTree(vault, masterKey)
+  const passwordCount = Object.values(transferTree.credentials || {}).flat().length
 
   const wrappedMasterKey = await wrapMasterKeyForTransfer(masterKey, sharedKey)
 
@@ -299,40 +316,30 @@ async function applyIncomingVault(payloadText, sharedKey, localMasterKey) {
   }
 
   const incomingMasterKey = await unwrapMasterKeyFromTransfer(data.wrappedMasterKey, sharedKey)
-  const incomingVault = data.vault
-  const localVault = await getPasswordVault()
+  const incomingRow = data.vault
+  const localRow = await getPasswordVault()
 
-  if (!localVault) {
-    incomingVault.meta.lastAccess = Date.now()
-    await setPasswordVault(incomingVault)
-    const count = Object.values(incomingVault.credentials || {}).flat().filter(function (c) { return !c.deleted }).length
+  if (!localRow) {
+    const incomingTree = await decryptAnyRowToTree(incomingRow, incomingMasterKey)
+    incomingTree.meta.lastAccess = Date.now()
+    await writeVaultTree(incomingTree, incomingMasterKey)
+    const count = Object.values(incomingTree.credentials || {}).flat().filter(function (c) { return !c.deleted }).length
     return { success: true, count, masterKey: incomingMasterKey, requiresAuthSetup: true }
   }
 
-  const localCreatedAt = localVault.meta.createdAt
-  const incomingCreatedAt = incomingVault.meta.createdAt
-
-  let sharedMasterKey
-  let localForMerge
-  let incomingForMerge
-
-  if (incomingCreatedAt <= localCreatedAt) {
-    sharedMasterKey = incomingMasterKey
-    localForMerge = await reEncryptVault(localVault, localMasterKey, sharedMasterKey)
-    incomingForMerge = incomingVault
-  } else {
-    sharedMasterKey = localMasterKey
-    localForMerge = localVault
-    incomingForMerge = await reEncryptVault(incomingVault, incomingMasterKey, sharedMasterKey)
+  if (!(await sameMasterKey(localMasterKey, incomingMasterKey))) {
+    return { success: false, error: 'Master key mismatch — import the same master key on both devices before syncing' }
   }
 
-  const merged = await mergeVaults(localForMerge, incomingForMerge, sharedMasterKey)
-  merged.meta.createdAt = Math.min(localCreatedAt, incomingCreatedAt)
+  const localTree = await decryptAnyRowToTree(localRow, localMasterKey)
+  const incomingTree = await decryptAnyRowToTree(incomingRow, incomingMasterKey)
+
+  const merged = mergeVaults(localTree, incomingTree)
   merged.meta.lastAccess = Date.now()
-  await setPasswordVault(merged)
+  await writeVaultTree(merged, localMasterKey)
 
   const count = Object.values(merged.credentials || {}).flat().filter(function (c) { return !c.deleted }).length
-  return { success: true, count, masterKey: sharedMasterKey }
+  return { success: true, count, masterKey: localMasterKey }
 }
 
 async function receiveTransfer(transferData, sharedKey, localMasterKey) {
@@ -353,12 +360,13 @@ async function receiveTransfer(transferData, sharedKey, localMasterKey) {
     return { success: false, error: verification.error }
   }
 
-  const incomingVault = data.vault
-  const localVault = await getPasswordVault()
+  const incomingRow = data.vault
+  const localRow = await getPasswordVault()
 
-  if (!localVault) {
-    incomingVault.meta.lastAccess = Date.now()
-    await setPasswordVault(incomingVault)
+  if (!localRow) {
+    const incomingTree = await decryptAnyRowToTree(incomingRow, masterKey)
+    incomingTree.meta.lastAccess = Date.now()
+    await writeVaultTree(incomingTree, masterKey)
     return {
       success: true,
       masterKey,
@@ -368,34 +376,23 @@ async function receiveTransfer(transferData, sharedKey, localMasterKey) {
     }
   }
 
-  const localCreatedAt = localVault.meta.createdAt
-  const incomingCreatedAt = incomingVault.meta.createdAt
-
-  let sharedMasterKey
-  let localForMerge
-  let incomingForMerge
-
-  if (incomingCreatedAt <= localCreatedAt) {
-    sharedMasterKey = masterKey
-    localForMerge = await reEncryptVault(localVault, localMasterKey, sharedMasterKey)
-    incomingForMerge = incomingVault
-  } else {
-    sharedMasterKey = localMasterKey
-    localForMerge = localVault
-    incomingForMerge = await reEncryptVault(incomingVault, masterKey, sharedMasterKey)
+  if (!(await sameMasterKey(localMasterKey, masterKey))) {
+    return { success: false, error: 'Master key mismatch — import the same master key on both devices before syncing' }
   }
 
-  const merged = await mergeVaults(localForMerge, incomingForMerge, sharedMasterKey)
-  merged.meta.createdAt = Math.min(localCreatedAt, incomingCreatedAt)
+  const localTree = await decryptAnyRowToTree(localRow, localMasterKey)
+  const incomingTree = await decryptAnyRowToTree(incomingRow, masterKey)
+
+  const merged = mergeVaults(localTree, incomingTree)
   merged.meta.lastAccess = Date.now()
-  await setPasswordVault(merged)
+  await writeVaultTree(merged, localMasterKey)
 
   const mergedCount = Object.values(merged.credentials || {}).flat().filter(function (c) { return !c.deleted }).length
 
   return {
     success: true,
-    masterKey: sharedMasterKey,
-    sharedMasterKey: sharedMasterKey,
+    masterKey: localMasterKey,
+    sharedMasterKey: localMasterKey,
     imported: { passwordCount: mergedCount },
     requiresAuthSetup: true
   }
