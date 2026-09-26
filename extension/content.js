@@ -456,6 +456,8 @@
     wiredForms.push({
       fields,
       cleanup: function () {
+        loginFieldsByEl.delete(username)
+        loginFieldsByEl.delete(password)
         teardownSubmitCapture()
         trackedFields.delete(username)
         trackedFields.delete(password)
@@ -726,19 +728,26 @@
 
   const fieldTags = new WeakMap()
   const loginFieldsByEl = new WeakMap()
+  const tagTypeByEl = new WeakMap()
   const taggedFieldRecords = []
 
   function attachVaultTag(el, fieldType) {
-    if (fieldTags.has(el)) { positionVaultTag(fieldTags.get(el), el); return }
+    if (fieldTags.has(el)) {
+      if (fieldType === 'login' || tagTypeByEl.get(el) !== 'login') tagTypeByEl.set(el, fieldType)
+      positionVaultTag(fieldTags.get(el), el)
+      return
+    }
     if (!el.isConnected) return
+    tagTypeByEl.set(el, fieldType)
     const tag = createVaultTag()
     positionVaultTag(tag, el)
     tag.onclick = (e) => {
       e.preventDefault()
       e.stopPropagation()
       pingActivity()
-      if (fieldType === 'login') showLoginPicker(el, loginFieldsByEl.get(el))
-      else showFieldPicker(el, fieldType)
+      const currentType = tagTypeByEl.get(el)
+      if (currentType === 'login' && loginFieldsByEl.has(el)) showLoginPicker(el, loginFieldsByEl.get(el))
+      else showFieldPicker(el, currentType === 'login' ? 'email' : currentType)
     }
     const scrollHandler = () => positionVaultTag(tag, el)
     const resizeHandler = () => positionVaultTag(tag, el)
