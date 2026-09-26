@@ -36,7 +36,11 @@ async function authenticateWithPassword(password) {
       'raw', wrapped, unwrappingKey, { name: 'AES-GCM', iv: iv }, { name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']
     )
     const bytes = new Uint8Array(await crypto.subtle.exportKey('raw', masterKey))
-    await chrome.storage.session.set({ masterKeyBytes: Array.from(bytes), lastActivity: Date.now() })
+    try {
+      await chrome.storage.session.set({ masterKeyBytes: Array.from(bytes), lastActivity: Date.now() })
+    } catch (e) {
+      return { success: false, error: 'Password accepted, but the session could not be started. Unlock from the Valid Vault icon.' }
+    }
     return { success: true }
   } catch (e) {
     return { success: false, error: 'Invalid password' }
@@ -250,59 +254,53 @@ async function resolvePendingSave(sender, id) {
 }
 
 
-async function getLockSettings() {
-  let soft = 5, hard = 20
+const DEFAULT_AUTOLOCK_SEC = 60
+const AUTOLOCK_ALARM = 'autoLock'
+const INACTIVITY_ALARM = 'inactivityCheck'
+
+async function getAutoLockMs() {
+  let seconds = DEFAULT_AUTOLOCK_SEC
   try {
-    const r = await chrome.storage.local.get(['softLockTimeout', 'hardLockTimeout'])
-    if (r.softLockTimeout) soft = r.softLockTimeout
-    if (r.hardLockTimeout) hard = r.hardLockTimeout
+    const r = await chrome.storage.local.get(['autoLockTimeout'])
+    if (r.autoLockTimeout) seconds = r.autoLockTimeout
   } catch (e) {}
-  return { softMs: soft * 60000, hardMs: hard * 60000 }
+  return seconds * 1000
 }
 
-async function authHasPin() {
-  const auth = await new Promise(function (resolve) {
-    const req = indexedDB.open('ValidVault')
-    req.onsuccess = function () {
-      try {
-        const tx = req.result.transaction('auth', 'readonly')
-        const g = tx.objectStore('auth').get('primary')
-        g.onsuccess = function () { resolve(g.result || null) }
-        g.onerror = function () { resolve(null) }
-      } catch (e) { resolve(null) }
-    }
-    req.onerror = function () { resolve(null) }
-  })
-  return !!(auth && auth.pinWrappedKey)
+async function scheduleAutoLock() {
+  try {
+    const stored = await chrome.storage.session.get(['masterKeyBytes', 'lastActivity'])
+    if (!stored || !stored.masterKeyBytes) return
+    const last = stored.lastActivity || Date.now()
+    chrome.alarms.create(AUTOLOCK_ALARM, { when: last + (await getAutoLockMs()) + 250 })
+  } catch (e) {}
 }
 
 async function markActivity() {
   try { await chrome.storage.session.set({ lastActivity: Date.now() }) } catch (e) {}
+  await scheduleAutoLock()
 }
 
 async function checkInactivity() {
   const stored = await chrome.storage.session.get(['masterKeyBytes', 'lastActivity'])
   if (!stored || !stored.masterKeyBytes) return
   const last = stored.lastActivity || Date.now()
-  const elapsed = Date.now() - last
-  const { softMs, hardMs } = await getLockSettings()
-  if (elapsed >= hardMs) {
+  if (Date.now() - last >= (await getAutoLockMs())) {
     try { await chrome.storage.session.remove(['masterKeyBytes', 'softLocked']) } catch (e) {}
-  } else if (elapsed >= softMs) {
-    if (await authHasPin()) {
-      try {
-        await chrome.storage.session.remove('masterKeyBytes')
-        await chrome.storage.session.set({ softLocked: true })
-      } catch (e) {}
-    } else {
-      try { await chrome.storage.session.remove(['masterKeyBytes', 'softLocked']) } catch (e) {}
-    }
+  } else {
+    await scheduleAutoLock()
   }
 }
 
-chrome.alarms.create('inactivityCheck', { periodInMinutes: 0.5 })
+chrome.alarms.create(INACTIVITY_ALARM, { periodInMinutes: 0.5 })
 chrome.alarms.onAlarm.addListener(function (alarm) {
-  if (alarm.name === 'inactivityCheck') checkInactivity()
+  if (alarm.name === INACTIVITY_ALARM || alarm.name === AUTOLOCK_ALARM) checkInactivity()
+})
+
+chrome.storage.onChanged.addListener(function (changes, area) {
+  if (area !== 'session' || !changes.masterKeyBytes || !changes.masterKeyBytes.newValue) return
+  if (changes.lastActivity && changes.lastActivity.newValue) scheduleAutoLock()
+  else markActivity()
 })
 
 chrome.runtime.onMessage.addListener(function (request) {

@@ -8,7 +8,7 @@ import * as pairing from './pairing.js'
 import QRCode from './qrcode.js'
 import { splitIntoFrames, createFrameCollector } from './frames.js'
 import { createEncoder, createDecoder } from './fountain.js'
-import { generateSalt, deriveKeyFromSecret, masterKeyToCryptoKey, wrapMasterKey, unwrapMasterKey } from './crypto.js'
+import { generateSalt, deriveKeyFromSecret, masterKeyToCryptoKey, wrapMasterKey, unwrapMasterKey, decrypt } from './crypto.js'
 import { getPasswordVault, setPasswordVault } from './store.js'
 
 
@@ -49,7 +49,7 @@ if (btnManageUnlockFp) {
     if (result.success) {
       session.setMasterKey(result.masterKey)
       const bytes = new Uint8Array(await crypto.subtle.exportKey('raw', result.masterKey))
-      await chrome.storage.session.set({ masterKeyBytes: Array.from(bytes) })
+      await chrome.storage.session.set({ masterKeyBytes: Array.from(bytes), lastActivity: Date.now() })
       hideLockOverlay()
       location.reload()
     } else if (msgManageLock) { showMsg(msgManageLock, result.error, 'error') }
@@ -64,7 +64,7 @@ if (btnManageUnlockPw) {
     if (result.success) {
       session.setMasterKey(result.masterKey)
       const bytes = new Uint8Array(await crypto.subtle.exportKey('raw', result.masterKey))
-      await chrome.storage.session.set({ masterKeyBytes: Array.from(bytes) })
+      await chrome.storage.session.set({ masterKeyBytes: Array.from(bytes), lastActivity: Date.now() })
       inputManagePassword.value = ''
       hideLockOverlay()
       location.reload()
@@ -80,7 +80,14 @@ if (inputManagePassword) {
 function attachActivityListeners() {
   
   
-  const bump = () => { session.resetActivity() }
+  let lastPing = 0
+  const bump = () => {
+    session.resetActivity()
+    const now = Date.now()
+    if (now - lastPing < 3000) return
+    lastPing = now
+    try { chrome.runtime.sendMessage({ action: 'activity' }) } catch (e) {}
+  }
   document.body.addEventListener('click', bump, true)
   document.body.addEventListener('input', bump, true)
   document.body.addEventListener('keydown', bump, true)
@@ -194,18 +201,23 @@ async function loadAllCredentials() {
     }
     return
   }
-  const domainsResult = await passwords.getAllDomains(session.getMasterKey())
-  if (!domainsResult.success || domainsResult.domains.length === 0) {
+  let tree = null
+  try {
+    tree = await passwords.readVaultTree(session.getMasterKey())
+  } catch (e) {
+    credentialsList.innerHTML = '<div style="padding:24px;text-align:center;color:var(--danger);">Could not open saved credentials with the current master key</div>'
+    return
+  }
+  const domains = Object.keys(tree.credentials).filter((d) => tree.credentials[d].some((c) => !c.deleted)).sort()
+  if (domains.length === 0) {
     credentialsList.innerHTML = '<div style="padding:24px;text-align:center;color:#666;">No saved credentials</div>'
     return
   }
-  
-  const domains = domainsResult.domains.sort()
+
   credentialsList.innerHTML = ''
-  
+
   for (const domain of domains) {
-    const vaultData = await store.getPasswordVault()
-    const domainCreds = vaultData?.credentials?.[domain] || []
+    const domainCreds = tree.credentials[domain].filter((c) => !c.deleted)
     
     const domainItem = document.createElement('div')
     domainItem.style.cssText = 'border-bottom:1px solid #2a2a2a;'
@@ -849,7 +861,7 @@ btnEditFp.onclick = async () => {
 btnEditPw.onclick = async () => {
   const mk = await ensureUnlocked()
   if (!mk) { showMsg(msgManage, 'Authentication required', 'error'); return }
-  const pw = prompt('Enter a password (8+ characters):')
+  const pw = prompt('Enter a password (12+ characters, letter, number, symbol):')
   if (!pw) return
   if (pw.length < 12) { showMsg(msgManage, 'Password must be 12+ characters', 'error'); return }
   if (!/[a-zA-Z]/.test(pw) || !/[0-9]/.test(pw) || !/[^a-zA-Z0-9]/.test(pw)) { showMsg(msgManage, 'Password needs a letter, a number, and a symbol', 'error'); return }
@@ -1100,37 +1112,9 @@ const _btnImportVault = document.getElementById('btn-import-vault'); if (_btnImp
       if (fileObj.format !== 'valid-vault-vault') { syncMsg('Not a Valid Vault backup file', 'error'); return }
       const mk = session.getMasterKey()
       if (!mk) { syncMsg('Unlock first', 'error'); return }
-      if (fileObj.vault) {
-        const localRow = await getPasswordVault()
-        const incomingRow = fileObj.vault
-        if (!localRow) {
-          const incomingTree = await passwords.decryptAnyRowToTree(incomingRow, mk)
-          await passwords.writeVaultTree(incomingTree, mk)
-        } else {
-          const localTree = await passwords.decryptAnyRowToTree(localRow, mk)
-          const incomingTree = await passwords.decryptAnyRowToTree(incomingRow, mk)
-          const merged = passwords.mergeVaults(localTree, incomingTree)
-          merged.meta.lastAccess = Date.now()
-          await passwords.writeVaultTree(merged, mk)
-        }
-      }
-      if (fileObj.webcreds) {
-        const localWc = await store.getWebCredsVault()
-        const incomingWc = fileObj.webcreds
-        if (!localWc) { await store.setWebCredsVault(incomingWc) }
-        else {
-          const mergedWc = await webcreds.mergeWebCredsVaults(localWc, incomingWc, mk)
-          mergedWc.meta.createdAt = Math.min(localWc.meta.createdAt, incomingWc.meta.createdAt)
-          mergedWc.meta.lastAccess = Date.now()
-          await store.setWebCredsVault(mergedWc)
-        }
-      }
-      if (fileObj.personalInfo) {
-        const localPi = await store.getPersonalInfo()
-        const mergedPi = personalinfo.mergeProfiles(localPi, fileObj.personalInfo)
-        await store.setPersonalInfo(mergedPi)
-      }
+      await importVaultBundle(fileObj, mk)
       syncMsg('Vault merged.', 'success')
+      if (loginCredsUnlocked) loadAllCredentials()
     } catch (e) { syncMsg('Import failed: ' + (e && e.message ? e.message : e), 'error') }
   })
 }
@@ -1187,48 +1171,160 @@ async function showImportKeyModal(fileObj) {
     const secret = combineSecret(pass, fileObj.questions, answers)
     const salt = new Uint8Array(fileObj.salt)
     const wrapKey = await deriveKeyFromSecret(secret, salt, fileObj.iterations || EXPORT_ITERATIONS)
-    const rawMaster = await unwrapMasterKey(fileObj.wrapped, wrapKey)
-    const importedKey = await masterKeyToCryptoKey(rawMaster)
-    session.setMasterKey(importedKey)
-    await persistImportedKey(importedKey)
-  } catch (e) { syncMsg('Wrong passphrase or answers.', 'error') }
+    let importedKey
+    try {
+      importedKey = await unwrapMasterKey(fileObj.wrapped, wrapKey)
+    } catch (e) { syncMsg('Wrong passphrase or answers.', 'error'); return }
+    await adoptImportedKey(importedKey)
+  } catch (e) { syncMsg('Key import failed: ' + (e && e.message ? e.message : e), 'error') }
 }
 
-async function persistImportedKey(importedKey) {
-  const status = await auth.initAuth()
+const KEY_MISMATCH_MSG = 'This vault was made with a different master key. Import that master key first, then import the vault.'
+const LOCAL_MISMATCH_MSG = 'This browser\'s saved data uses a different master key than the one unlocked. Import the matching master key first.'
+const VAULT_STORES = ['passwords', 'webcreds', 'personalInfo', 'vaultMigration']
 
-  if (!status.hasPassword && !status.hasFingerprint) {
-    const newPass = window.prompt('No unlock method is set up yet on this browser. Set a password (12+ chars, letter, number, symbol) to use with the imported vault:')
-    if (!newPass) { syncMsg('Master key imported for this session only. Set a password to make it permanent.', 'error'); return }
-    auth.startPasswordCreation()
-    const result = await auth.setPassword(newPass, importedKey)
-    if (result.success) { syncMsg('Master key imported and password set. This browser now uses the imported vault permanently.', 'success') }
-    else { syncMsg('Master key imported for this session only. ' + result.error, 'error') }
-    return
+function passwordMeetsRule(pw) {
+  return !!pw && pw.length >= 12 && /[a-zA-Z]/.test(pw) && /[0-9]/.test(pw) && /[^a-zA-Z0-9]/.test(pw)
+}
+
+async function rowOpensWith(row, key) {
+  if (!row) return true
+  try { await passwords.decryptAnyRowToTree(row, key); return true } catch (e) { return false }
+}
+
+async function webCredsOpenWith(vault, key) {
+  if (!vault || !vault.credentials) return true
+  for (const category of Object.keys(vault.credentials)) {
+    for (const cred of vault.credentials[category]) {
+      if (cred.deleted) continue
+      try { await decrypt(cred.name, key); return true } catch (e) { return false }
+    }
   }
+  return true
+}
 
-  if (status.hasPassword) {
-    const currentPass = window.prompt('Key imported. Enter your password to make it permanent on this browser:')
-    if (!currentPass) { syncMsg('Master key imported for this session only. It will revert on next unlock unless you make it permanent.', 'error'); return }
-    auth.startPasswordCreation()
-    const result = await auth.setPassword(currentPass, importedKey)
-    if (!result.success) { syncMsg('Could not make the key permanent: ' + result.error, 'error'); return }
-  }
+async function personalInfoOpensWith(record, key) {
+  if (!record || !record.data) return true
+  try { await decrypt(record.data, key); return true } catch (e) { return false }
+}
 
-  if (status.hasFingerprint) {
-    if (window.confirm('Also relink fingerprint unlock to the imported vault? You will be prompted for your fingerprint.')) {
-      try {
-        await auth.startFingerprintEnrollment()
-        const fpResult = await auth.enrollFingerprint(importedKey)
-        if (!fpResult.success) { syncMsg('Password updated, but fingerprint relink failed: ' + fpResult.error, 'error'); return }
-      } catch (e) { syncMsg('Password updated, but fingerprint relink failed.', 'error'); return }
+async function localVaultOpensWith(key) {
+  if (!(await rowOpensWith(await getPasswordVault(), key))) return false
+  if (!(await webCredsOpenWith(await store.getWebCredsVault(), key))) return false
+  return personalInfoOpensWith(await store.getPersonalInfo(), key)
+}
+
+async function importVaultBundle(bundle, mk) {
+  if (!(await rowOpensWith(bundle.vault, mk))) throw new Error(KEY_MISMATCH_MSG)
+  if (!(await webCredsOpenWith(bundle.webcreds, mk))) throw new Error(KEY_MISMATCH_MSG)
+  if (!(await personalInfoOpensWith(bundle.personalInfo, mk))) throw new Error(KEY_MISMATCH_MSG)
+  if (!(await localVaultOpensWith(mk))) throw new Error(LOCAL_MISMATCH_MSG)
+
+  if (bundle.vault) {
+    const localRow = await getPasswordVault()
+    const incomingTree = await passwords.decryptAnyRowToTree(bundle.vault, mk)
+    if (!localRow) {
+      await passwords.writeVaultTree(incomingTree, mk)
     } else {
-      syncMsg('Password updated. Fingerprint still unlocks the old vault until you relink it in Manage.', 'success')
-      return
+      const localTree = await passwords.decryptAnyRowToTree(localRow, mk)
+      const merged = passwords.mergeVaults(localTree, incomingTree)
+      merged.meta.lastAccess = Date.now()
+      await passwords.writeVaultTree(merged, mk)
+    }
+  }
+  if (bundle.webcreds) {
+    const localWc = await store.getWebCredsVault()
+    const incomingWc = bundle.webcreds
+    if (!localWc) { await store.setWebCredsVault(incomingWc) }
+    else {
+      const mergedWc = await webcreds.mergeWebCredsVaults(localWc, incomingWc, mk)
+      mergedWc.meta.lastAccess = Date.now()
+      await store.setWebCredsVault(mergedWc)
+    }
+  }
+  if (bundle.personalInfo) {
+    const localPi = await store.getPersonalInfo()
+    await store.setPersonalInfo(personalinfo.mergeProfiles(localPi, bundle.personalInfo))
+  }
+}
+
+async function clearLocalVaultData() {
+  const database = await store.openDB()
+  for (const storeName of VAULT_STORES) {
+    await new Promise((resolve, reject) => {
+      const tx = database.transaction(storeName, 'readwrite')
+      tx.objectStore(storeName).clear()
+      tx.oncomplete = () => resolve()
+      tx.onerror = () => reject(tx.error)
+    })
+  }
+}
+
+async function choosePasswordForImport(status) {
+  if (status.hasPassword) {
+    const current = window.prompt('Enter this browser\'s master password to confirm the key import:')
+    if (!current) { syncMsg('Key import cancelled. Nothing changed.', 'error'); return null }
+    const check = await auth.authenticatePassword(current)
+    if (!check.success) { syncMsg('Wrong password. Key import cancelled, nothing changed.', 'error'); return null }
+    if (passwordMeetsRule(current)) return current
+  }
+  const fresh = window.prompt('Set a master password for this browser (12+ characters, letter, number, symbol):')
+  if (!fresh) { syncMsg('Key import cancelled. Nothing changed.', 'error'); return null }
+  if (!passwordMeetsRule(fresh)) { syncMsg('Password must be 12+ characters with a letter, a number, and a symbol. Key import cancelled, nothing changed.', 'error'); return null }
+  return fresh
+}
+
+async function adoptImportedKey(importedKey) {
+  const matches = await localVaultOpensWith(importedKey)
+  if (!matches) {
+    const proceed = window.confirm(
+      'WARNING: This browser\'s current vault was made with a different master key.\n\n' +
+      'Importing this key makes that vault unusable, so it will be cleared from this browser.\n\n' +
+      'This is how you get ready to receive the vault from your other device: import the key first, then import or scan the vault.\n\n' +
+      'Continue?'
+    )
+    if (!proceed) { syncMsg('Key import cancelled. Nothing changed.', 'error'); return false }
+  }
+
+  const status = await auth.initAuth()
+  const password = await choosePasswordForImport(status)
+  if (!password) return false
+
+  if (!matches) await clearLocalVaultData()
+
+  auth.startPasswordCreation()
+  const result = await auth.setPassword(password, importedKey)
+  if (!result.success) { syncMsg('Could not save the imported key: ' + result.error, 'error'); return false }
+
+  let fingerprintNote = ''
+  if (status.hasFingerprint) {
+    let relinked = false
+    if (window.confirm('Relink fingerprint unlock to the imported key? You will be asked for your fingerprint. Cancel turns fingerprint unlock off until you re-enroll it in Manage.')) {
+      try {
+        auth.startFingerprintEnrollment()
+        const fp = await auth.enrollFingerprint(importedKey)
+        relinked = !!fp.success
+      } catch (e) {}
+    }
+    if (!relinked) {
+      await auth.removeFingerprint()
+      fingerprintNote = ' Fingerprint unlock is off until you re-enroll it in Manage.'
     }
   }
 
-  syncMsg('Master key imported and made permanent. This device now stays in sync using this vault.', 'success')
+  session.setMasterKey(importedKey)
+  const raw = new Uint8Array(await crypto.subtle.exportKey('raw', importedKey))
+  try { await chrome.storage.session.set({ masterKeyBytes: Array.from(raw), lastActivity: Date.now() }) } catch (e) {}
+  loginCredsUnlocked = false
+  webCredsUnlocked = false
+  personalInfoUnlocked = false
+  await loadAuthStatus()
+  await loadAllCredentials()
+
+  syncMsg(matches
+    ? 'Master key imported and saved on this browser.' + fingerprintNote
+    : 'Master key imported and saved. Now import or scan the vault from your other device.' + fingerprintNote, 'success')
+  return true
 }
 
 
@@ -1273,7 +1369,7 @@ const _qrScanBox = document.getElementById('qr-scan-box'); if (_qrScanBox) _qrSc
           const outcome = decoder.addFrame(code.data)
           if (outcome.success) {
             status.textContent = 'Receiving: ' + outcome.solved + ' of ' + outcome.total
-            if (outcome.complete) { const assembled = decoder.assemble(); cleanup(); handleImported(assembled.payload); return }
+            if (outcome.complete) { const assembled = decoder.assemble(); cleanup(); syncMsg('Received ' + outcome.total + ' of ' + outcome.total + ', importing...', 'success'); handleImported(assembled.payload); return }
           }
         }
       }
@@ -1284,50 +1380,23 @@ const _qrScanBox = document.getElementById('qr-scan-box'); if (_qrScanBox) _qrSc
 }
 
 async function handleImported(payloadText) {
-  const data = JSON.parse(payloadText)
-  if (data.kind === 'key') {
-    const importedKey = await masterKeyToCryptoKey(new Uint8Array(data.key))
-    session.setMasterKey(importedKey)
-    syncMsg('Sync key imported. This device can now sync.', 'success')
-    return
-  }
-  if (data.kind === 'vault') {
-    const mk = session.getMasterKey()
-    if (!mk) { syncMsg('QR sync not enabled. Import master key first', 'error'); return }
-    if (data.vault) {
-      const localRow = await getPasswordVault()
-      const incomingRow = data.vault
-      if (!localRow) {
-        const incomingTree = await passwords.decryptAnyRowToTree(incomingRow, mk)
-        await passwords.writeVaultTree(incomingTree, mk)
-      } else {
-        const localTree = await passwords.decryptAnyRowToTree(localRow, mk)
-        const incomingTree = await passwords.decryptAnyRowToTree(incomingRow, mk)
-        const merged = passwords.mergeVaults(localTree, incomingTree)
-        merged.meta.lastAccess = Date.now()
-        await passwords.writeVaultTree(merged, mk)
-      }
+  try {
+    const data = JSON.parse(payloadText)
+    if (data.kind === 'key') {
+      const importedKey = await masterKeyToCryptoKey(new Uint8Array(data.key))
+      await adoptImportedKey(importedKey)
+      return
     }
-    if (data.webcreds) {
-      const localWc = await store.getWebCredsVault()
-      const incomingWc = data.webcreds
-      if (!localWc) { await store.setWebCredsVault(incomingWc) }
-      else {
-        const mergedWc = await webcreds.mergeWebCredsVaults(localWc, incomingWc, mk)
-        mergedWc.meta.createdAt = Math.min(localWc.meta.createdAt, incomingWc.meta.createdAt)
-        mergedWc.meta.lastAccess = Date.now()
-        await store.setWebCredsVault(mergedWc)
-      }
+    if (data.kind === 'vault') {
+      const mk = session.getMasterKey()
+      if (!mk) { syncMsg('QR sync not enabled. Import master key first', 'error'); return }
+      await importVaultBundle(data, mk)
+      syncMsg('Sync complete.', 'success')
+      if (loginCredsUnlocked) loadAllCredentials()
+      return
     }
-    if (data.personalInfo) {
-      const localPi = await store.getPersonalInfo()
-      const mergedPi = personalinfo.mergeProfiles(localPi, data.personalInfo)
-      await store.setPersonalInfo(mergedPi)
-    }
-    syncMsg('Sync complete.', 'success')
-    return
-  }
-  syncMsg('Unrecognized code', 'error')
+    syncMsg('Unrecognized code', 'error')
+  } catch (e) { syncMsg('Sync failed: ' + (e && e.message ? e.message : e), 'error') }
 }
 
 init()

@@ -2,13 +2,6 @@
   if (window.localVaultInjected) return
   window.localVaultInjected = true
 
-  // background.js's inactivity timer only resets on an explicit 'activity' message.
-  // Without this, actively using autofill on a page doesn't count as activity, and
-  // the vault can lock mid-use even while the person is right there working with it.
-  // Throttled so the broader set of call sites below (ordinary typing, every
-  // autofill dispatch, dropdown opens) can ping liberally without turning every
-  // keystroke into its own runtime message — only the correctness of "was there
-  // recent activity" matters, not sub-second precision.
   let lastActivityPingAt = 0
   function pingActivity() {
     const now = Date.now()
@@ -17,30 +10,15 @@
     try { chrome.runtime.sendMessage({ action: 'activity' }) } catch (e) {}
   }
 
-  // Ordinary typing/selecting in any field on the page, and every synthetic
-  // input event our own autofill dispatches, both land here — so passive
-  // personal-info autofill and plain typing both count as activity now, not
-  // just the handful of deliberate click-driven actions (dropdown pick, tag
-  // click, unlock) that were the only things resetting the timer before.
   document.addEventListener('input', (e) => {
     const t = e.target
     if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT')) pingActivity()
   }, true)
-  // Tab/arrow-key navigation between fields, and time spent with a dropdown
-  // or the save prompt open, doesn't fire 'input' at all — this catches the
-  // "still clearly here, just not typing this instant" case.
   document.addEventListener('keydown', (e) => {
     const t = e.target
     if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT')) pingActivity()
   }, true)
 
-  // React (and similar frameworks) install their own value tracker over a plain
-  // `el.value = x` assignment, so setting it directly can leave the DOM showing
-  // the new value while the framework's internal state — and anything driven by
-  // its onChange — never sees the change. Calling the native prototype setter
-  // directly, before dispatching the input event, is what actually invalidates
-  // that tracker. Falls back to a plain assignment for anything without one
-  // (plain HTML pages, older engines) — this can only help, never regress.
   function setNativeValue(el, value) {
     const proto = el.tagName === 'TEXTAREA'
       ? window.HTMLTextAreaElement.prototype
@@ -55,14 +33,6 @@
     }
   }
 
-  // A <select>'s value has to be one of its own <option> values — assigning an
-  // arbitrary string (a saved "United States" against options keyed "US", say)
-  // silently clears the selection instead of picking anything, which is worse
-  // than leaving it untouched. Tries an exact option value match first, then a
-  // normalized match against either the option's value or its visible text
-  // (handles "US" vs "United States", casing, punctuation). Returns whether
-  // anything was actually selected, so callers only dispatch input/change and
-  // mark the field filled when a real match was found.
   function setSelectValue(el, value) {
     if (value === undefined || value === null) return false
     const normTarget = normalizeLabel(String(value))
@@ -84,22 +54,10 @@
   }
 
   let currentDomain = window.location.hostname
-  let dropdown = null
-  let dropdownOwnerField = null  // which field the currently-open dropdown belongs to
 
-  // A page can have more than one login form (or gain a second one dynamically,
-  // via the MutationObserver below). Each wired form gets its own {username,
-  // password} pair instead of everything sharing one mutable global — a shared
-  // pair meant that wiring a second form silently repointed the first form's
-  // already-attached listeners at the wrong fields.
   const wiredForms = []
-  const trackedFields = new Set()  // every username/password field across all wired forms
+  const trackedFields = new Set()
 
-  // Shared low-level matcher: both the login-username heuristic and the signup/
-  // personal-info classifier (matchSignupFieldType, below) run candidate fields
-  // through the same selector-list check, instead of each hand-rolling its own
-  // matching logic. Keeps the two classifiers from silently disagreeing about
-  // what a given input actually is.
   function fieldMatchesSelectors(el, selectors) {
     for (let i = 0; i < selectors.length; i++) {
       if (el.matches(selectors[i])) return true
@@ -107,11 +65,6 @@
     return false
   }
 
-  // Used only to PREFER a candidate within detectLoginForm's existing pool of
-  // visible text/email/tel inputs — it never narrows that pool. If nothing
-  // matches, the previous behavior (first visible candidate) still applies, so
-  // this can only make matching better on sites that already worked, not break
-  // them.
   const USERNAME_SELECTORS = [
     'input[autocomplete="username"]',
     'input[autocomplete="email"]',
@@ -127,11 +80,6 @@
     'input[placeholder*="login" i]'
   ]
 
-  // Classifies what KIND of identifier a field is asking for, from the field's
-  // own attributes (type, autocomplete, name/id/placeholder) - never from the
-  // typed value, so it's stable whether the field is empty or filled. Used both
-  // to tag a credential at save time and to target the right saved credential
-  // (and the right field) at fill time.
   function classifyLoginType(el) {
     if (!el) return 'username'
     const type = (el.type || '').toLowerCase()
@@ -165,149 +113,6 @@
     return null
   }
 
-  function createDropdown() {
-    const shadowHost = document.createElement('div')
-    shadowHost.id = 'local-vault-dropdown-host'
-    shadowHost.style.cssText = 'position:absolute;z-index:2147483647;'
-    document.body.appendChild(shadowHost)
-
-    const shadow = shadowHost.attachShadow({ mode: 'closed' })
-    
-    shadow.innerHTML = `
-      <style>
-        .dropdown {
-          position: absolute;
-          background: #1a1a1a;
-          border: 1px solid #333;
-          border-radius: 8px;
-          box-shadow: 0 4px 12px rgba(0,0,0,0.5);
-          min-width: 280px;
-          max-width: 400px;
-          overflow: hidden;
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        }
-        .header {
-          padding: 12px 16px;
-          background: #0a0a0a;
-          color: #00d4aa;
-          font-size: 12px;
-          font-weight: 500;
-          border-bottom: 1px solid #333;
-        }
-        .item {
-          padding: 12px 16px;
-          cursor: pointer;
-          border-bottom: 1px solid #2a2a2a;
-          color: #e0e0e0;
-        }
-        .item:hover {
-          background: #2a2a2a;
-        }
-        .item:last-child {
-          border-bottom: none;
-        }
-        .username {
-          font-size: 13px;
-          margin-bottom: 4px;
-        }
-        .password-dots {
-          font-size: 11px;
-          color: #666;
-        }
-        .manage {
-          padding: 10px 16px;
-          text-align: center;
-          color: #00d4aa;
-          font-size: 12px;
-          border-top: 1px solid #333;
-        }
-        .no-accounts {
-          padding: 16px;
-          text-align: center;
-          color: #666;
-          font-size: 12px;
-        }
-      </style>
-      <div class="dropdown" id="dropdown">
-        <div class="header">🔐 Valid Vault</div>
-        <div id="items"></div>
-      </div>
-    `
-
-    return { host: shadowHost, shadow }
-  }
-
-  function positionDropdown(field) {
-    if (!dropdown) return
-    const rect = field.getBoundingClientRect()
-    dropdown.host.style.left = rect.left + window.scrollX + 'px'
-    dropdown.host.style.top = rect.bottom + window.scrollY + 2 + 'px'
-  }
-
-  // formFields identifies which form's dropdown this is, so selecting a
-  // credential always fills the fields it was opened from, even if another
-  // login form on the page got focused/wired in between.
-  async function showDropdown(field, formFields) {
-    // Opening the dropdown (without necessarily picking anything yet) is
-    // itself a sign the person is actively working the page, not idle.
-    pingActivity()
-    if (!dropdown) dropdown = createDropdown()
-
-    dropdownOwnerField = field
-    positionDropdown(field)
-    dropdown.host.style.display = 'block'
-
-    const response = await chrome.runtime.sendMessage({
-      action: 'getCredentialsForDomain',
-      domain: currentDomain
-    })
-
-    const itemsContainer = dropdown.shadow.getElementById('items')
-    itemsContainer.innerHTML = ''
-
-    if (response.success && response.credentials.length > 0) {
-      // Prefer accounts whose stored loginType matches what THIS field is
-      // asking for (an email input, a phone input, plain text) - relevant on
-      // sites where one domain has both an email-login and a phone-login
-      // account saved. Doesn't hide the rest, just orders the likely match
-      // to the top; a stable sort so credentials of the same type keep
-      // whatever order the background script returned them in.
-      const targetType = classifyLoginType(field)
-      const ranked = response.credentials
-        .map((cred, i) => ({ cred, i }))
-        .sort((a, b) => {
-          const aMatch = (a.cred.loginType || 'username') === targetType ? 0 : 1
-          const bMatch = (b.cred.loginType || 'username') === targetType ? 0 : 1
-          return aMatch - bMatch || a.i - b.i
-        })
-        .map((x) => x.cred)
-
-      for (const cred of ranked) {
-        const icon = LOGIN_TYPE_ICON[cred.loginType || 'username'] || LOGIN_TYPE_ICON.username
-        const item = document.createElement('div')
-        item.className = 'item'
-        item.innerHTML = `
-          <div class="username">${icon} ${escapeHtml(cred.username)}</div>
-          <div class="password-dots">••••••••</div>
-        `
-        item.onclick = () => fillCredentials(cred, formFields)
-        itemsContainer.appendChild(item)
-      }
-
-      const manage = document.createElement('div')
-      manage.className = 'manage'
-      manage.textContent = 'Manage in Valid Vault...'
-      manage.onclick = () => chrome.runtime.sendMessage({ action: 'openManage' })
-      itemsContainer.appendChild(manage)
-    } else {
-      itemsContainer.innerHTML = '<div class="no-accounts">No saved accounts</div>'
-    }
-  }
-
-  function hideDropdown() {
-    if (dropdown) dropdown.host.style.display = 'none'
-  }
-
   function fillCredentials(cred, formFields) {
     pingActivity()
     const username = formFields && formFields.username
@@ -339,22 +144,13 @@
         }
       }
     }
-    hideDropdown()
+    hideFieldPicker()
   }
 
-  // Anything on the form that isn't the login/password and isn't a Personal Info
-  // field (name, phone, address, email stay a settings-driven autofill source, never
-  // captured per-site) still belongs to this one site's credential record, things
-  // like an account number. It's captured as the user types it, not filled from a
-  // settings page, and saved alongside the login it was typed next to.
   function isTrackedField(el) {
     return trackedFields.has(el)
   }
 
-  // A saved label and a freshly-read one rarely come back byte-identical: sites
-  // tweak whitespace, capitalization, or a trailing colon/asterisk without changing
-  // what the field actually is. Matching should tolerate that; the label shown to
-  // the user stays whatever was originally captured.
   function normalizeLabel(label) {
     return (label || '')
       .toLowerCase()
@@ -424,7 +220,14 @@
         .title { color:#33ff66; font-size:15px; font-weight:700; margin-bottom:6px; }
         .sub { color:#6fae7f; font-size:12px; margin-bottom:4px; word-break:break-all; }
         .user { color:#b8f0c4; font-size:13px; margin:4px 0 8px; word-break:break-all; }
-        .extra-note { color:#6fae7f; font-size:11px; margin-bottom:16px; }
+        .extra-note { color:#6fae7f; font-size:11px; margin-bottom:12px; }
+        .pw-wrap { display:none; position:relative; align-items:center; margin:0 0 10px; }
+        .pw { width:100%; box-sizing:border-box; padding:10px 40px 10px 10px; border-radius:6px; border:1px solid #1f9e40;
+          background:#0a0e0a; color:#b8f0c4; font-size:13px; }
+        .pw-eye { position:absolute; right:8px; background:none; border:none; color:#6fae7f; cursor:pointer; padding:4px; margin:0;
+          display:flex; align-items:center; flex:none; }
+        .pw-eye:hover { color:#33ff66; }
+        .pw-eye svg { width:20px; height:20px; fill:currentColor; }
         .row { display:flex; gap:10px; }
         button { flex:1; padding:11px; border-radius:6px; border:none; font-size:13px; font-weight:700; cursor:pointer; }
         .save { background:#33ff66; color:#05140a; }
@@ -436,6 +239,10 @@
           <div class="sub" id="sp-domain"></div>
           <div class="user" id="sp-user"></div>
           <div class="extra-note" id="sp-extra"></div>
+          <div class="pw-wrap" id="sp-pw-wrap">
+            <input class="pw" id="sp-pw" type="password" placeholder="Master password" autocomplete="new-password" spellcheck="false">
+            <button type="button" class="pw-eye" id="sp-eye" aria-label="Show/hide"><svg viewBox="0 0 24 24"><path d="M12 4.5C7 4.5 2.7 7.6 1 12c1.7 4.4 6 7.5 11 7.5s9.3-3.1 11-7.5c-1.7-4.4-6-7.5-11-7.5zm0 12.5a5 5 0 110-10 5 5 0 010 10zm0-8a3 3 0 100 6 3 3 0 000-6z"/></svg></button>
+          </div>
           <div class="sub" id="sp-msg" style="color:#ff8866;min-height:14px;"></div>
           <div class="row">
             <button class="save" id="sp-save">Save</button>
@@ -447,76 +254,109 @@
     return { host, shadow }
   }
 
-  function showSavePrompt(domain, username, password, isUpdate, extraFields, pendingId, loginType) {
+  function showSavePrompt(domain, username, password, isUpdate, extraFields, pendingId, loginType, locked) {
     if (!savePrompt) savePrompt = createSavePrompt()
-    savePrompt.shadow.getElementById('sp-title').textContent = isUpdate ? 'Update saved password?' : 'Save to Valid Vault?'
-    savePrompt.shadow.getElementById('sp-domain').textContent = domain
-    savePrompt.shadow.getElementById('sp-user').textContent = username || '(no username)'
-    const extraEl = savePrompt.shadow.getElementById('sp-extra')
+    const shadow = savePrompt.shadow
+    const saveBtn = shadow.getElementById('sp-save')
+    const pwEl = shadow.getElementById('sp-pw')
+    const pwWrap = shadow.getElementById('sp-pw-wrap')
+    const eyeBtn = shadow.getElementById('sp-eye')
+    const msgEl = shadow.getElementById('sp-msg')
+    function setPwVisible(visible) {
+      pwEl.type = visible ? 'text' : 'password'
+      eyeBtn.style.color = visible ? '#33ff66' : ''
+    }
+    shadow.getElementById('sp-title').textContent = isUpdate ? 'Update saved password?' : 'Save to Valid Vault?'
+    shadow.getElementById('sp-domain').textContent = domain
+    shadow.getElementById('sp-user').textContent = username || '(no username)'
+    const extraEl = shadow.getElementById('sp-extra')
     if (extraEl) {
       extraEl.textContent = extraFields && extraFields.length
         ? '+ ' + extraFields.length + ' additional field' + (extraFields.length !== 1 ? 's' : '') + ' on this form will be saved too'
         : ''
     }
-    const msgEl0 = savePrompt.shadow.getElementById('sp-msg')
-    if (msgEl0) msgEl0.textContent = ''
+    function showLocked() {
+      pwWrap.style.display = 'flex'
+      pwEl.value = ''
+      setPwVisible(false)
+      saveBtn.textContent = 'Unlock and Save'
+      msgEl.textContent = 'Vault is locked. Enter your master password to unlock and save.'
+      setTimeout(() => pwEl.focus(), 0)
+    }
+    function showUnlocked() {
+      pwWrap.style.display = 'none'
+      pwEl.value = ''
+      setPwVisible(false)
+      saveBtn.textContent = 'Save'
+      msgEl.textContent = ''
+    }
+    if (locked) showLocked()
+    else showUnlocked()
     savePrompt.host.style.display = 'block'
-    // Any real dismissal — cancel, clicking outside, or a successful save —
-    // resolves the underlying pending-save record (by its own id, since more
-    // than one can be staged in the same tab) so it stops reappearing on later
-    // pages in this tab. A locked-vault save attempt does NOT resolve it (see
-    // below), since the user is expected to unlock and click Save again. A
-    // non-locked write failure (storage error, etc.) also does not resolve it
-    // — the user sees an error and can retry Save without losing the capture.
+    let busy = false
     const close = () => {
       savePrompt.host.style.display = 'none'
+      showUnlocked()
       if (pendingId) { try { chrome.runtime.sendMessage({ action: 'resolvePendingSave', id: pendingId }) } catch (e) {} }
     }
-    savePrompt.shadow.getElementById('sp-cancel').onclick = close
-    savePrompt.shadow.getElementById('sp-save').onclick = async () => {
-      pingActivity()
-      const msgEl = savePrompt.shadow.getElementById('sp-msg')
-      const result = await chrome.runtime.sendMessage({ action: 'saveCredential', domain, username, password, extraFields, loginType })
-      if (result && result.locked) {
-        if (msgEl) msgEl.textContent = 'Vault is locked. Click the Valid Vault icon to unlock, then click Save again.'
-        return
+    const doSave = async () => {
+      if (busy) return
+      busy = true
+      try {
+        pingActivity()
+        if (pwWrap.style.display !== 'none') {
+          const pw = pwEl.value
+          if (!pw) { msgEl.textContent = 'Enter your master password.'; return }
+          let unlock = null
+          try { unlock = await chrome.runtime.sendMessage({ action: 'authenticateWithPassword', password: pw }) } catch (e) {}
+          if (!unlock) { msgEl.textContent = 'Could not reach Valid Vault. Refresh this page and try again.'; return }
+          if (!unlock.success) {
+            msgEl.textContent = unlock.error === 'Invalid password' ? 'Wrong password. Try again.' : unlock.error
+            pwEl.value = ''
+            pwEl.focus()
+            return
+          }
+          showUnlocked()
+          const check = await chrome.runtime.sendMessage({ action: 'getCredentialsForDomain', domain })
+          const existing = check && check.success ? check.credentials.find(c => c.username === username) : null
+          if (existing && existing.password === password && sameExtraFields(existing.extraFields, extraFields)) {
+            close()
+            return
+          }
+        }
+        const result = await chrome.runtime.sendMessage({ action: 'saveCredential', domain, username, password, extraFields, loginType })
+        if (result && result.locked) { showLocked(); return }
+        if (!result || !result.success) { msgEl.textContent = 'Could not save. Please try again.'; return }
+        close()
+      } finally {
+        busy = false
       }
-      if (!result || !result.success) {
-        if (msgEl) msgEl.textContent = 'Could not save — please try again.'
-        return
-      }
-      close()
     }
-    savePrompt.shadow.getElementById('backdrop').onclick = (e) => {
-      if (e.target === savePrompt.shadow.getElementById('backdrop')) close()
-    }
+    shadow.getElementById('sp-cancel').onclick = close
+    saveBtn.onclick = doSave
+    pwEl.onkeydown = (e) => { e.stopPropagation(); if (e.key === 'Enter') { e.preventDefault(); doSave() } }
+    pwEl.onkeyup = (e) => e.stopPropagation()
+    pwEl.onkeypress = (e) => e.stopPropagation()
+    pwEl.oninput = (e) => e.stopPropagation()
+    eyeBtn.onclick = (e) => { e.preventDefault(); setPwVisible(pwEl.type === 'password'); pwEl.focus() }
+    shadow.getElementById('backdrop').onclick = null
   }
 
-  // domain is passed explicitly (not read from the outer currentDomain) because
-  // checkPendingSave() can be resolving a save that was staged on a DIFFERENT
-  // page than the one currently loaded (a redirect mid-login) — the credential
-  // must always be saved under the domain it was actually typed on.
   async function maybePromptSave(domain, u, p, extras, pendingId, loginType) {
     let existing = null
+    let locked = false
     try {
       const result = await chrome.runtime.sendMessage({ action: 'getCredentialsForDomain', domain })
       if (result && result.success) existing = result.credentials.find(c => c.username === u)
+      else if (result && result.locked) locked = true
     } catch (e) {}
     if (existing && existing.password === p && sameExtraFields(existing.extraFields, extras)) {
-      // already saved, nothing changed — resolve the staged record now instead
-      // of leaving it to sit until the TTL expires
       if (pendingId) { try { chrome.runtime.sendMessage({ action: 'resolvePendingSave', id: pendingId }) } catch (e) {} }
       return
     }
-    showSavePrompt(domain, u, p, !!existing, extras, pendingId, loginType)
+    showSavePrompt(domain, u, p, !!existing, extras, pendingId, loginType, locked)
   }
 
-  // One logical submission can trigger this three separate ways — the form's
-  // own submit event, Enter in the password field (which usually ALSO fires
-  // submit), and a button-click heuristic — each doing its own redundant
-  // stagePendingSave + existing-credential round trip. This collapses
-  // overlapping calls for the same password field into one; a genuinely later,
-  // separate submission (after the first finishes) is unaffected.
   const captureInFlight = new WeakSet()
 
   async function captureAndPrompt(formFields) {
@@ -528,20 +368,12 @@
     try {
       const u = username ? username.value : ''
       const p = password ? password.value : ''
-      if (!p) return  // no password, nothing to save
+      if (!p) return
       const extras = collectExtraFields(password)
       const loginType = classifyLoginType(username)
 
-      // Own id per capture (generated here, not round-tripped from background)
-      // so two submissions in the same tab within the TTL window stage as two
-      // independent records instead of the second overwriting the first.
       const pendingId = 'ps_' + Date.now() + '_' + Math.random().toString(36).slice(2)
 
-      // Stage a copy in background.js BEFORE the async existing-credential lookup
-      // below. A real submit can navigate away — or tear down this whole content
-      // script — before that lookup's promise resolves, silently losing the save
-      // prompt. The staged copy survives navigation; checkPendingSave() picks it
-      // up on whatever page loads next, if this document doesn't get the chance.
       try {
         chrome.runtime.sendMessage({ action: 'stagePendingSave', id: pendingId, domain: currentDomain, username: u, password: p, extraFields: extras, loginType })
       } catch (e) {}
@@ -552,47 +384,16 @@
     }
   }
 
-  // Checked once per page load. If the previous page's submit got cut off by
-  // navigation before it could show its own save prompt — including a redirect
-  // to a different hostname, which is common for login flows (SSO, login.x.com
-  // -> x.com/dashboard) — this is where that prompt actually appears, under the
-  // domain the credential was originally typed on.
   async function checkPendingSave() {
     let pending
     try {
       pending = await chrome.runtime.sendMessage({ action: 'takePendingSave' })
     } catch (e) { return }
     if (!pending || !pending.found) return
-    // A pending save being recovered here means a login/SSO/MFA flow is still
-    // actively in progress in this tab (a real submission happened recently
-    // enough that its record hasn't expired) — that counts as the person
-    // being present, even though nothing on this exact page was clicked yet.
     pingActivity()
     await maybePromptSave(pending.domain, pending.username, pending.password, pending.extraFields, pending.id, pending.loginType)
   }
 
-  // formFields is captured once, per form, in this closure — every listener
-  // here reads it directly instead of a shared mutable variable, so wiring a
-  // second form later can't repoint what this form's listeners act on.
-  //
-  // Returns a teardown function that removes every listener this attached,
-  // including the document-level click listener — which otherwise lives for
-  // the lifetime of the page even after the form itself is long gone from the
-  // DOM (an SPA that mounts/unmounts a login form repeatedly would otherwise
-  // accumulate one such listener, and its retained closure, per mount).
-  // A password field with no wrapping <form> (a custom login widget built out
-  // of plain divs) has no natural boundary to scope a "nearby button" heuristic
-  // to — falling back to "every button on the page belongs to this field" meant
-  // that a page with two SEPARATE formless widgets would fire BOTH widgets'
-  // capture on a click anywhere, since each one's listener treated the whole
-  // document as its own. This walks up from the password field looking for the
-  // smallest ancestor that already contains a button-like control, and uses
-  // that as the pseudo-form boundary instead — the two widgets' own containers
-  // are typically disjoint, so a click inside one no longer falsely belongs to
-  // the other. Capped depth so a field with no reasonable container (badly
-  // flattened markup) doesn't walk all the way up to <body> and lose the
-  // scoping benefit entirely; that rare case still falls back to page-wide,
-  // matching the old behavior, rather than refusing to work at all.
   function findFormlessContainer(field) {
     let el = field.parentElement
     let depth = 0
@@ -612,20 +413,15 @@
     const submitHandler = function () { captureAndPrompt(formFields) }
     if (form) form.addEventListener('submit', submitHandler, true)
 
-    // also capture Enter in password field and clicks on likely submit buttons
     const keydownHandler = function (e) {
       if (e.key === 'Enter') setTimeout(() => captureAndPrompt(formFields), 0)
     }
     password.addEventListener('keydown', keydownHandler)
 
-    // button clicks near the form (submit buttons that are not type=submit in a form)
     const clickHandler = function (e) {
       const t = e.target
       if (!t) return
       const isBtn = (t.tagName === 'BUTTON') || (t.tagName === 'INPUT' && (t.type === 'submit' || t.type === 'button'))
-      // Scoped to the real <form>, or the nearest formless container found
-      // above — only falling all the way back to page-wide when neither
-      // exists, instead of doing that for every formless widget by default.
       const belongsToThisForm = container ? container.contains(t) : true
       if (isBtn && belongsToThisForm && password.value) {
         setTimeout(() => captureAndPrompt(formFields), 50)
@@ -640,9 +436,6 @@
     }
   }
 
-  // Fields already wired get their listeners attached exactly once, even though
-  // init() itself may run again later (see the MutationObserver below) when a
-  // form is injected into the page after the initial scan.
   const wiredPasswordFields = new WeakSet()
 
   function wireLoginForm(fields) {
@@ -654,20 +447,15 @@
     username.setAttribute('autocomplete', 'off')
     password.setAttribute('autocomplete', 'off')
 
-    const usernameFocusHandler = (e) => { showDropdown(username, fields); e.stopImmediatePropagation() }
-    const passwordFocusHandler = (e) => { showDropdown(password, fields); e.stopImmediatePropagation() }
-    username.addEventListener('focus', usernameFocusHandler, true)
-    password.addEventListener('focus', passwordFocusHandler, true)
+    loginFieldsByEl.set(username, fields)
+    loginFieldsByEl.set(password, fields)
+    attachVaultTag(username, 'login')
+    attachVaultTag(password, 'login')
     const teardownSubmitCapture = wireSubmitCapture(fields)
 
-    // Recorded (not just fire-and-forget listeners) so cleanupDetachedState()
-    // can find and tear this down once the form is removed from the DOM —
-    // see that function for why this matters.
     wiredForms.push({
       fields,
       cleanup: function () {
-        username.removeEventListener('focus', usernameFocusHandler, true)
-        password.removeEventListener('focus', passwordFocusHandler, true)
         teardownSubmitCapture()
         trackedFields.delete(username)
         trackedFields.delete(password)
@@ -675,9 +463,6 @@
     })
   }
 
-  // Wires every not-yet-wired login form currently on the page. Recurses so a
-  // page with multiple login forms present at once (or gaining a second one
-  // later) gets all of them, not just the first.
   function init() {
     const fields = detectLoginForm(wiredPasswordFields)
     if (!fields) return
@@ -685,24 +470,6 @@
     init()
   }
 
-  // Registered once (not per-form) — reads dropdownOwnerField, which tracks
-  // whichever field the currently-open dropdown belongs to, rather than a
-  // single shared "the" username field.
-  document.addEventListener('click', (e) => {
-    if (!dropdown) return
-    if (!dropdown.host.contains(e.target) && e.target !== dropdownOwnerField) {
-      hideDropdown()
-    }
-  })
-
-  // Fields that arrive after the initial scan (SPA navigations, a modal injected
-  // on click, content loaded behind an XHR) never went through detection at all
-  // before this — both init() (login forms) and scanAndPopulatePersonalInfoFields()
-  // (name/email/phone/address fields) only ran once, at load. Re-scanning on every
-  // DOM mutation is wasteful, so this only acts when a plausible new <input> shows
-  // up. scanAndPopulatePersonalInfoFields()/attachVaultTag() are idempotent (they
-  // skip fields already tagged/filled), so re-running them on every such mutation
-  // is safe, just a little redundant.
   let rescanScheduled = false
   function scheduleRescan() {
     if (rescanScheduled) return
@@ -711,20 +478,10 @@
       rescanScheduled = false
       cleanupDetachedState()
       init()
-      scanAndPopulatePersonalInfoFields()
+      scanPersonalInfoFields()
     }, 250)
   }
 
-  // A form (or a personal-info field) removed from the DOM — an SPA navigating
-  // away from a login step, a modal closing, a wizard moving on — otherwise
-  // left every listener wireLoginForm()/attachVaultTag() attached still alive
-  // indefinitely: the document-level submit-capture click listener per wired
-  // form, and the window scroll/resize listeners keeping each floating vault
-  // tag positioned, none of which ever got torn down on their own. On a
-  // long-lived SPA page that mounts/unmounts forms repeatedly this accumulates
-  // without bound. Cheap to run (small arrays, one isConnected check each), so
-  // it rides along on the same debounce as the rescan above rather than
-  // needing its own scheduling.
   function cleanupDetachedState() {
     for (let i = wiredForms.length - 1; i >= 0; i--) {
       const entry = wiredForms[i]
@@ -745,19 +502,8 @@
     }
   }
 
-  // Attributes a framework commonly fills in AFTER the bare <input> is first
-  // inserted (React/Vue hydration, a multi-step form library assigning name/id
-  // once a step becomes active, etc). Without watching these, a field that
-  // looked unclassifiable at insertion time — no name, no id, nothing — stays
-  // unclassified forever, even though matchSignupFieldType()/detectLoginForm()
-  // would happily recognize it once the attribute lands. 'type' is included so
-  // a field that's turned into a password field after insertion (some frameworks
-  // build the field generically, then set type='password' for a password step)
-  // is picked up by detectLoginForm() too, not just the personal-info scan.
   const WATCHED_DYNAMIC_ATTRS = ['name', 'id', 'autocomplete', 'aria-label', 'placeholder', 'type']
 
-  // textarea/select included alongside input now that personal-info discovery
-  // covers them too (see scanAndPopulatePersonalInfoFields).
   const DISCOVERABLE_FIELDS_SELECTOR = 'input, textarea, select'
 
   const formObserver = new MutationObserver((mutations) => {
@@ -772,9 +518,6 @@
         if (node.matches && node.matches(DISCOVERABLE_FIELDS_SELECTOR)) { scheduleRescan(); return }
         if (node.querySelector && node.querySelector(DISCOVERABLE_FIELDS_SELECTOR)) { scheduleRescan(); return }
       }
-      // Removed nodes matter too now — that's what lets cleanupDetachedState()
-      // above actually run promptly instead of only whenever something else
-      // happens to add a new input later.
       for (const node of mutation.removedNodes) {
         if (node.nodeType !== 1) continue
         if (node.matches && node.matches(DISCOVERABLE_FIELDS_SELECTOR)) { scheduleRescan(); return }
@@ -789,13 +532,6 @@
     attributeFilter: WATCHED_DYNAMIC_ATTRS
   })
 
-  // Same-document SPA navigations (pushState/replaceState, or back/forward via
-  // popstate) never reload this content script, so checkPendingSave() would
-  // otherwise only ever run once, at the very first load. history is the same
-  // underlying object the page's own scripts see (isolated worlds still share
-  // window/DOM), so wrapping it here also catches the page's own router calls.
-  // Debounced together with a rescan, since a router may fire several history
-  // calls back-to-back for one logical navigation.
   let routeChangeScheduled = false
   function scheduleRouteChange() {
     if (routeChangeScheduled) return
@@ -803,7 +539,7 @@
     setTimeout(() => {
       routeChangeScheduled = false
       init()
-      scanAndPopulatePersonalInfoFields()
+      scanPersonalInfoFields()
       checkPendingSave()
     }, 250)
   }
@@ -835,15 +571,6 @@
     'address.country': ['input[name="country"]', 'input[id="country"]', 'input[autocomplete="country-name"]', 'input[placeholder*="Country" i]']
   }
 
-  // Fallback for fields the exact selectors above miss — id="firstName-field",
-  // name="first_name_input", aria-label="First name", etc. Each keyword is
-  // matched as a whole word/phrase against a normalized signal string (never a
-  // raw substring), so "state" doesn't match inside "statement" and "address"
-  // doesn't match inside "email address" ahead of the email check.
-  // Multi-word phrases and unambiguous compound/abbreviated forms — safe to
-  // match against ANY signal, including free-text prose (labels, placeholders,
-  // aria-labels), since they're specific enough that incidental collisions are
-  // very unlikely.
   const SIGNUP_FIELD_KEYWORDS = {
     firstName: ['first name', 'given name', 'firstname', 'fname'],
     lastName: ['last name', 'family name', 'surname', 'lastname', 'lname'],
@@ -853,13 +580,6 @@
     'address.zip': ['zip code', 'postal code', 'postcode']
   }
 
-  // Bare, generic single words — "state", "city", "country", "street", "zip",
-  // "town". These are common enough in ordinary prose ("please state your
-  // reason", "which city do you support?") that trusting them against free-text
-  // label/placeholder/aria-label content risks real false positives. Only
-  // matched against structured, developer-authored identifiers (name/id/
-  // autocomplete), where a bare "state" or "city" is far more likely to
-  // actually mean what it says.
   const SIGNUP_FIELD_KEYWORDS_STRUCTURED_ONLY = {
     'address.street': ['street'],
     'address.city': ['city', 'town'],
@@ -868,15 +588,10 @@
     'address.country': ['country']
   }
 
-  // Whole-word/phrase containment: pads both sides with spaces so a match can
-  // only land on a real word boundary, not a substring buried inside a longer
-  // word (e.g. "state" must not match "statement").
   function normalizedIncludesPhrase(normalized, phrase) {
     return (' ' + normalized + ' ').indexOf(' ' + phrase + ' ') !== -1
   }
 
-  // Structured, developer-authored identifiers — trustworthy enough for even
-  // generic single-word keywords.
   function fieldStructuredSignalStrings(el) {
     const out = []
     if (el.name) out.push(el.name)
@@ -886,7 +601,6 @@
     return out
   }
 
-  // Free-text, human-facing strings — safe only for specific multi-word phrases.
   function fieldFreeTextSignalStrings(el) {
     const out = []
     const ariaLabel = el.getAttribute('aria-label')
@@ -920,28 +634,18 @@
     return null
   }
 
-  const filledSignupFields = new WeakSet()
+
+  const NON_TEXT_INPUT_TYPES = new Set(['checkbox', 'radio', 'submit', 'button', 'reset', 'hidden', 'file', 'image', 'range', 'color'])
 
   function matchSignupFieldType(el) {
-    // The login form's own username/password fields are owned by the login-detection
-    // path (detectLoginForm/isTrackedField), never the signup/personal-info one — a
-    // field otherwise matching e.g. the email pattern shouldn't also grow a "fill
-    // from profile" tag while it's actively serving as the login username.
     if (isTrackedField(el)) return null
+    if (el.tagName === 'INPUT' && NON_TEXT_INPUT_TYPES.has((el.type || '').toLowerCase())) return null
     for (const fieldType in SIGNUP_FIELD_MAP) {
       if (fieldMatchesSelectors(el, SIGNUP_FIELD_MAP[fieldType])) return fieldType
     }
     return matchSignupFieldTypeByKeywords(el)
   }
 
-  // Fingerprint/WebAuthn cannot be triggered from here: the credential is bound to
-  // the extension's own origin (chrome-extension://...), and a content script runs
-  // in the page's origin (e.g. tubitv.com) — a fingerprint attempt made from an
-  // arbitrary website would always fail against the wrong origin. Password auth has
-  // no such restriction, but still can't run its crypto here: a content script's
-  // storage is scoped to the page's own origin, not the extension's, so the actual
-  // unwrap runs in background.js, which has the correct access to the real vault.
-  // This function only collects the password and hands it off.
   async function unlockInline() {
     const pw = window.prompt('Vault is locked. Enter your password to unlock:')
     if (!pw) return false
@@ -950,89 +654,78 @@
     return !!(result && result.success)
   }
 
-  async function fillPersonalInfoField(el, fieldType) {
-    const response = await chrome.runtime.sendMessage({ action: 'getPersonalInfoField', fieldType })
-    if (response && response.success && response.value) {
-      el.setAttribute('autocomplete', 'off')
-      // A <select> (state/country dropdowns are the common case) only counts
-      // as filled if one of its actual options matched — see setSelectValue.
-      const filled = el.tagName === 'SELECT' ? setSelectValue(el, response.value) : (setNativeValue(el, response.value), true)
-      if (!filled) return false
-      el.dispatchEvent(new Event('input', { bubbles: true }))
-      el.dispatchEvent(new Event('change', { bubbles: true }))
-      filledSignupFields.add(el)
-      return true
-    }
-    return false
-  }
-
-  // Only used from a deliberate click (the tag, the email picker), never from the
-  // passive page-load scan — an unlock prompt should never appear unprompted just
-  // because a site happened to load with a matching field.
-  async function fillPersonalInfoFieldWithUnlock(el, fieldType) {
-    const response = await chrome.runtime.sendMessage({ action: 'getPersonalInfoField', fieldType })
-    if (response && response.success && response.value) {
-      el.setAttribute('autocomplete', 'off')
-      const filled = el.tagName === 'SELECT' ? setSelectValue(el, response.value) : (setNativeValue(el, response.value), true)
-      if (filled) {
-        el.dispatchEvent(new Event('input', { bubbles: true }))
-        el.dispatchEvent(new Event('change', { bubbles: true }))
-        filledSignupFields.add(el)
-        return true
-      }
-      return false
-    }
-    if (response && response.locked) {
-      const unlocked = await unlockInline()
-      if (unlocked) return fillPersonalInfoField(el, fieldType)
-    }
-    return false
+  function fillFieldValue(el, value) {
+    pingActivity()
+    el.setAttribute('autocomplete', 'off')
+    const filled = el.tagName === 'SELECT' ? setSelectValue(el, value) : (setNativeValue(el, value), true)
+    if (!filled) return false
+    el.dispatchEvent(new Event('input', { bubbles: true }))
+    el.dispatchEvent(new Event('change', { bubbles: true }))
+    return true
   }
 
   function createVaultTag() {
     const tag = document.createElement('div')
     tag.textContent = 'V'
-    tag.style.fontWeight = '800'
     tag.title = 'Fill with Valid Vault'
-    tag.style.cssText = `
-      position: absolute;
-      z-index: 2147483646;
-      width: 22px;
-      height: 22px;
-      border-radius: 50%;
-      background: #00d4aa;
-      color: #05140a;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 12px;
-      line-height: 1;
-      cursor: pointer;
-      user-select: none;
-      box-shadow: 0 1px 4px rgba(0,0,0,0.4);
-      border: 1px solid #00b294;
-    `
+    tag.style.cssText = [
+      'position:absolute',
+      'z-index:2147483646',
+      'width:22px',
+      'height:22px',
+      'border-radius:50%',
+      'background:#33ff66',
+      'color:#05140a',
+      'display:flex',
+      'align-items:center',
+      'justify-content:center',
+      'font:800 12px/1 -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif',
+      'cursor:pointer',
+      'user-select:none',
+      'box-shadow:0 0 0 2px #05140a,0 1px 6px rgba(0,0,0,0.5)',
+      'opacity:1',
+      'visibility:visible',
+      'pointer-events:auto'
+    ].map((rule) => rule + ' !important').join(';')
     document.body.appendChild(tag)
     return tag
   }
 
   function positionVaultTag(tag, el) {
     const rect = el.getBoundingClientRect()
+    const hidden = el.offsetParent === null || rect.width === 0 || rect.height === 0
+    tag.style.setProperty('display', hidden ? 'none' : 'flex', 'important')
+    if (hidden) return
     const size = 22
     const top = rect.top + window.scrollY + (rect.height - size) / 2
-    const left = rect.right + window.scrollX - size - 6
-    tag.style.top = top + 'px'
-    tag.style.left = left + 'px'
+    let left = rect.right + window.scrollX - size - 6
+    const probeY = rect.top + rect.height / 2
+    for (let i = 0; i < 4; i++) {
+      const x0 = left - window.scrollX
+      if (x0 < rect.left) break
+      let blocker = null
+      for (const probeX of [x0 + 1, x0 + size / 2, x0 + size - 1]) {
+        const hit = document.elementsFromPoint(probeX, probeY).filter((n) => n !== tag && !tag.contains(n))[0]
+        if (hit && hit !== el && !hit.contains(el)) { blocker = hit; break }
+      }
+      if (!blocker) break
+      left = Math.min(left - size - 8, blocker.getBoundingClientRect().left + window.scrollX - size - 4)
+    }
+    tag.style.setProperty('top', top + 'px', 'important')
+    tag.style.setProperty('left', left + 'px', 'important')
+  }
+
+  document.addEventListener('input', (e) => {
+    const t = e.target
+    if (t && fieldTags.has(t)) positionVaultTag(fieldTags.get(t), t)
+  }, true)
+
+  function repositionAllTags() {
+    for (const rec of taggedFieldRecords) positionVaultTag(rec.tag, rec.el)
   }
 
   const fieldTags = new WeakMap()
-  // Parallel array (not just the WeakMap above) so cleanupDetachedState() can
-  // actually enumerate tagged fields — a WeakMap can't be iterated. Without
-  // this, a personal-info field removed from the DOM (an SPA step navigated
-  // away from) leaves its floating "V" tag icon on screen forever, along with
-  // the window scroll/resize listeners keeping it positioned — both outlive
-  // the field indefinitely since nothing ever calls removeEventListener or
-  // removes the tag element.
+  const loginFieldsByEl = new WeakMap()
   const taggedFieldRecords = []
 
   function attachVaultTag(el, fieldType) {
@@ -1044,11 +737,8 @@
       e.preventDefault()
       e.stopPropagation()
       pingActivity()
-      if (fieldType === 'email') {
-        showEmailPicker(el)
-      } else {
-        fillPersonalInfoFieldWithUnlock(el, fieldType)
-      }
+      if (fieldType === 'login') showLoginPicker(el, loginFieldsByEl.get(el))
+      else showFieldPicker(el, fieldType)
     }
     const scrollHandler = () => positionVaultTag(tag, el)
     const resizeHandler = () => positionVaultTag(tag, el)
@@ -1058,9 +748,21 @@
     taggedFieldRecords.push({ el, tag, scrollHandler, resizeHandler })
   }
 
-  let emailPicker = null
+  let fieldPicker = null
 
-  function createEmailPicker() {
+  const FIELD_PICKER_TITLES = {
+    email: 'Choose an email',
+    firstName: 'First name',
+    lastName: 'Last name',
+    phone: 'Phone',
+    'address.street': 'Street address',
+    'address.city': 'City',
+    'address.state': 'State',
+    'address.zip': 'ZIP',
+    'address.country': 'Country'
+  }
+
+  function createFieldPicker() {
     const host = document.createElement('div')
     host.style.cssText = 'position:absolute;z-index:2147483647;display:none;'
     document.body.appendChild(host)
@@ -1070,87 +772,146 @@
         .dropdown { position:absolute; background:#1a1a1a; border:1px solid #333; border-radius:8px;
           box-shadow:0 4px 12px rgba(0,0,0,0.5); min-width:220px; max-width:340px; overflow:hidden;
           font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; }
-        .header { padding:10px 14px; background:#0a0a0a; color:#00d4aa; font-size:12px; font-weight:500; border-bottom:1px solid #333; }
+        .header { padding:10px 14px; background:#0a0a0a; color:#33ff66; font-size:12px; font-weight:500; border-bottom:1px solid #333; }
         .item { padding:10px 14px; cursor:pointer; border-bottom:1px solid #2a2a2a; color:#e0e0e0; font-size:13px; word-break:break-all; }
         .item:hover { background:#2a2a2a; }
         .item:last-child { border-bottom:none; }
+        .empty { padding:10px 14px; color:#888; font-size:12px; }
+        .section { padding:6px 14px; background:#111; color:#6fae7f; font-size:11px; text-transform:uppercase; letter-spacing:0.5px; border-bottom:1px solid #2a2a2a; }
       </style>
       <div class="dropdown">
-        <div class="header">Choose an email</div>
+        <div class="header" id="header"></div>
         <div id="items"></div>
       </div>
     `
     return { host, shadow }
   }
 
-  async function showEmailPicker(field) {
-    if (!emailPicker) emailPicker = createEmailPicker()
-    const rect = field.getBoundingClientRect()
-    emailPicker.host.style.left = rect.left + window.scrollX + 'px'
-    emailPicker.host.style.top = rect.bottom + window.scrollY + 2 + 'px'
-    emailPicker.host.style.display = 'block'
-
-    let response = await chrome.runtime.sendMessage({ action: 'getPersonalInfoAllEmails' })
-    if (response && response.locked) {
-      const unlocked = await unlockInline()
-      if (unlocked) response = await chrome.runtime.sendMessage({ action: 'getPersonalInfoAllEmails' })
+  async function fetchPickerValues(fieldType) {
+    if (fieldType === 'email') {
+      const r = await chrome.runtime.sendMessage({ action: 'getPersonalInfoAllEmails' })
+      return { locked: !!(r && r.locked), values: (r && r.emails) || [] }
     }
-    const itemsContainer = emailPicker.shadow.getElementById('items')
-    itemsContainer.innerHTML = ''
+    const r = await chrome.runtime.sendMessage({ action: 'getPersonalInfoField', fieldType })
+    return { locked: !!(r && r.locked), values: r && r.value ? [r.value] : [] }
+  }
 
-    if (response && response.success && response.emails.length > 0) {
-      response.emails.forEach((email) => {
-        const item = document.createElement('div')
-        item.className = 'item'
-        item.textContent = email
-        item.onclick = () => {
-          pingActivity()
-          field.setAttribute('autocomplete', 'off')
-          setNativeValue(field, email)
-          field.dispatchEvent(new Event('input', { bubbles: true }))
-          field.dispatchEvent(new Event('change', { bubbles: true }))
-          filledSignupFields.add(field)
-          emailPicker.host.style.display = 'none'
-        }
-        itemsContainer.appendChild(item)
-      })
+  function hideFieldPicker() {
+    if (fieldPicker) fieldPicker.host.style.display = 'none'
+  }
+
+  function openPicker(field, title) {
+    if (!fieldPicker) fieldPicker = createFieldPicker()
+    const rect = field.getBoundingClientRect()
+    fieldPicker.host.style.left = rect.left + window.scrollX + 'px'
+    fieldPicker.host.style.top = rect.bottom + window.scrollY + 2 + 'px'
+    fieldPicker.shadow.getElementById('header').textContent = title
+    const itemsContainer = fieldPicker.shadow.getElementById('items')
+    itemsContainer.innerHTML = ''
+    fieldPicker.host.style.display = 'block'
+    return itemsContainer
+  }
+
+  function addPickerSection(container, title) {
+    const section = document.createElement('div')
+    section.className = 'section'
+    section.textContent = title
+    container.appendChild(section)
+  }
+
+  function addPickerItem(container, text, onPick) {
+    const item = document.createElement('div')
+    item.className = 'item'
+    item.textContent = text
+    item.onclick = () => { onPick(); hideFieldPicker() }
+    container.appendChild(item)
+  }
+
+  function addPickerEmpty(container, text) {
+    const empty = document.createElement('div')
+    empty.className = 'empty'
+    empty.textContent = text
+    container.appendChild(empty)
+  }
+
+  async function showFieldPicker(field, fieldType) {
+    const itemsContainer = openPicker(field, 'Valid Vault: ' + (FIELD_PICKER_TITLES[fieldType] || 'Fill'))
+    let result = await fetchPickerValues(fieldType)
+    if (result.locked) {
+      const unlocked = await unlockInline()
+      if (unlocked) result = await fetchPickerValues(fieldType)
+    }
+    itemsContainer.innerHTML = ''
+    if (result.values.length > 0) {
+      result.values.forEach((value) => addPickerItem(itemsContainer, value, () => fillFieldValue(field, value)))
     } else {
-      itemsContainer.innerHTML = '<div class="item">No saved emails</div>'
+      addPickerEmpty(itemsContainer, result.locked ? 'Vault is locked' : 'Nothing saved for this field. Add it in Personal Info.')
+    }
+  }
+
+  async function fetchLoginPickerData(field) {
+    const creds = await chrome.runtime.sendMessage({ action: 'getCredentialsForDomain', domain: currentDomain })
+    let emails = { success: true, emails: [] }
+    if (classifyLoginType(field) === 'email') emails = await chrome.runtime.sendMessage({ action: 'getPersonalInfoAllEmails' })
+    return {
+      locked: !!((creds && creds.locked) || (emails && emails.locked)),
+      credentials: (creds && creds.success && creds.credentials) || [],
+      emails: (emails && emails.emails) || []
+    }
+  }
+
+  async function showLoginPicker(field, formFields) {
+    const itemsContainer = openPicker(field, 'Valid Vault')
+    let data = await fetchLoginPickerData(field)
+    if (data.locked) {
+      const unlocked = await unlockInline()
+      if (unlocked) data = await fetchLoginPickerData(field)
+    }
+    itemsContainer.innerHTML = ''
+    const targetType = classifyLoginType(field)
+    const ranked = data.credentials
+      .map((cred, i) => ({ cred, i }))
+      .sort((a, b) => {
+        const aMatch = (a.cred.loginType || 'username') === targetType ? 0 : 1
+        const bMatch = (b.cred.loginType || 'username') === targetType ? 0 : 1
+        return aMatch - bMatch || a.i - b.i
+      })
+      .map((x) => x.cred)
+    if (ranked.length > 0) {
+      addPickerSection(itemsContainer, 'Saved logins for this site')
+      for (const cred of ranked) {
+        const icon = LOGIN_TYPE_ICON[cred.loginType || 'username'] || LOGIN_TYPE_ICON.username
+        addPickerItem(itemsContainer, icon + ' ' + cred.username, () => fillCredentials(cred, formFields))
+      }
+    }
+    if (data.emails.length > 0) {
+      addPickerSection(itemsContainer, 'Your emails')
+      for (const email of data.emails) addPickerItem(itemsContainer, email, () => fillFieldValue(field, email))
+    }
+    if (ranked.length === 0 && data.emails.length === 0) {
+      addPickerEmpty(itemsContainer, data.locked ? 'Vault is locked' : 'No saved logins for this site yet. Log in or sign up and Valid Vault will offer to save it.')
     }
   }
 
   document.addEventListener('click', (e) => {
-    if (emailPicker && emailPicker.host.style.display !== 'none') {
-      if (!emailPicker.host.contains(e.target)) emailPicker.host.style.display = 'none'
+    if (fieldPicker && fieldPicker.host.style.display !== 'none') {
+      if (!fieldPicker.host.contains(e.target)) fieldPicker.host.style.display = 'none'
     }
   })
 
-  async function trySignupAutofill(el) {
+  function trySignupTag(el) {
     if (el.type === 'password') return
-    if (filledSignupFields.has(el)) return
     const fieldType = matchSignupFieldType(el)
     if (!fieldType) return
     attachVaultTag(el, fieldType)
-    if (el.value) return
-    // Email can have multiple saved addresses — leave it to the tag/picker so the
-    // user chooses, rather than silently filling in whichever is ranked first.
-    if (fieldType === 'email') return
-    await fillPersonalInfoField(el, fieldType)
   }
 
-  // Personal-info fields aren't always plain <input>s — a state/country picker
-  // is very often a <select>, and a "notes"/address-line-2 style field is
-  // sometimes a <textarea>. Both expose the same name/id/autocomplete/label
-  // signals matchSignupFieldType() already reads, so no separate classifier
-  // is needed — only the discovery selectors below needed widening. Custom
-  // comboboxes (a div-based dropdown) and contenteditable fields have no such
-  // standard signal to key off of and are deliberately still out of scope.
   document.addEventListener('focus', (e) => {
     const t = e.target
-    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT')) trySignupAutofill(t)
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT')) trySignupTag(t)
   }, true)
 
-  async function scanAndPopulatePersonalInfoFields() {
+  function scanPersonalInfoFields() {
     const fields = document.querySelectorAll('input, textarea, select')
     for (let i = 0; i < fields.length; i++) {
       const el = fields[i]
@@ -1159,16 +920,13 @@
       const fieldType = matchSignupFieldType(el)
       if (!fieldType) continue
       attachVaultTag(el, fieldType)
-      if (!el.value && fieldType !== 'email') await fillPersonalInfoField(el, fieldType)
     }
+    repositionAllTags()
   }
 
-  // init() must run first: it populates trackedFields, which matchSignupFieldType
-  // (via isTrackedField) relies on to keep every wired login form's own fields
-  // out of the signup/personal-info scan below.
   function bootstrap() {
     init()
-    scanAndPopulatePersonalInfoFields()
+    scanPersonalInfoFields()
     checkPendingSave()
   }
 

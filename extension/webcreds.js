@@ -244,6 +244,10 @@ async function mergeWebCredsVaults(localVault, incomingVault, masterKey) {
       if (tomb && tomb.updatedAt > cred.updatedAt) continue
       result.push(cred)
     }
+    const liveIds = new Set(result.map((cred) => cred.id))
+    for (const tomb of tombstones.values()) {
+      if (!liveIds.has(tomb.id)) result.push(tomb)
+    }
 
     if (result.length > 0) merged.credentials[category] = result
   }

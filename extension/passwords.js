@@ -115,8 +115,19 @@ async function encryptTree(tree, masterKey) {
   return encrypt(JSON.stringify(tree), masterKey)
 }
 
-function vaultFingerprint(tree) {
-  return JSON.stringify(tree)
+const FINGERPRINT_HEX_LENGTH = 64
+
+async function vaultFingerprint(tree) {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(tree)))
+  return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, '0')).join('')
+}
+
+async function matchesJournalFingerprint(tree, expected) {
+  if (typeof expected !== 'string') return true
+  if (expected.length === FINGERPRINT_HEX_LENGTH && /^[0-9a-f]+$/.test(expected)) {
+    return (await vaultFingerprint(tree)) === expected
+  }
+  return JSON.stringify(tree) === expected
 }
 
 async function decryptTree(blob, masterKey) {
@@ -157,7 +168,7 @@ async function finalizeMigration(masterKey) {
     return { migrated: false, status: 'rolled-back' }
   }
 
-  if (journal && journal.expected && vaultFingerprint(writtenTree) !== journal.expected) {
+  if (journal && journal.expected && !(await matchesJournalFingerprint(writtenTree, journal.expected))) {
     await rollbackMigration(masterKey, 'Vault migration verification failed and was reverted')
     return { migrated: false, status: 'rolled-back' }
   }
@@ -205,7 +216,7 @@ async function migrateLegacyVault(masterKey) {
   const legacyTree = { meta: current.meta || {}, credentials: current.credentials || {} }
   const plainTree = await decryptLegacyTree(legacyTree, masterKey)
   const encryptedBackup = await encrypt(JSON.stringify(current), masterKey)
-  const expected = vaultFingerprint(plainTree)
+  const expected = await vaultFingerprint(plainTree)
 
   await setVaultMigrationJournal({ status: 'prepared', backup: encryptedBackup, expected, createdAt: Date.now() })
 
@@ -460,6 +471,10 @@ function mergeVaults(localTree, incomingTree) {
       const tomb = tombstones.get(cred.id)
       if (tomb && tomb.updatedAt > cred.updatedAt) continue
       result.push(cred)
+    }
+    const liveIds = new Set(result.map((cred) => cred.id))
+    for (const tomb of tombstones.values()) {
+      if (!liveIds.has(tomb.id)) result.push(tomb)
     }
 
     if (result.length > 0) merged.credentials[domain] = result
