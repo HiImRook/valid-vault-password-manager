@@ -221,13 +221,6 @@
         .sub { color:#6fae7f; font-size:12px; margin-bottom:4px; word-break:break-all; }
         .user { color:#b8f0c4; font-size:13px; margin:4px 0 8px; word-break:break-all; }
         .extra-note { color:#6fae7f; font-size:11px; margin-bottom:12px; }
-        .pw-wrap { display:none; position:relative; align-items:center; margin:0 0 10px; }
-        .pw { width:100%; box-sizing:border-box; padding:10px 40px 10px 10px; border-radius:6px; border:1px solid #1f9e40;
-          background:#0a0e0a; color:#b8f0c4; font-size:13px; }
-        .pw-eye { position:absolute; right:8px; background:none; border:none; color:#6fae7f; cursor:pointer; padding:4px; margin:0;
-          display:flex; align-items:center; flex:none; }
-        .pw-eye:hover { color:#33ff66; }
-        .pw-eye svg { width:20px; height:20px; fill:currentColor; }
         .row { display:flex; gap:10px; }
         button { flex:1; padding:11px; border-radius:6px; border:none; font-size:13px; font-weight:700; cursor:pointer; }
         .save { background:#33ff66; color:#05140a; }
@@ -239,10 +232,6 @@
           <div class="sub" id="sp-domain"></div>
           <div class="user" id="sp-user"></div>
           <div class="extra-note" id="sp-extra"></div>
-          <div class="pw-wrap" id="sp-pw-wrap">
-            <input class="pw" id="sp-pw" type="password" placeholder="Master password" autocomplete="new-password" spellcheck="false">
-            <button type="button" class="pw-eye" id="sp-eye" aria-label="Show/hide"><svg viewBox="0 0 24 24"><path d="M12 4.5C7 4.5 2.7 7.6 1 12c1.7 4.4 6 7.5 11 7.5s9.3-3.1 11-7.5c-1.7-4.4-6-7.5-11-7.5zm0 12.5a5 5 0 110-10 5 5 0 010 10zm0-8a3 3 0 100 6 3 3 0 000-6z"/></svg></button>
-          </div>
           <div class="sub" id="sp-msg" style="color:#ff8866;min-height:14px;"></div>
           <div class="row">
             <button class="save" id="sp-save">Save</button>
@@ -258,14 +247,7 @@
     if (!savePrompt) savePrompt = createSavePrompt()
     const shadow = savePrompt.shadow
     const saveBtn = shadow.getElementById('sp-save')
-    const pwEl = shadow.getElementById('sp-pw')
-    const pwWrap = shadow.getElementById('sp-pw-wrap')
-    const eyeBtn = shadow.getElementById('sp-eye')
     const msgEl = shadow.getElementById('sp-msg')
-    function setPwVisible(visible) {
-      pwEl.type = visible ? 'text' : 'password'
-      eyeBtn.style.color = visible ? '#33ff66' : ''
-    }
     shadow.getElementById('sp-title').textContent = isUpdate ? 'Update saved password?' : 'Save to Valid Vault?'
     shadow.getElementById('sp-domain').textContent = domain
     shadow.getElementById('sp-user').textContent = username || '(no username)'
@@ -275,18 +257,14 @@
         ? '+ ' + extraFields.length + ' additional field' + (extraFields.length !== 1 ? 's' : '') + ' on this form will be saved too'
         : ''
     }
-    function showLocked() {
-      pwWrap.style.display = 'flex'
-      pwEl.value = ''
-      setPwVisible(false)
+    let lockedMode = false
+    function showLocked(text) {
+      lockedMode = true
       saveBtn.textContent = 'Unlock and Save'
-      msgEl.textContent = 'Vault is locked. Enter your master password to unlock and save.'
-      setTimeout(() => pwEl.focus(), 0)
+      msgEl.textContent = text || 'Vault is locked. Unlock in the Valid Vault window to save.'
     }
     function showUnlocked() {
-      pwWrap.style.display = 'none'
-      pwEl.value = ''
-      setPwVisible(false)
+      lockedMode = false
       saveBtn.textContent = 'Save'
       msgEl.textContent = ''
     }
@@ -304,18 +282,10 @@
       busy = true
       try {
         pingActivity()
-        if (pwWrap.style.display !== 'none') {
-          const pw = pwEl.value
-          if (!pw) { msgEl.textContent = 'Enter your master password.'; return }
-          let unlock = null
-          try { unlock = await chrome.runtime.sendMessage({ action: 'authenticateWithPassword', password: pw }) } catch (e) {}
-          if (!unlock) { msgEl.textContent = 'Could not reach Valid Vault. Refresh this page and try again.'; return }
-          if (!unlock.success) {
-            msgEl.textContent = unlock.error === 'Invalid password' ? 'Wrong password. Try again.' : unlock.error
-            pwEl.value = ''
-            pwEl.focus()
-            return
-          }
+        if (lockedMode) {
+          msgEl.textContent = 'Waiting for unlock in the Valid Vault window...'
+          const unlocked = await unlockInline()
+          if (!unlocked) { showLocked('Vault is still locked. Click Unlock and Save to try again.'); return }
           showUnlocked()
           const check = await chrome.runtime.sendMessage({ action: 'getCredentialsForDomain', domain })
           const existing = check && check.success ? check.credentials.find(c => c.username === username) : null
@@ -334,11 +304,6 @@
     }
     shadow.getElementById('sp-cancel').onclick = close
     saveBtn.onclick = doSave
-    pwEl.onkeydown = (e) => { e.stopPropagation(); if (e.key === 'Enter') { e.preventDefault(); doSave() } }
-    pwEl.onkeyup = (e) => e.stopPropagation()
-    pwEl.onkeypress = (e) => e.stopPropagation()
-    pwEl.oninput = (e) => e.stopPropagation()
-    eyeBtn.onclick = (e) => { e.preventDefault(); setPwVisible(pwEl.type === 'password'); pwEl.focus() }
     shadow.getElementById('backdrop').onclick = null
   }
 
@@ -649,9 +614,8 @@
   }
 
   async function unlockInline() {
-    const pw = window.prompt('Vault is locked. Enter your password to unlock:')
-    if (!pw) return false
-    const result = await chrome.runtime.sendMessage({ action: 'authenticateWithPassword', password: pw })
+    let result = null
+    try { result = await chrome.runtime.sendMessage({ action: 'requestUnlock' }) } catch (e) {}
     if (result && result.success) pingActivity()
     return !!(result && result.success)
   }

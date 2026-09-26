@@ -15,38 +15,6 @@ async function getAuthRecord() {
   })
 }
 
-async function authenticateWithPassword(password) {
-  const auth = await getAuthRecord()
-  if (!auth || !auth.passwordWrappedKey) return { success: false, error: 'No password set' }
-  try {
-    const salt = new Uint8Array(auth.passwordSalt)
-    const iterations = auth.passwordKdfIterations || 100000
-    const encoder = new TextEncoder()
-    const keyMaterial = await crypto.subtle.importKey('raw', encoder.encode(password), 'PBKDF2', false, ['deriveKey'])
-    const unwrappingKey = await crypto.subtle.deriveKey(
-      { name: 'PBKDF2', salt: salt, iterations: iterations, hash: 'SHA-256' },
-      keyMaterial,
-      { name: 'AES-GCM', length: 256 },
-      false,
-      ['unwrapKey']
-    )
-    const iv = new Uint8Array(auth.passwordWrappedKey.iv)
-    const wrapped = new Uint8Array(auth.passwordWrappedKey.wrapped)
-    const masterKey = await crypto.subtle.unwrapKey(
-      'raw', wrapped, unwrappingKey, { name: 'AES-GCM', iv: iv }, { name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']
-    )
-    const bytes = new Uint8Array(await crypto.subtle.exportKey('raw', masterKey))
-    try {
-      await chrome.storage.session.set({ masterKeyBytes: Array.from(bytes), lastActivity: Date.now() })
-    } catch (e) {
-      return { success: false, error: 'Password accepted, but the session could not be started. Unlock from the Valid Vault icon.' }
-    }
-    return { success: true }
-  } catch (e) {
-    return { success: false, error: 'Invalid password' }
-  }
-}
-
 async function getSessionKeyBytes() {
   try {
     const stored = await chrome.storage.session.get('masterKeyBytes')
@@ -156,8 +124,8 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
       .catch(function () { sendResponse({ success: false }) })
     return true
   }
-  if (request.action === 'authenticateWithPassword') {
-    authenticateWithPassword(request.password).then(sendResponse)
+  if (request.action === 'requestUnlock') {
+    requestUnlock(sender).then(sendResponse)
     return true
   }
   if (request.action === 'openManage') {
@@ -180,6 +148,72 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
     return true
   }
   return false
+})
+
+const UNLOCK_WINDOW_WIDTH = 380
+const UNLOCK_WINDOW_HEIGHT = 440
+const UNLOCK_TIMEOUT_MS = 180000
+const unlockWaiters = []
+let unlockWindowId = null
+
+function settleUnlockWaiters(success) {
+  while (unlockWaiters.length) {
+    const waiter = unlockWaiters.shift()
+    clearTimeout(waiter.timer)
+    waiter.resolve({ success })
+  }
+}
+
+async function openUnlockWindow(sender) {
+  if (unlockWindowId !== null) {
+    try {
+      await chrome.windows.update(unlockWindowId, { focused: true })
+      return
+    } catch (e) {
+      unlockWindowId = null
+    }
+  }
+  let site = ''
+  try { site = new URL(sender.url).hostname } catch (e) {}
+  const options = {
+    url: 'unlock.html?site=' + encodeURIComponent(site),
+    type: 'popup',
+    width: UNLOCK_WINDOW_WIDTH,
+    height: UNLOCK_WINDOW_HEIGHT,
+    focused: true
+  }
+  try {
+    const parent = await chrome.windows.get(sender.tab.windowId)
+    options.left = Math.max(0, Math.round(parent.left + (parent.width - UNLOCK_WINDOW_WIDTH) / 2))
+    options.top = Math.max(0, Math.round(parent.top + (parent.height - UNLOCK_WINDOW_HEIGHT) / 2))
+  } catch (e) {}
+  try {
+    const win = await chrome.windows.create(options)
+    unlockWindowId = win.id
+  } catch (e) {
+    settleUnlockWaiters(false)
+  }
+}
+
+async function requestUnlock(sender) {
+  if (await getSessionKeyBytes()) return { success: true }
+  const result = new Promise(function (resolve) {
+    const waiter = { resolve }
+    waiter.timer = setTimeout(function () {
+      const idx = unlockWaiters.indexOf(waiter)
+      if (idx !== -1) unlockWaiters.splice(idx, 1)
+      resolve({ success: false })
+    }, UNLOCK_TIMEOUT_MS)
+    unlockWaiters.push(waiter)
+  })
+  await openUnlockWindow(sender)
+  return result
+}
+
+chrome.windows.onRemoved.addListener(async function (windowId) {
+  if (windowId !== unlockWindowId) return
+  unlockWindowId = null
+  settleUnlockWaiters(!!(await getSessionKeyBytes()))
 })
 
 const PENDING_SAVE_TTL_MS = 45000
@@ -299,6 +333,7 @@ chrome.alarms.onAlarm.addListener(function (alarm) {
 
 chrome.storage.onChanged.addListener(function (changes, area) {
   if (area !== 'session' || !changes.masterKeyBytes || !changes.masterKeyBytes.newValue) return
+  settleUnlockWaiters(true)
   if (changes.lastActivity && changes.lastActivity.newValue) scheduleAutoLock()
   else markActivity()
 })
