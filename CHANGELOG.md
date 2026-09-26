@@ -5,6 +5,29 @@ All notable changes to Local Vault will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.4] - 2026-09-26
+ 
+Hotfix for v0.6.3, extension only. Fixes key import, sync, migration, and autofill problems found in real use after the single-blob release. The phone app receives the matching key and transport fixes in the next release.
+ 
+### Fixed
+- **Setting up a second browser could not receive a vault.** Every browser creates its own key at setup and writes an empty vault under it on first unlock. Importing the real master key afterwards left that vault unreadable, so every read failed and Import Vault or QR sync threw a raw `OperationError`. Importing a key now checks whether this browser's vault opens with it. If not, a warning explains that the current vault will become unusable and is how you prepare to receive the vault from another device; on confirmation the old vault data is cleared and the key is saved.
+- **Imported keys reverted on the next unlock.** QR key import only set the key for the current session. File and QR key import now both rewrap the key under the browser's password (confirmed by entering it) and relink or turn off fingerprint, so the key survives lock and unlock.
+- **Key file import always reported a wrong passphrase.** The unwrapped key was passed back into a raw-bytes import and threw, which was caught and shown as a bad passphrase even with correct answers.
+- **Deleted logins came back.** `mergeVaults()` and `mergeWebCredsVaults()` dropped tombstones from their output, so any older device or backup resurrected a deleted item on the next sync. Tombstones are now kept.
+- **The migration journal stored the vault in plaintext.** The verification fingerprint was the full plaintext tree written to IndexedDB. It is now a SHA-256 digest; a journal left by v0.6.3 is still verified.
+- **Manage showed every site with 0 accounts.** The list read credentials from the raw vault row, which a single-blob row no longer has. It now reads through the decrypted tree.
+- **The background auto-lock ignored the seconds setting.** It used old minute-based defaults, so the autofill session stayed open about 5 minutes idle. It now follows the auto-lock setting, and a fresh unlock or activity on the Manage page counts as activity instead of tripping an immediate lock.
+- **Mismatched keys and scan results were silent or cryptic.** Vault import and QR sync now fail with a clear message when the vault was made with a different key, and scan outcomes are always shown.
+- **Locked save prompts lost the login.** Saving while locked only said to unlock elsewhere, and clicking outside the prompt dismissed it and discarded the capture. The prompt now shows a masked master password box with a show/hide toggle and unlocks and saves in one step; only "Not now" dismisses it.
+- **V tags attached to checkboxes** whose label mentioned a keyword like "email". Non-text inputs are skipped.
+### Changed
+- **Personal Info no longer fills on page load.** Each matched field gets a visible V tag; clicking it opens a picker with the saved value, and nothing fills until you pick.
+- **Login fields use the V tag instead of a focus popup.** The login email/username and password fields each get a V tag listing saved logins for the site, plus saved emails on an email field. Picking a login fills both fields; picking an email fills just that field. The tag moves clear of a site's own icons at the field edge.
+- Manage shows "Locked" instead of "Not enrolled" / "Not set" while locked, and lists Personal Info above Misc Credentials.
+### Known Gaps
+- The phone app still has the v0.6.3 key import, key file import, and silent scan result problems; it is next.
+- Old plaintext journal data from a v0.6.3 migration may linger in the browser's own database files until the browser compacts them. New migrations no longer write it.
+
 ## [0.6.3] - 2026-09-22
 
 This release replaces per-credential encryption for Website Credentials with single-blob vault encryption, closing the last major gap in what's readable from the raw database at rest. It also closes out three real migration-safety gaps found across independent code review before shipping, and completes the `loginType` classification work scoped since v0.6.0.

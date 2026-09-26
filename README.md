@@ -6,6 +6,10 @@ A local, encrypted, QR code portable password manager. No cloud, no accounts, no
 
 ---
 
+> ✅ **Extension Hotfix for v0.6.3 - v0.6.4**
+>
+> Fixes key import, sync, migration, and autofill problems found after v0.6.3. Importing a master key now warns when this browser's vault was made with a different key and then saves the imported key for good, deletes now sync correctly, the migration journal no longer holds a plaintext copy of the vault, and Manage lists your logins again. Autofill moved to click-to-fill V tags on every matched field, including login email and password fields, and a locked save prompt now unlocks in place. Extension-only; the phone app gets the same key and transport fixes next. See [CHANGELOG.md](CHANGELOG.md) for full details.
+
 > ✅ **Single-Blob Vault Encryption and Migration Hardening - v0.6.3**
 >
 > Website Credentials now live behind one AES-GCM encrypted blob instead of per-credential encryption, so domain names, credential IDs, timestamps, login types, usernames, passwords, and per-site extra fields are no longer readable from the Website Credentials database row at rest. Existing vaults migrate automatically on first unlock, backed by an encrypted short-lived recovery journal and a full-tree fingerprint check after conversion, with automatic rollback if anything doesn't match. Devices must now import the same master key before syncing; a mismatched key fails clearly instead of being silently reconciled. See [CHANGELOG.md](CHANGELOG.md) for full details.
@@ -69,9 +73,10 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 - The extension can also be unlocked inline, directly on a page, when a tagged field is clicked while locked - password-only, since a WebAuthn platform credential can't be triggered from a page's own origin
 
 **Autofill (Extension):**
-- Personal Info fields (name, phone, address) auto-populate matched, empty fields on page load, now including `<select>` and `<textarea>` fields (a state/country dropdown is matched by its actual option, never a blind value assignment)
+- Personal Info fields (name, phone, address) get a V tag; clicking it opens a picker with the saved value and fills only on click, including `<select>` and `<textarea>` fields (a state/country dropdown is matched by its actual option, never a blind value assignment)
 - Email fields are click-to-pick from a small on-field picker listing every saved, ranked email, never auto-filled silently
-- Website Credentials show a picker of saved usernames for the current site; injection only, no password reveal - that's the site's own UI if it has one
+- Login email/username and password fields get a V tag listing saved logins for the current site (and saved emails on email fields); injection only, no password reveal - that's the site's own UI if it has one
+- A save prompt shown while the vault is locked unlocks in place with a masked master password box and show/hide toggle
 - A visible field tag marks anything Valid Vault has matched
 - Website Credentials reliably saves new logins from real signup flows, including submit-triggered navigation, cross-domain SSO/MFA redirects, and multi-form pages
 - Each saved login now classifies its `loginType` (username, email, or phone) for more reliable matching
@@ -84,6 +89,7 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 - Encrypted key backup - export the master key wrapped under a passphrase and three security questions, high-iteration KDF, never stored
 - Logins, Web Credentials, and Personal Info all travel together through the same export/import/QR flow, merged by timestamp with tombstoned deletes
 - Syncing now requires both devices to already share the same master key; a mismatched key fails with a clear error instead of being silently reconciled
+- Importing a master key onto a browser whose vault uses a different key warns first, clears that vault on confirmation, and saves the imported key under the browser's unlock methods (extension; phone follows next release)
 
 **Vault:**
 - Website Credentials are encrypted as one AES-GCM vault blob rather than per-credential, so domain names, credential IDs, and login types are no longer readable at rest
@@ -98,7 +104,7 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 - Android via Capacitor, with native plugins for biometric auth and file saving
 - Vendored, self-contained code only, no Google SDKs in the scan path
 
-## Current Status: v0.6.3 - Active Testing
+## Current Status: v0.6.4 - Active Testing
 
 **Completed:**
 * ✅ Master key wrap architecture, verify-by-unwrap, no stored hashes
@@ -113,8 +119,10 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 * ✅ Personal Info autofill and per-site extra fields extended to `<select>` and `<textarea>`
 * ✅ `loginType` field (username/email/phone) on Website Credentials for more reliable matching
 * ✅ Website Credentials encrypted as a single AES-GCM vault blob, with automatic migration, an encrypted recovery journal, and full-tree fingerprint verification for existing vaults
+* ✅ Extension key import that survives lock and unlock, deletes that sync, and click-to-fill V tags on every matched field
 
 **In Development:**
+* 📋 Phone de-drift: key import, QR transport, whole-vault carry, and Personal Info on the phone
 * 📋 Custom div-based combobox and `contenteditable` field support
 * 📋 Continued field testing of sync, backup, and native file saving across Android versions
 * 📋 Per-method auth edit and delete on the phone Manage tab

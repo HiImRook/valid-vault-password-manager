@@ -2,7 +2,7 @@
 
 
 
-\*\*Current Version:\*\* v0.6.3 - \*\*Status: Active Testing\*\*
+\*\*Current Version:\*\* v0.6.4 - \*\*Status: Active Testing\*\*
 
 
 
@@ -11,6 +11,30 @@
 
 
 \## Version History (Completed)
+
+
+
+\### v0.6.4 - Extension Hotfix for v0.6.3 (Sep 2026)
+
+
+
+\- ✅ Master key import (file and QR) warns when the browser's vault uses a different key, clears it on confirmation, and saves the imported key under the browser's unlock methods so it survives lock and unlock
+
+\- ✅ Key file import no longer always reports a wrong passphrase
+
+\- ✅ Deletes now propagate through sync - merges keep tombstones for logins and Web Credentials
+
+\- ✅ Migration journal stores a SHA-256 fingerprint instead of a plaintext copy of the vault
+
+\- ✅ Manage lists Website Credentials again under single-blob storage
+
+\- ✅ Background auto-lock follows the seconds setting; a fresh unlock and Manage activity count as activity
+
+\- ✅ Click-to-fill V tags on Personal Info, login email/username, and password fields; no fill on page load and no focus popup
+
+\- ✅ Locked save prompt unlocks in place with a masked password box and show/hide toggle; clicking outside no longer discards the capture
+
+\- ⚠️ Extension-only - the phone app still needs the same key import, QR, and whole-vault fixes
 
 
 
@@ -140,7 +164,19 @@
 
 
 
-\## Upcoming After v0.6.3
+\## Upcoming After v0.6.4
+
+
+
+\### Key Handling and Transport (Next)
+
+
+
+\- Phone de-drift: key import that survives lock and unlock with the same warning flow, working key file import, visible scan results, whole-vault carry (Web Credentials and Personal Info), and a Personal Info tab
+
+\- QR sync verified end to end, extension to phone and phone to extension, with clear key-mismatch errors on both sides
+
+\- Unlock behavior quirks reported by community testing
 
 
 
@@ -175,8 +211,6 @@
 \- Native background-lifecycle lock guarantees on Android
 
 \- Styled Export/Import Key modals on the extension (currently plain browser prompts)
-
-\- A desktop app to own the vault file directly and sync it across browser extensions (Chrome, Firefox, Edge) without manual export/import - browser extensions can't watch or write an arbitrary file continuously, so this is the real fix for seamless cross-browser sync
 
 
 
@@ -256,5 +290,5 @@ MIT License - See LICENSE file for details
 
 
 
-\*\*Last Updated:\*\* Sep 22, 2026
+\*\*Last Updated:\*\* Sep 26, 2026
 
