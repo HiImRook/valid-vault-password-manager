@@ -6,6 +6,14 @@ A local, encrypted, QR code portable password manager. No cloud, no accounts, no
 
 ---
 
+> ✅ **Crypto Wallets and Encrypted Bookmarks - v0.7.0**
+>
+> The extension now stores crypto wallet seed phrases and bookmarks inside the same encrypted vault as your logins. Seed phrases are organized by wallet and account, checked word by word against the standard 2048-word seed phrase list, and only visible while you choose to show them. Bookmarks are saved from a new icon in the popup and listed in a side panel with search and drag reorder. Both sections are sealed as single AES-GCM blobs, nothing about them is readable at rest, and they travel between browsers through the encrypted vault file. On-page unlocks now open a Valid Vault window with Windows Hello, and the popup lock button is fixed. See [Crypto Wallet and Bookmark Security](#crypto-wallet-and-bookmark-security) and [CHANGELOG.md](CHANGELOG.md) for full details.
+
+> 🔧 **Phone app and QR transport: in active development**
+>
+> The phone app is being brought up to the extension's feature set (v0.8.x), and live QR transport is getting its next round of refinement (v0.7.x). Your data stays encrypted through all of it; this is feature work, and nothing about it changes how the vault is protected. Until it lands, Export Vault and Import Vault move the complete vault between browsers.
+
 > ✅ **Extension Hotfix for v0.6.3 - v0.6.4**
 >
 > Fixes key import, sync, migration, and autofill problems found after v0.6.3. Importing a master key now warns when this browser's vault was made with a different key and then saves the imported key for good, deletes now sync correctly, the migration journal no longer holds a plaintext copy of the vault, and Manage lists your logins again. Autofill moved to click-to-fill V tags on every matched field, including login email and password fields, and a locked save prompt now unlocks in place. Extension-only; the phone app gets the same key and transport fixes next. See [CHANGELOG.md](CHANGELOG.md) for full details.
@@ -70,13 +78,14 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 - Auto-lock inactivity timer in seconds, locks the vault and returns to the lock screen
 - Both surfaces show an inline unlock overlay on session timeout instead of a dead end
 - Website Credentials, Web Credentials, and Personal Info each require their own explicit re-unlock inside Manage; editing Personal Info specifically requires the master password, never fingerprint
-- The extension can also be unlocked inline, directly on a page, when a tagged field is clicked while locked - password-only, since a WebAuthn platform credential can't be triggered from a page's own origin
+- Clicking a tagged field or a save prompt while locked opens a small Valid Vault unlock window with Windows Hello (fingerprint or device PIN) or password; the unlock runs in the extension's own origin, never in the visited page
+- Crypto Wallets requires its own explicit unlock inside Manage, like the other sections
 
 **Autofill (Extension):**
 - Personal Info fields (name, phone, address) get a V tag; clicking it opens a picker with the saved value and fills only on click, including `<select>` and `<textarea>` fields (a state/country dropdown is matched by its actual option, never a blind value assignment)
 - Email fields are click-to-pick from a small on-field picker listing every saved, ranked email, never auto-filled silently
 - Login email/username and password fields get a V tag listing saved logins for the current site (and saved emails on email fields); injection only, no password reveal - that's the site's own UI if it has one
-- A save prompt shown while the vault is locked unlocks in place with a masked master password box and show/hide toggle
+- A save prompt shown while the vault is locked offers Unlock and Save, which opens the Valid Vault unlock window and saves once unlocked
 - A visible field tag marks anything Valid Vault has matched
 - Website Credentials reliably saves new logins from real signup flows, including submit-triggered navigation, cross-domain SSO/MFA redirects, and multi-form pages
 - Each saved login now classifies its `loginType` (username, email, or phone) for more reliable matching
@@ -88,6 +97,7 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 - Encrypted vault backup - save directly to Downloads or share the file, inert without the matching master key
 - Encrypted key backup - export the master key wrapped under a passphrase and three security questions, high-iteration KDF, never stored
 - Logins, Web Credentials, and Personal Info all travel together through the same export/import/QR flow, merged by timestamp with tombstoned deletes
+- Bookmarks and Crypto Wallets travel inside the encrypted vault file (Export Vault / Import Vault) with the same tombstoned-delete merge; seed phrases are kept out of the live QR share, and a bookmarks QR share is planned for v0.7.x
 - Syncing now requires both devices to already share the same master key; a mismatched key fails with a clear error instead of being silently reconciled
 - Importing a master key onto a browser whose vault uses a different key warns first, clears that vault on confirmation, and saves the imported key under the browser's unlock methods (extension; phone follows next release)
 
@@ -97,6 +107,8 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 - Website Credentials - logins grouped by site, multiple usernames per site supported, matched by username on merge
 - Web Credentials - category-organized secrets like Wi-Fi passwords or license keys, view/edit/delete
 - Personal Info - one profile per vault: name, phone, address, and ranked emails, used as an autofill source only, never stored per-site
+- Crypto Wallets - seed phrases organized by wallet and account, 1 to 24 numbered words per account plus one optional note (for example a wallet password), stored as one sealed AES-GCM blob
+- Bookmarks - saved from the popup's bookmark icon, listed in a side panel with search, rename, remove, and drag reorder, stored as one sealed AES-GCM blob
 - IndexedDB persistence - no external database or server
 
 **Platform:**
@@ -104,7 +116,7 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 - Android via Capacitor, with native plugins for biometric auth and file saving
 - Vendored, self-contained code only, no Google SDKs in the scan path
 
-## Current Status: v0.6.4 - Active Testing
+## Current Status: v0.7.0 - Active Testing
 
 **Completed:**
 * ✅ Master key wrap architecture, verify-by-unwrap, no stored hashes
@@ -120,9 +132,13 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 * ✅ `loginType` field (username/email/phone) on Website Credentials for more reliable matching
 * ✅ Website Credentials encrypted as a single AES-GCM vault blob, with automatic migration, an encrypted recovery journal, and full-tree fingerprint verification for existing vaults
 * ✅ Extension key import that survives lock and unlock, deletes that sync, and click-to-fill V tags on every matched field
+* ✅ Crypto Wallets: encrypted seed phrase storage by wallet and account, with on-device seed word and checksum checking
+* ✅ Encrypted bookmarks with a popup bookmark icon and a searchable, reorderable side panel
+* ✅ Windows Hello unlock window for on-page unlocks; popup lock button fixed
 
 **In Development:**
-* 📋 Phone de-drift: key import, QR transport, whole-vault carry, and Personal Info on the phone
+* 📋 Phone de-drift (v0.8.x): key import, whole-vault carry including bookmarks and wallets, and Personal Info on the phone
+* 📋 QR transport refinement (v0.7.x), including a bookmarks QR share
 * 📋 Custom div-based combobox and `contenteditable` field support
 * 📋 Continued field testing of sync, backup, and native file saving across Android versions
 * 📋 Per-method auth edit and delete on the phone Manage tab
@@ -150,7 +166,9 @@ Since Website Credentials moved to single-blob encryption, merging requires both
 
 **Personal Info gets a stricter gate.** Viewing it requires a normal unlock; adding or editing any field requires the master password specifically, not fingerprint.
 
-**Autofill never exposes the master key.** background.js is the only place the session key lives; content.js, running in the page's own context, only ever receives specific plaintext values it explicitly requested for injection. Inline unlock is password-only for the same reason a content script can't trigger a WebAuthn platform credential bound to the extension's own origin.
+**Autofill never exposes the master key.** background.js is the only place the session key lives; content.js, running in the page's own context, only ever receives specific plaintext values it explicitly requested for injection. Unlocking from a page opens a separate extension window, so the password and the WebAuthn credential are only ever handled in the extension's own origin, never typed into or triggered from the visited page.
+
+**Seed phrases and bookmarks never reach web pages.** No background message handler serves wallet or bookmark data to a content script. They are decrypted only inside extension pages (Manage, the popup, and the bookmarks side panel).
 
 **No competitor-targeting logic exists or is planned.** Autofill competes on being fully local and already-unlocked in memory, not on hiding another password manager's UI.
 
@@ -160,6 +178,42 @@ Since Website Credentials moved to single-blob encryption, merging requires both
 - Auto-lock is a foreground inactivity timer; exact timing while backgrounded is subject to OS suspension
 - A captured save-prompt is tracked per browser tab, not per destination page, for up to 45 seconds - deliberately, so it survives a cross-domain SSO/MFA redirect. The tradeoff is a narrow window where an unrelated page loaded in that same tab could recover the same prompt
 - Live QR transport is protected by physical privacy, not by a handshake
+
+## Crypto Wallet and Bookmark Security
+
+Seed phrases are the highest-value secret most people own, and the common places they end up (a notes app, a screenshot in a photo library, a cloud document, an email to yourself) are either unencrypted or readable by the provider that syncs them. Crypto Wallets gives them the same protection as the rest of the vault: encrypted at rest under a key only the owner can unwrap, never sent to any server, and portable between devices only as ciphertext.
+
+**What is stored, and how:**
+- The entire Crypto Wallets section (wallet names, account names, seed words, notes, timestamps, and ordering) is serialized once, deflate-compressed, and encrypted as a single AES-256-GCM blob under the vault master key, with a fresh random 96-bit IV on every write. The IndexedDB row holds only `{schemaVersion, blob: {iv, data}}`.
+- Nothing about the contents is readable at rest: no wallet names, no account names, no count of wallets or accounts, no word counts. The ciphertext length does reveal the approximate total size of the section, as with any encryption.
+- Bookmarks use the identical construction in their own row, so saved addresses and titles are not readable at rest either, unlike browser bookmarks, which sit in plain text in the browser profile.
+- AES-GCM authenticates every blob. Any modification fails decryption. A row with an unrecognized `schemaVersion` or an unexpected shape throws instead of being treated as empty, so bad data can never be silently written over real data.
+- Compression happens before encryption, entirely on the user's own data. Compression side channels (CRIME/BREACH) need an attacker to inject chosen content alongside the secret and watch ciphertext sizes across many requests; here there is no attacker-controlled input and no network channel, so that class of attack does not apply.
+
+**Who can decrypt it:**
+- The same master key wrap architecture as the rest of the vault: one random 256-bit master key, wrapped separately under the password (PBKDF2-SHA256, 600,000 iterations) and Windows Hello (WebAuthn PRF), with verify-by-unwrap and no stored hashes.
+- While unlocked, the session key lives only in `chrome.storage.session`, which is memory-only and cleared when the browser closes. Locking, manually or by the inactivity timer, clears it everywhere.
+- Crypto Wallets asks for its own unlock inside Manage even when the vault is already open.
+- Seed words are never autofilled, never injected into a page, and never passed to a content script. No background message handler returns wallet data at all.
+
+**On screen:**
+- Words exist in the page only while Show is on. They are removed, and an open editor is covered, when the window loses focus, when you switch browser tabs, when you switch Manage tabs, when the vault locks, or when the auto-lock time runs out. This keeps seed words from sitting on screen during screen sharing, streaming, or walking away.
+- Word boxes turn off browser autocomplete and spellcheck, so typed words are not kept in form history or sent to an online spelling service.
+
+**Word checking, fully offline:**
+- The standard 2048-word BIP-39 English list is bundled in the extension. Its SHA-256 (`2f5eed53a4727b4bf8880d8f3f199efc90e58503646d9ff8eff3a2ed3b24dbda`) matches the official `english.txt`.
+- Suggestions, unknown-word warnings, and the full-phrase checksum (computed with WebCrypto SHA-256) all run locally. Nothing is looked up online, and no dependency was added.
+- An unknown word or a failed checksum warns and lets the owner decide, since some wallets use their own word lists. Editing saved words shows an explicit warning first.
+
+**Moving between devices:**
+- Wallets and bookmarks travel only inside the encrypted vault file, which is useless without the matching master key. Seed phrases are deliberately kept out of the live QR share.
+- Merging is deterministic and never silently overwrites. Each account carries a permanent random ID, the newest edit wins per account, and deletes carry across as tombstones. The same seed saved twice in one wallet keeps the older copy. When two different accounts share a name, the older one keeps it and newer ones become `.1`, `.2`, computed the same way on every device, so any number of devices merged in any order reach the same result. Re-importing a file that was already merged changes nothing.
+- Wallet names match exactly, so `Metamask` and `metamask` stay separate.
+
+**Honest limits:**
+- Malware running on a machine while the vault is unlocked can read whatever the vault can read. This is true of every password manager, and it is why auto-lock and hide-on-blur exist.
+- Physical access to an already-unlocked device is outside the threat model.
+- Losing the master key, and every backup of it, means losing the seed phrases stored here. Keep your wallet's own recovery backup as well.
 
 ## Quick Start - Forks and Experimentation Highly Encouraged!
 
@@ -194,7 +248,10 @@ Importing a master key re-wraps it under the browser's existing password (and fi
 The Website Credentials tree (meta plus every domain's credentials) is serialized once and encrypted as one AES-GCM blob, instead of encrypting each field independently. A legacy vault converts on first unlock: the old row is decrypted into a plaintext tree, backed up encrypted under a short-lived migration journal, re-encrypted as the new blob, and verified by comparing a full-tree fingerprint of what was converted against what was written back, with automatic rollback from the encrypted backup if anything doesn't match.
 
 **Safe Autofill Injection:**
-background.js holds the session key and does all decryption; content.js, running in the visited page's own origin, only ever receives the specific plaintext value it asked for (a name, a saved login) and never the master key itself. Inline unlock on a locked page is password-only, since a WebAuthn platform credential is bound to the extension's own origin and can't be triggered from a page's origin.
+background.js holds the session key and does all decryption; content.js, running in the visited page's own origin, only ever receives the specific plaintext value it asked for (a name, a saved login) and never the master key itself. Unlocking from a locked page opens a small extension window, so Windows Hello and the password are handled in the extension's own origin, where the WebAuthn credential is bound.
+
+**Sealed Sections:**
+Crypto Wallets and Bookmarks share one small module, sealed.js, that serializes a section, deflate-compresses it, and encrypts it as one AES-GCM blob with a fresh IV per write. Each section merges by permanent record IDs with tombstoned deletes, so the same vault file converges on every device.
 
 **Native Biometric (Android):**
 A custom Capacitor plugin bridges JavaScript to Android's BiometricPrompt. It creates a hardware-backed Keystore key that requires user authentication, then uses it to wrap the master key.
@@ -232,7 +289,7 @@ Contributions welcome. This project maintains a compact, readable codebase with 
 Report security issues via GitHub Security Advisories.
 
 **Audit Status:**
-Pre-1.0, under active testing. Community review welcome. auth.js, crypto.js, session.js, and the native plugins are the surfaces that matter.
+Pre-1.0, under active testing. Community review welcome. auth.js, crypto.js, session.js, sealed.js, wallets.js, and the native plugins are the surfaces that matter.
 
 ## License
 

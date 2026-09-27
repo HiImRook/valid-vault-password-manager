@@ -5,6 +5,37 @@ All notable changes to Local Vault will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-09-27
+
+This release adds two new encrypted sections to the vault, Crypto Wallets for seed phrases and Bookmarks, both sealed the same way as Website Credentials and both carried between browsers inside the encrypted vault file. It also moves on-page unlocking into a dedicated extension window with Windows Hello, and fixes the popup lock button. Extension only; the phone app receives these sections in the v0.8.x de-drift.
+
+### Added
+- **Crypto Wallets.** A new Manage tab between Misc Credentials and Sync. Each wallet (exact, case-sensitive name) holds named accounts; each account has 24 numbered word boxes, filled as far as the wallet needs, plus one optional note with a header, such as a wallet password. Accounts can be renamed, edited, deleted, and dragged to reorder, and wallets can be dragged or sorted A-Z. The tab requires its own unlock inside Manage.
+- **Offline seed word checking.** The 2048-word BIP-39 English list is bundled in `bip39-words.js` (SHA-256 `2f5eed53a4727b4bf8880d8f3f199efc90e58503646d9ff8eff3a2ed3b24dbda`, matching the official `english.txt`). Boxes suggest matching words as you type, an unknown word asks to keep or clear it, and Done runs the full-phrase checksum with WebCrypto SHA-256; a failed check asks to save anyway or keep editing. Pasting a whole phrase into box 1 fills the boxes in order. Editing saved words shows a warning first. No network lookups, no new dependency.
+- **Hide on blur.** Seed words exist in the page only while shown and are removed, with any open editor covered, on window blur, browser tab switch, Manage tab switch, lock, or when the auto-lock time runs out. Word boxes disable autocomplete and spellcheck.
+- **Encrypted bookmarks.** A bookmark icon beside the popup's lock, hollow when the page is not saved and filled when it is, with a confirm panel to add (editable name) or remove. A new Bookmarks menu item opens a side panel list with search, rename, remove, and drag reorder by a grip on each row. The list stays alphabetical until the first drag, after which new bookmarks go to the bottom. Adds the `sidePanel` permission.
+- **Sealed sections.** `sealed.js` serializes a section, deflate-compresses it, and encrypts it as one AES-GCM blob with a fresh IV per write. Crypto Wallets (in the existing `wallets` store) and Bookmarks (new `bookmarks` store, database version 5) both use it, so wallet names, account names, seed words, notes, addresses, titles, and ordering are not readable at rest. A row with an unrecognized `schemaVersion` or an unexpected shape throws instead of being treated as empty.
+- **Deterministic merge for both sections.** Records carry permanent random IDs; the newest edit wins per record, deletes carry across as tombstones, and ordering merges per entry. For wallets, the same seed saved twice in one wallet keeps the older copy, and accounts sharing a name resolve by age (older keeps it, newer become `.1`, `.2`) identically on every device, so any number of devices merged in any order converge and re-importing changes nothing. Bookmarks merge by address with no duplicates.
+- **Unlock window.** Clicking a V tag or Unlock and Save while locked opens a small Valid Vault window that starts Windows Hello, with a password fallback and show/hide toggle. The unlock runs in the extension's own origin, so fingerprint now works for on-page unlocks and nothing is typed into the visited page. The in-page password box and the content-script password path are removed.
+
+### Fixed
+- **The popup lock button did nothing.** Its handler referenced list elements removed in v0.5.3 and threw before locking. It now locks, and the popup restores an unlock done anywhere else instead of always opening locked.
+- **The login email field lost the saved-logins picker** when the password field loaded after the email field. The tag now upgrades in place.
+- **Background database connections could block a version upgrade.** background.js now closes each raw IndexedDB connection after its read, and the shared store closes on `versionchange`.
+
+### Changed
+- Export Vault and Import Vault include Bookmarks and Crypto Wallets, checked against the unlocked key before merging. Seed phrases are kept out of the live QR share; a bookmarks QR share is planned for v0.7.x.
+- Extension icons replaced with the globe-in-a-V logo.
+- Manage page content is centered at a maximum width on wide screens.
+
+### Known Gaps
+- The phone app does not read Bookmarks or Crypto Wallets yet; they arrive in the v0.8.x phone de-drift and stay encrypted in the vault file until then.
+- QR transport refinement is the v0.7.x focus. This is feature work; vault data stays encrypted throughout.
+- When the same seed is saved under two different account IDs, only the older copy is kept, so a differing note on the newer copy is dropped.
+
+### Notes
+- Every change in this release was verified with Playwright-in-Chromium tests, including three-device merges in every import order, the version 4 to 5 database upgrade with existing logins, and regression runs of the earlier autofill and unlock tests.
+
 ## [0.6.4] - 2026-09-26
  
 Hotfix for v0.6.3, extension only. Fixes key import, sync, migration, and autofill problems found in real use after the single-blob release. The phone app receives the matching key and transport fixes in the next release.
