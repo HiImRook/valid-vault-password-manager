@@ -1,8 +1,7 @@
 import { getBookmarksVault, setBookmarksVault } from './store.js'
+import { sealJson, openJson } from './sealed.js'
 
 const BOOKMARKS_SCHEMA_VERSION = 1
-const IV_LENGTH = 12
-const BASE64_CHUNK = 32768
 const POS_STEP = 1024
 
 function generateId() {
@@ -32,34 +31,6 @@ function isBookmarkable(url) {
   }
 }
 
-function bytesToBase64(bytes) {
-  let binary = ''
-  for (let i = 0; i < bytes.length; i += BASE64_CHUNK) {
-    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + BASE64_CHUNK))
-  }
-  return btoa(binary)
-}
-
-function base64ToBytes(text) {
-  const binary = atob(text)
-  const bytes = new Uint8Array(binary.length)
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
-  return bytes
-}
-
-async function streamBytes(bytes, transform) {
-  const stream = new Blob([bytes]).stream().pipeThrough(transform)
-  return new Uint8Array(await new Response(stream).arrayBuffer())
-}
-
-async function encryptTree(tree, key) {
-  const plain = new TextEncoder().encode(JSON.stringify(tree))
-  const compressed = await streamBytes(plain, new CompressionStream('deflate'))
-  const iv = crypto.getRandomValues(new Uint8Array(IV_LENGTH))
-  const ciphertext = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, compressed))
-  return { iv: bytesToBase64(iv), data: bytesToBase64(ciphertext) }
-}
-
 function isValidTree(tree) {
   if (!tree || typeof tree !== 'object' || !tree.meta || !Array.isArray(tree.items)) return false
   for (const item of tree.items) {
@@ -73,11 +44,7 @@ function isValidTree(tree) {
 async function decryptRow(row, key) {
   if (!row) return emptyTree()
   if (row.schemaVersion !== BOOKMARKS_SCHEMA_VERSION || !row.blob) throw new Error('Unsupported bookmarks format')
-  const iv = base64ToBytes(row.blob.iv)
-  const ciphertext = base64ToBytes(row.blob.data)
-  const compressed = new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ciphertext))
-  const plain = await streamBytes(compressed, new DecompressionStream('deflate'))
-  const tree = JSON.parse(new TextDecoder().decode(plain))
+  const tree = await openJson(row.blob, key)
   if (!isValidTree(tree)) throw new Error('Bookmarks have an unexpected shape')
   return tree
 }
@@ -88,7 +55,7 @@ async function readTree(key) {
 
 async function writeTree(tree, key) {
   tree.meta.lastAccess = Date.now()
-  await setBookmarksVault({ schemaVersion: BOOKMARKS_SCHEMA_VERSION, blob: await encryptTree(tree, key) })
+  await setBookmarksVault({ schemaVersion: BOOKMARKS_SCHEMA_VERSION, blob: await sealJson(tree, key) })
 }
 
 async function rowOpensWith(row, key) {

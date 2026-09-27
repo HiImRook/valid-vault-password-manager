@@ -61,6 +61,60 @@
     .msg.success { background: rgba(51,255,102,0.08); color: var(--green); border-color: var(--green-faint); }
     .msg.error { background: rgba(255,85,85,0.08); color: var(--danger); border-color: rgba(255,85,85,0.3); }
     a { color: var(--green); }
+    textarea { background: var(--bg); border: 1px solid var(--green-faint); color: var(--text); padding: 9px; border-radius: 6px; font-family: inherit; font-size: 13px; resize: vertical; }
+    textarea:focus { outline: none; border-color: var(--green-dim); box-shadow: 0 0 0 2px rgba(51,255,102,0.1); }
+    .wv-toolbar { display: flex; gap: 8px; margin-bottom: 14px; }
+    .wv-gate, .wv-empty { padding: 24px; text-align: center; color: var(--text-dim); font-size: 13px; }
+    .wv-error { color: var(--danger); }
+    .wv-wallet { background: var(--bg-raise); border: 1px solid var(--green-faint); border-radius: 8px; margin-bottom: 14px; }
+    .wv-wallet.dragging, .wv-account.dragging { opacity: 0.4; }
+    .wv-wallet.drop-before, .wv-account.drop-before { box-shadow: 0 -2px 0 var(--green); }
+    .wv-wallet.drop-after, .wv-account.drop-after { box-shadow: 0 2px 0 var(--green); }
+    .wv-wallet-head, .wv-account-head { display: flex; align-items: center; gap: 8px; padding: 14px 16px; flex-wrap: wrap; }
+    .wv-wallet-head { border-bottom: 1px solid var(--green-faint); }
+    .wv-wallet-info, .wv-account-info { flex: 1; min-width: 140px; }
+    .wv-wallet-name { color: var(--green); font-size: 16px; font-weight: 700; word-break: break-word; }
+    .wv-account-label { color: var(--text); font-size: 14px; font-weight: 700; word-break: break-word; }
+    .wv-account-meta { color: var(--text-dim); font-size: 11px; margin-top: 2px; }
+    .wv-accounts { padding: 4px 12px 8px 24px; }
+    .wv-account { border-bottom: 1px solid var(--green-faint); }
+    .wv-account:last-child { border-bottom: none; }
+    .wv-grip { color: var(--text-dim); font-size: 14px; letter-spacing: -3px; cursor: grab; padding: 4px 6px 4px 0; user-select: none; }
+    .wv-grip:hover { color: var(--green); }
+    .wv-confirm-text { color: var(--danger); font-size: 12px; }
+    .wv-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 12px 0; }
+    .wv-cell { display: flex; align-items: center; gap: 6px; background: var(--bg); border: 1px solid var(--green-faint); border-radius: 6px; padding: 4px 8px; }
+    .wv-num { color: var(--text-dim); font-size: 11px; min-width: 18px; text-align: right; }
+    .wv-word { color: var(--green); font-size: 14px; font-weight: 700; padding: 5px 0; }
+    .wv-word-input { border: none; background: transparent; padding: 5px 0; width: 100%; min-width: 0; color: var(--green); font-weight: 700; }
+    .wv-word-input:focus { box-shadow: none; }
+    .wv-cell:focus-within { border-color: var(--green-dim); }
+    .wv-reveal { padding: 0 16px 14px; }
+    .wv-notes-view { background: var(--bg); border: 1px solid var(--green-faint); border-radius: 6px; padding: 10px 12px; }
+    .wv-notes-view-header { color: var(--green); font-size: 13px; font-weight: 700; margin-bottom: 4px; }
+    .wv-notes-view-body { color: var(--text); font-size: 13px; white-space: pre-wrap; word-break: break-word; }
+    .wv-editor { background: var(--panel); border: 1px solid var(--green-dim); border-radius: 8px; padding: 16px; margin: 10px 0 14px; }
+    .wv-editor-title { color: var(--green); font-size: 14px; font-weight: 700; margin-bottom: 10px; word-break: break-word; }
+    .wv-fields { display: flex; gap: 8px; flex-wrap: wrap; }
+    .wv-fields input { flex: 1; min-width: 180px; }
+    .wv-hint { color: var(--text-dim); font-size: 12px; margin: 10px 0 0; }
+    .wv-warning { color: var(--danger); font-size: 12px; border: 1px solid rgba(255,85,85,0.3); background: rgba(255,85,85,0.08); border-radius: 6px; padding: 10px; margin-bottom: 10px; line-height: 1.5; }
+    .wv-notes-header { width: 100%; margin: 10px 0 8px; }
+    .wv-notes-body { width: 100%; }
+    .wv-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
+    .wv-covered { display: flex; align-items: center; justify-content: center; min-height: 120px; border: 1px dashed var(--green-dim); border-radius: 6px; cursor: pointer; }
+    .wv-covered-text { color: var(--text-dim); font-size: 13px; }
+    .wv-suggest { position: absolute; z-index: 1000; background: var(--bg-raise); border: 1px solid var(--green-dim); border-radius: 6px; box-shadow: 0 4px 16px rgba(0,0,0,0.5); overflow: hidden; }
+    .wv-suggest-item { padding: 6px 10px; font-size: 13px; color: var(--text); cursor: pointer; }
+    .wv-suggest-item:first-child { background: var(--green-faint); color: var(--green); }
+    .wv-suggest-item:hover { background: var(--green); color: #05140a; }
+    .wv-dialog-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 2000; }
+    .wv-dialog { background: var(--bg-raise); border: 1px solid var(--green-dim); border-radius: 8px; padding: 20px; width: min(420px, calc(100vw - 32px)); }
+    .wv-dialog-title { color: var(--green); font-size: 15px; font-weight: 700; margin-bottom: 10px; }
+    .wv-dialog-text { color: var(--text); font-size: 13px; line-height: 1.5; margin-bottom: 14px; word-break: break-word; }
+    .wv-dialog-input { width: 100%; margin-bottom: 14px; }
+    .wv-dialog-actions { display: flex; gap: 8px; justify-content: flex-end; }
+    @media (max-width: 760px) { .wv-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   </style>
 </head>
 <body>
@@ -70,6 +124,7 @@
       <div class="sidebar-tab active" data-tab="manage">Manage</div>
       <div class="sidebar-tab" data-tab="personal">Personal Info</div>
       <div class="sidebar-tab" data-tab="webcreds">Misc Credentials</div>
+      <div class="sidebar-tab" data-tab="wallets">Crypto Wallets</div>
       <div class="sidebar-tab" data-tab="sync">Sync</div>
       <div class="sidebar-tab" data-tab="settings">Settings</div>
       <div class="sidebar-tab" data-tab="about">About</div>
@@ -117,6 +172,17 @@
         <p style="color:var(--text-dim);font-size:13px;margin-bottom:14px;">Used by autofill on signup and profile forms. Viewing requires unlock; adding or editing any field requires your master password. Social Security numbers and card info are deferred for now, held back for later, added security work.</p>
         <div id="personalinfo-content"></div>
         <div id="msg-personalinfo" class="msg hidden"></div>
+      </div>
+
+      <div id="tab-wallets" class="hidden">
+        <h1>Crypto Wallets</h1>
+        <p style="color:var(--text-dim);font-size:13px;margin-bottom:14px;">Store seed phrases by wallet and account. Words stay hidden until you click Show, and hide again when you switch tabs, leave the window, or the timer runs out.</p>
+        <div id="wallets-toolbar" class="wv-toolbar hidden">
+          <button id="btn-add-wallet">Add Wallet</button>
+          <button class="secondary" id="btn-sort-wallets">Sort A-Z</button>
+        </div>
+        <div id="wallets-content"></div>
+        <div id="msg-wallets" class="msg hidden"></div>
       </div>
 
       <div id="tab-sync" class="hidden">

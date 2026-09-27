@@ -3,6 +3,8 @@ import * as passwords from './passwords.js'
 import * as webcreds from './webcreds.js'
 import * as personalinfo from './personalinfo.js'
 import * as bookmarks from './bookmarks.js'
+import * as wallets from './wallets.js'
+import * as walletsTab from './wallets-tab.js'
 import * as session from './session.js'
 import * as store from './store.js'
 import * as pairing from './pairing.js'
@@ -103,7 +105,7 @@ function attachActivityListeners() {
 async function checkAndShowLockOverlay() {
   if (session.hasMasterKey()) { hideLockOverlay(); return }
   const restored = await restoreMasterKeyFromSession()
-  if (restored) { hideLockOverlay() } else { showLockOverlay(); loginCredsUnlocked = false; webCredsUnlocked = false; personalInfoUnlocked = false }
+  if (restored) { hideLockOverlay() } else { showLockOverlay(); loginCredsUnlocked = false; webCredsUnlocked = false; personalInfoUnlocked = false; walletsTab.lock() }
 }
 setInterval(checkAndShowLockOverlay, 5000)
 
@@ -133,6 +135,7 @@ const inputQrTimeout = document.getElementById('input-qr-timeout')
 const btnClearVault = document.getElementById('btn-clear-vault')
 
 function showTab(tabName) {
+  if (tabName !== 'wallets') walletsTab.onTabHidden()
   tabs.forEach(t => t.classList.remove('active'))
   document.querySelector(`[data-tab="${tabName}"]`).classList.add('active')
   
@@ -140,12 +143,14 @@ function showTab(tabName) {
   tabWebcreds.classList.add('hidden')
   tabPersonal.classList.add('hidden')
   document.getElementById('tab-sync').classList.add('hidden')
+  document.getElementById('tab-wallets').classList.add('hidden')
   tabSettings.classList.add('hidden')
   tabAbout.classList.add('hidden')
   
   document.getElementById('tab-' + tabName).classList.remove('hidden')
   if (tabName === 'webcreds') loadAllWebCredentials()
   if (tabName === 'personal') loadPersonalInfo()
+  if (tabName === 'wallets') walletsTab.onTabShown()
 }
 
 function showMsg(el, msg, type) {
@@ -831,6 +836,16 @@ async function promptAuth() {
   return { success: false }
 }
 
+walletsTab.init({
+  getKey: () => session.getMasterKey(),
+  authenticate: async () => {
+    const authResult = await promptAuth()
+    if (!authResult.success) return false
+    session.setMasterKey(authResult.masterKey)
+    return true
+  }
+})
+
 function escapeHtml(str) {
   const div = document.createElement('div')
   div.textContent = str
@@ -1096,13 +1111,14 @@ const _btnExportVault = document.getElementById('btn-export-vault'); if (_btnExp
   const webCredsData = await store.getWebCredsVault()
   const personalInfoData = await store.getPersonalInfo()
   const bookmarksData = await store.getBookmarksVault()
-  if (!vaultData && !webCredsData && !personalInfoData && !bookmarksData) { syncMsg('Nothing to export yet', 'error'); return }
+  const walletsData = await store.getWalletVault()
+  if (!vaultData && !webCredsData && !personalInfoData && !bookmarksData && !walletsData) { syncMsg('Nothing to export yet', 'error'); return }
   let nickname = ''
   try { const a = await store.getAuth() || {}; nickname = (a.keyNickname || '').trim() } catch (e) {}
   
   const safeName = nickname ? '-' + nickname.replace(/[\\/:*?"<>|]+/g, '').replace(/\s+/g, '-') : ''
   const fname = 'valid-vault-backup' + safeName + '.vault'
-  if (downloadFile(fname, JSON.stringify({ format: 'valid-vault-vault', version: 1, vault: vaultData, webcreds: webCredsData, personalInfo: personalInfoData, bookmarks: bookmarksData })))
+  if (downloadFile(fname, JSON.stringify({ format: 'valid-vault-vault', version: 1, vault: vaultData, webcreds: webCredsData, personalInfo: personalInfoData, bookmarks: bookmarksData, wallets: walletsData })))
     syncMsg('Vault exported. It stays encrypted, useless without your master key.', 'success')
   else syncMsg('Could not save the file', 'error')
 }
@@ -1183,7 +1199,7 @@ async function showImportKeyModal(fileObj) {
 
 const KEY_MISMATCH_MSG = 'This vault was made with a different master key. Import that master key first, then import the vault.'
 const LOCAL_MISMATCH_MSG = 'This browser\'s saved data uses a different master key than the one unlocked. Import the matching master key first.'
-const VAULT_STORES = ['passwords', 'webcreds', 'personalInfo', 'vaultMigration', 'bookmarks']
+const VAULT_STORES = ['passwords', 'webcreds', 'personalInfo', 'vaultMigration', 'bookmarks', 'wallets']
 
 function passwordMeetsRule(pw) {
   return !!pw && pw.length >= 12 && /[a-zA-Z]/.test(pw) && /[0-9]/.test(pw) && /[^a-zA-Z0-9]/.test(pw)
@@ -1214,7 +1230,8 @@ async function localVaultOpensWith(key) {
   if (!(await rowOpensWith(await getPasswordVault(), key))) return false
   if (!(await webCredsOpenWith(await store.getWebCredsVault(), key))) return false
   if (!(await personalInfoOpensWith(await store.getPersonalInfo(), key))) return false
-  return bookmarks.rowOpensWith(await store.getBookmarksVault(), key)
+  if (!(await bookmarks.rowOpensWith(await store.getBookmarksVault(), key))) return false
+  return wallets.rowOpensWith(await store.getWalletVault(), key)
 }
 
 async function importVaultBundle(bundle, mk) {
@@ -1222,6 +1239,7 @@ async function importVaultBundle(bundle, mk) {
   if (!(await webCredsOpenWith(bundle.webcreds, mk))) throw new Error(KEY_MISMATCH_MSG)
   if (!(await personalInfoOpensWith(bundle.personalInfo, mk))) throw new Error(KEY_MISMATCH_MSG)
   if (!(await bookmarks.rowOpensWith(bundle.bookmarks, mk))) throw new Error(KEY_MISMATCH_MSG)
+  if (!(await wallets.rowOpensWith(bundle.wallets, mk))) throw new Error(KEY_MISMATCH_MSG)
   if (!(await localVaultOpensWith(mk))) throw new Error(LOCAL_MISMATCH_MSG)
 
   if (bundle.vault) {
@@ -1252,6 +1270,9 @@ async function importVaultBundle(bundle, mk) {
   }
   if (bundle.bookmarks) {
     await bookmarks.importRow(bundle.bookmarks, mk)
+  }
+  if (bundle.wallets) {
+    await wallets.importRow(bundle.wallets, mk)
   }
 }
 
@@ -1325,6 +1346,7 @@ async function adoptImportedKey(importedKey) {
   loginCredsUnlocked = false
   webCredsUnlocked = false
   personalInfoUnlocked = false
+  walletsTab.lock()
   await loadAuthStatus()
   await loadAllCredentials()
 
