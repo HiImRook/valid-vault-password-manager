@@ -1,5 +1,5 @@
 const DB_NAME = 'ValidVault'
-const DB_VERSION = 4
+const DB_VERSION = 5
 
 let db = null
 
@@ -13,6 +13,10 @@ async function openDB() {
     
     request.onsuccess = () => {
       db = request.result
+      db.onversionchange = () => {
+        db.close()
+        db = null
+      }
       resolve(db)
     }
     
@@ -41,6 +45,10 @@ async function openDB() {
 
       if (!database.objectStoreNames.contains('vaultMigration')) {
         database.createObjectStore('vaultMigration', { keyPath: 'id' })
+      }
+
+      if (!database.objectStoreNames.contains('bookmarks')) {
+        database.createObjectStore('bookmarks', { keyPath: 'id' })
       }
     }
   })
@@ -131,9 +139,17 @@ async function clearVaultMigrationJournal() {
   return remove('vaultMigration', 'single-blob-migration')
 }
 
+async function getBookmarksVault() {
+  return get('bookmarks', 'vault')
+}
+
+async function setBookmarksVault(vaultData) {
+  return put('bookmarks', { id: 'vault', ...vaultData })
+}
+
 async function clearAll() {
   const database = await openDB()
-  const stores = ['auth', 'passwords', 'wallets', 'webcreds', 'personalInfo', 'vaultMigration']
+  const stores = ['auth', 'passwords', 'wallets', 'webcreds', 'personalInfo', 'vaultMigration', 'bookmarks']
   
   for (const storeName of stores) {
     const tx = database.transaction(storeName, 'readwrite')
@@ -160,5 +176,7 @@ export {
   getVaultMigrationJournal,
   setVaultMigrationJournal,
   clearVaultMigrationJournal,
+  getBookmarksVault,
+  setBookmarksVault,
   clearAll
 }

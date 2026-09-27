@@ -2,6 +2,7 @@ import * as auth from './auth.js'
 import * as passwords from './passwords.js'
 import * as webcreds from './webcreds.js'
 import * as personalinfo from './personalinfo.js'
+import * as bookmarks from './bookmarks.js'
 import * as session from './session.js'
 import * as store from './store.js'
 import * as pairing from './pairing.js'
@@ -1094,13 +1095,14 @@ const _btnExportVault = document.getElementById('btn-export-vault'); if (_btnExp
   const vaultData = await getPasswordVault()
   const webCredsData = await store.getWebCredsVault()
   const personalInfoData = await store.getPersonalInfo()
-  if (!vaultData && !webCredsData && !personalInfoData) { syncMsg('Nothing to export yet', 'error'); return }
+  const bookmarksData = await store.getBookmarksVault()
+  if (!vaultData && !webCredsData && !personalInfoData && !bookmarksData) { syncMsg('Nothing to export yet', 'error'); return }
   let nickname = ''
   try { const a = await store.getAuth() || {}; nickname = (a.keyNickname || '').trim() } catch (e) {}
   
   const safeName = nickname ? '-' + nickname.replace(/[\\/:*?"<>|]+/g, '').replace(/\s+/g, '-') : ''
   const fname = 'valid-vault-backup' + safeName + '.vault'
-  if (downloadFile(fname, JSON.stringify({ format: 'valid-vault-vault', version: 1, vault: vaultData, webcreds: webCredsData, personalInfo: personalInfoData })))
+  if (downloadFile(fname, JSON.stringify({ format: 'valid-vault-vault', version: 1, vault: vaultData, webcreds: webCredsData, personalInfo: personalInfoData, bookmarks: bookmarksData })))
     syncMsg('Vault exported. It stays encrypted, useless without your master key.', 'success')
   else syncMsg('Could not save the file', 'error')
 }
@@ -1181,7 +1183,7 @@ async function showImportKeyModal(fileObj) {
 
 const KEY_MISMATCH_MSG = 'This vault was made with a different master key. Import that master key first, then import the vault.'
 const LOCAL_MISMATCH_MSG = 'This browser\'s saved data uses a different master key than the one unlocked. Import the matching master key first.'
-const VAULT_STORES = ['passwords', 'webcreds', 'personalInfo', 'vaultMigration']
+const VAULT_STORES = ['passwords', 'webcreds', 'personalInfo', 'vaultMigration', 'bookmarks']
 
 function passwordMeetsRule(pw) {
   return !!pw && pw.length >= 12 && /[a-zA-Z]/.test(pw) && /[0-9]/.test(pw) && /[^a-zA-Z0-9]/.test(pw)
@@ -1211,13 +1213,15 @@ async function personalInfoOpensWith(record, key) {
 async function localVaultOpensWith(key) {
   if (!(await rowOpensWith(await getPasswordVault(), key))) return false
   if (!(await webCredsOpenWith(await store.getWebCredsVault(), key))) return false
-  return personalInfoOpensWith(await store.getPersonalInfo(), key)
+  if (!(await personalInfoOpensWith(await store.getPersonalInfo(), key))) return false
+  return bookmarks.rowOpensWith(await store.getBookmarksVault(), key)
 }
 
 async function importVaultBundle(bundle, mk) {
   if (!(await rowOpensWith(bundle.vault, mk))) throw new Error(KEY_MISMATCH_MSG)
   if (!(await webCredsOpenWith(bundle.webcreds, mk))) throw new Error(KEY_MISMATCH_MSG)
   if (!(await personalInfoOpensWith(bundle.personalInfo, mk))) throw new Error(KEY_MISMATCH_MSG)
+  if (!(await bookmarks.rowOpensWith(bundle.bookmarks, mk))) throw new Error(KEY_MISMATCH_MSG)
   if (!(await localVaultOpensWith(mk))) throw new Error(LOCAL_MISMATCH_MSG)
 
   if (bundle.vault) {
@@ -1245,6 +1249,9 @@ async function importVaultBundle(bundle, mk) {
   if (bundle.personalInfo) {
     const localPi = await store.getPersonalInfo()
     await store.setPersonalInfo(personalinfo.mergeProfiles(localPi, bundle.personalInfo))
+  }
+  if (bundle.bookmarks) {
+    await bookmarks.importRow(bundle.bookmarks, mk)
   }
 }
 

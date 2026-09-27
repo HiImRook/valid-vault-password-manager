@@ -1,18 +1,29 @@
 import { saveCredential as passwordsSaveCredential, getCredentials as passwordsGetCredentials } from './passwords.js'
 
-async function getAuthRecord() {
+function readRawRecord(storeName, key) {
   return new Promise(function (resolve) {
     const req = indexedDB.open('ValidVault')
     req.onsuccess = function () {
+      const db = req.result
+      db.onversionchange = function () { db.close() }
       try {
-        const tx = req.result.transaction('auth', 'readonly')
-        const get = tx.objectStore('auth').get('primary')
+        const tx = db.transaction(storeName, 'readonly')
+        const get = tx.objectStore(storeName).get(key)
         get.onsuccess = function () { resolve(get.result || null) }
         get.onerror = function () { resolve(null) }
-      } catch (e) { resolve(null) }
+        tx.oncomplete = function () { db.close() }
+        tx.onabort = function () { db.close() }
+      } catch (e) {
+        db.close()
+        resolve(null)
+      }
     }
     req.onerror = function () { resolve(null) }
   })
+}
+
+async function getAuthRecord() {
+  return readRawRecord('auth', 'primary')
 }
 
 async function getSessionKeyBytes() {
@@ -31,19 +42,7 @@ async function decryptField(field, key) {
 }
 
 async function getPersonalInfoRecord() {
-  return new Promise(function (resolve) {
-    const req = indexedDB.open('ValidVault')
-    req.onsuccess = function () {
-      const db = req.result
-      try {
-        const tx = db.transaction('personalInfo', 'readonly')
-        const get = tx.objectStore('personalInfo').get('profile')
-        get.onsuccess = function () { resolve(get.result || null) }
-        get.onerror = function () { resolve(null) }
-      } catch (e) { resolve(null) }
-    }
-    req.onerror = function () { resolve(null) }
-  })
+  return readRawRecord('personalInfo', 'profile')
 }
 
 async function loadDecryptedProfile() {
@@ -174,7 +173,9 @@ async function openUnlockWindow(sender) {
     }
   }
   let site = ''
-  try { site = new URL(sender.url).hostname } catch (e) {}
+  if (sender.url && !sender.url.startsWith(chrome.runtime.getURL(''))) {
+    try { site = new URL(sender.url).hostname } catch (e) {}
+  }
   const options = {
     url: 'unlock.html?site=' + encodeURIComponent(site),
     type: 'popup',

@@ -6,8 +6,12 @@
   "permissions": [
     "storage",
     "activeTab",
-    "alarms"
+    "alarms",
+    "sidePanel"
   ],
+  "side_panel": {
+    "default_path": "bookmarks.html"
+  },
   "action": {
     "default_popup": "popup.html",
     "default_icon": {

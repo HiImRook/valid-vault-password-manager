@@ -1,12 +1,17 @@
 import * as auth from './auth.js'
-import * as passwords from './passwords.js'
 import * as session from './session.js'
-import * as store from './store.js'
+import * as bookmarks from './bookmarks.js'
+import { masterKeyToCryptoKey } from './crypto.js'
+
+const MASTER_KEY_LENGTH = 32
+const SIDE_WINDOW_WIDTH = 380
+const SIDE_WINDOW_HEIGHT = 720
+const WEBSITE_URL = 'https://hiimrook.github.io/valid-vault-password-manager/'
 
 const viewSetup = document.getElementById('view-setup')
 const viewLocked = document.getElementById('view-locked')
 const viewUnlocked = document.getElementById('view-unlocked')
-const viewAdd = document.getElementById('view-add')
+const viewSoftlock = document.getElementById('view-softlock')
 
 const setupStateFp = document.getElementById('setup-state-fp')
 const btnSetupFp = document.getElementById('btn-setup-fp')
@@ -23,7 +28,6 @@ const btnPassword = document.getElementById('btn-password')
 const inputPassword = document.getElementById('input-password')
 const msgLocked = document.getElementById('msg-locked')
 
-const viewSoftlock = document.getElementById('view-softlock')
 const inputSoftpin = document.getElementById('input-softpin')
 const btnSoftpin = document.getElementById('btn-softpin')
 const btnSoftFingerprint = document.getElementById('btn-soft-fingerprint')
@@ -33,31 +37,26 @@ const msgSoftlock = document.getElementById('msg-softlock')
 
 const btnLock = document.getElementById('btn-lock')
 const btnExpand = document.getElementById('btn-expand')
-const btnAdd = document.getElementById('btn-add')
-const btnSave = document.getElementById('btn-save')
-const btnCancel = document.getElementById('btn-cancel')
-const currentDomain = document.getElementById('current-domain')
-const credentialsList = document.getElementById('credentials-list')
-const addDomain = document.getElementById('add-domain')
-const addUsername = document.getElementById('add-username')
-const addPassword = document.getElementById('add-password')
-const addLoginType = document.getElementById('add-login-type')
-
-const LOGIN_TYPE_ICON = { email: '📧', phone: '📱', username: '👤' }
-// Best guess to preselect the type dropdown from what was just typed - the
-// person can always override it before saving.
-function guessLoginType(identifier) {
-  const v = (identifier || '').trim()
-  if (!v) return 'username'
-  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) return 'email'
-  if (v.replace(/\D/g, '').length >= 7 && /^[+()\-.\s\d]+$/.test(v)) return 'phone'
-  return 'username'
-}
+const menuDropdown = document.getElementById('menu-dropdown')
+const menuBookmarks = document.getElementById('menu-bookmarks')
+const menuSettings = document.getElementById('menu-settings')
+const menuWebsite = document.getElementById('menu-website')
 const msgUnlocked = document.getElementById('msg-unlocked')
-const msgAdd = document.getElementById('msg-add')
 
-let activeDomain = ''
-let setupState = { hasFp: false, hasPin: false, hasPw: false }
+const btnBookmark = document.getElementById('btn-bookmark')
+const unlockedInfo = document.getElementById('unlocked-info')
+const bookmarkAdd = document.getElementById('bookmark-add')
+const bookmarkName = document.getElementById('bookmark-name')
+const bookmarkAddUrl = document.getElementById('bookmark-add-url')
+const btnBookmarkSave = document.getElementById('btn-bookmark-save')
+const btnBookmarkAddCancel = document.getElementById('btn-bookmark-add-cancel')
+const bookmarkRemove = document.getElementById('bookmark-remove')
+const bookmarkRemoveName = document.getElementById('bookmark-remove-name')
+const btnBookmarkRemove = document.getElementById('btn-bookmark-remove')
+const btnBookmarkRemoveCancel = document.getElementById('btn-bookmark-remove-cancel')
+
+const setupState = { hasFp: false, hasPin: false, hasPw: false }
+const pageState = { tabUrl: '', tabTitle: '', windowId: null, bookmark: null, busy: false }
 let masterKey = null
 
 async function persistKey() {
@@ -65,21 +64,27 @@ async function persistKey() {
     const mk = session.getMasterKey()
     if (!mk) return
     const bytes = new Uint8Array(await crypto.subtle.exportKey('raw', mk))
-    // Delegate the actual write to the background service worker rather than writing
-    // from the popup directly. Popups are destroyed the instant they lose focus, and
-    // if the write is still in flight at that moment it can be silently lost. The
-    // background worker is a separate, longer-lived context, so once the message is
-    // sent, the write completes there regardless of how fast the popup closes.
     await chrome.runtime.sendMessage({ action: 'persistSessionKey', masterKeyBytes: Array.from(bytes) })
   } catch (e) {}
 }
 
+async function restoreSessionKey() {
+  try {
+    const stored = await chrome.storage.session.get('masterKeyBytes')
+    if (stored && stored.masterKeyBytes && stored.masterKeyBytes.length === MASTER_KEY_LENGTH) {
+      session.setMasterKey(await masterKeyToCryptoKey(new Uint8Array(stored.masterKeyBytes)))
+      try { chrome.runtime.sendMessage({ action: 'activity' }) } catch (e) {}
+      return true
+    }
+  } catch (e) {}
+  return false
+}
+
 function showView(view) {
   viewSetup.classList.add('hidden')
-  if (viewSoftlock) viewSoftlock.classList.add('hidden')
+  viewSoftlock.classList.add('hidden')
   viewLocked.classList.add('hidden')
   viewUnlocked.classList.add('hidden')
-  viewAdd.classList.add('hidden')
   view.classList.remove('hidden')
 }
 
@@ -105,7 +110,6 @@ function updateSetupStatus() {
   if (setupStateFp) setupStateFp.textContent = setupState.hasFp ? 'Enrolled' : ''
   setEnrollButton(btnSetupFp, setupState.hasFp)
   setEnrollButton(btnSetupPw, setupState.hasPw)
-  // Finish is available once at least one HARD unlock (fingerprint or password) exists.
   const canFinish = setupState.hasFp || setupState.hasPw
   btnSetupDone.disabled = !canFinish
   btnSetupDone.style.opacity = canFinish ? '1' : '0.5'
@@ -118,19 +122,69 @@ async function updateStatus() {
   return status
 }
 
-async function init() {
-  const status = await updateStatus()
+async function loadActiveTab() {
+  try {
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true })
+    const tab = tabs[0]
+    if (!tab) return
+    pageState.tabUrl = tab.url || ''
+    pageState.tabTitle = tab.title || ''
+    pageState.windowId = typeof tab.windowId === 'number' ? tab.windowId : null
+  } catch (e) {}
+}
 
-  // seed setup state from real enrollment so Enroll/Re-enroll shows correctly
+function showBookmarkPanel(panel) {
+  unlockedInfo.classList.add('hidden')
+  bookmarkAdd.classList.add('hidden')
+  bookmarkRemove.classList.add('hidden')
+  panel.classList.remove('hidden')
+}
+
+function renderBookmarkIcon() {
+  if (!session.hasMasterKey() || !bookmarks.isBookmarkable(pageState.tabUrl)) {
+    btnBookmark.classList.add('hidden')
+    return
+  }
+  btnBookmark.classList.remove('hidden')
+  if (pageState.bookmark) {
+    btnBookmark.classList.add('saved')
+    btnBookmark.title = 'Bookmarked. Click to remove'
+  } else {
+    btnBookmark.classList.remove('saved')
+    btnBookmark.title = 'Bookmark this page'
+  }
+}
+
+async function refreshBookmarkState() {
+  pageState.bookmark = null
+  const mk = session.getMasterKey()
+  if (mk && bookmarks.isBookmarkable(pageState.tabUrl)) {
+    try { pageState.bookmark = await bookmarks.findByUrl(pageState.tabUrl, mk) } catch (e) { pageState.bookmark = null }
+  }
+  renderBookmarkIcon()
+}
+
+function notifyBookmarksChanged() {
+  try { chrome.runtime.sendMessage({ action: 'bookmarksChanged' }).catch(() => {}) } catch (e) {}
+}
+
+async function enterUnlocked() {
+  showView(viewUnlocked)
+  showBookmarkPanel(unlockedInfo)
+  await refreshBookmarkState()
+}
+
+async function init() {
+  const tabLoad = loadActiveTab()
+  const status = await updateStatus()
   setupState.hasFp = !!status.hasFingerprint
   setupState.hasPin = !!status.hasPIN
   setupState.hasPw = !!status.hasPassword
+  await tabLoad
 
-  if (session.hasMasterKey()) {
-    showView(viewUnlocked)
-    await loadCurrentSite()
+  if (session.hasMasterKey() || await restoreSessionKey()) {
+    await enterUnlocked()
   } else if (await session.isSoftLocked()) {
-    // idle soft-lock: PIN can resume, fingerprint/password also work
     showView(viewSoftlock)
   } else if (status.hasFingerprint || status.hasPIN || status.hasPassword) {
     showView(viewLocked)
@@ -140,67 +194,11 @@ async function init() {
   }
 }
 
-async function getCurrentTab() {
-  const tabs = await chrome.tabs.query({ active: true, currentWindow: true })
-  if (tabs[0] && tabs[0].url) {
-    try {
-      const url = new URL(tabs[0].url)
-      return url.hostname
-    } catch (e) {
-      return ''
-    }
-  }
-  return ''
-}
-
-async function loadCurrentSite() {
-  activeDomain = await getCurrentTab()
-  currentDomain.textContent = activeDomain || 'No site detected'
-  
-  if (!activeDomain) {
-    credentialsList.innerHTML = ''
-    return
-  }
-  
-  const mk = session.getMasterKey()
-  const result = await passwords.getCredentials(activeDomain, mk)
-  
-  if (result.success && result.credentials.length > 0) {
-    credentialsList.innerHTML = ''
-    for (const cred of result.credentials) {
-      const item = document.createElement('div')
-      item.className = 'credential-item'
-      const typeIcon = LOGIN_TYPE_ICON[cred.loginType || 'username'] || LOGIN_TYPE_ICON.username
-      item.innerHTML =
-        '<div class="credential-domain">' + typeIcon + ' ' + escapeHtml(cred.username) + '</div>' +
-        '<div class="credential-user">••••••••</div>' +
-        '<div class="credential-actions">' +
-        '<button class="small secondary btn-show">👁️ Show</button>' +
-        '</div>'
-      item.dataset.password = cred.password
-      
-      item.querySelector('.btn-show').onclick = (e) => {
-        const userEl = item.querySelector('.credential-user')
-        if (e.target.textContent.includes('Show')) {
-          userEl.textContent = cred.password
-          e.target.textContent = '👁️ Hide'
-        } else {
-          userEl.textContent = '••••••••'
-          e.target.textContent = '👁️ Show'
-        }
-      }
-      
-      credentialsList.appendChild(item)
-    }
-  } else {
-    credentialsList.innerHTML = '<div class="msg">No credentials for this site</div>'
-  }
-}
-
-function escapeHtml(str) {
-  const div = document.createElement('div')
-  div.textContent = str
-  return div.innerHTML
+async function completeUnlock(key) {
+  session.setMasterKey(key)
+  await persistKey()
+  await updateStatus()
+  await enterUnlocked()
 }
 
 btnSetupFp.onclick = async () => {
@@ -250,8 +248,7 @@ btnSetupDone.onclick = async () => {
   }
   await updateStatus()
   if (session.hasMasterKey()) {
-    showView(viewUnlocked)
-    await loadCurrentSite()
+    await enterUnlocked()
   } else {
     showView(viewLocked)
   }
@@ -260,42 +257,27 @@ btnSetupDone.onclick = async () => {
 btnFingerprint.onclick = async () => {
   const result = await auth.authenticateFingerprint()
   if (result.success) {
-    session.setMasterKey(result.masterKey)
-    await persistKey()
-    await updateStatus()
-    showView(viewUnlocked)
-    await loadCurrentSite()
+    await completeUnlock(result.masterKey)
   } else {
     showMsg(msgLocked, result.error, 'error')
   }
 }
 
 btnPassword.onclick = async () => {
-  const pw = inputPassword.value
-  const result = await auth.authenticatePassword(pw)
+  const result = await auth.authenticatePassword(inputPassword.value)
   if (result.success) {
-    session.setMasterKey(result.masterKey)
-    await persistKey()
     inputPassword.value = ''
-    await updateStatus()
-    showView(viewUnlocked)
-    await loadCurrentSite()
+    await completeUnlock(result.masterKey)
   } else {
     showMsg(msgLocked, result.error, 'error')
   }
 }
 
-// ---- Soft-lock (idle) resume handlers ----
 btnSoftpin.onclick = async () => {
-  const pin = inputSoftpin.value
-  const result = await auth.authenticatePIN(pin)
+  const result = await auth.authenticatePIN(inputSoftpin.value)
   if (result.success) {
-    session.setMasterKey(result.masterKey)
     inputSoftpin.value = ''
-    await persistKey()
-    await updateStatus()
-    showView(viewUnlocked)
-    await loadCurrentSite()
+    await completeUnlock(result.masterKey)
   } else {
     showMsg(msgSoftlock, result.error || 'Incorrect PIN', 'error')
   }
@@ -304,63 +286,113 @@ btnSoftpin.onclick = async () => {
 btnSoftFingerprint.onclick = async () => {
   const result = await auth.authenticateFingerprint()
   if (result.success) {
-    session.setMasterKey(result.masterKey)
-    await persistKey()
-    await updateStatus()
-    showView(viewUnlocked)
-    await loadCurrentSite()
+    await completeUnlock(result.masterKey)
   } else {
     showMsg(msgSoftlock, result.error, 'error')
   }
 }
 
 btnSoftPassword.onclick = async () => {
-  const pw = inputSoftpassword.value
-  const result = await auth.authenticatePassword(pw)
+  const result = await auth.authenticatePassword(inputSoftpassword.value)
   if (result.success) {
-    session.setMasterKey(result.masterKey)
-    await persistKey()
     inputSoftpassword.value = ''
-    await updateStatus()
-    showView(viewUnlocked)
-    await loadCurrentSite()
+    await completeUnlock(result.masterKey)
   } else {
     showMsg(msgSoftlock, result.error, 'error')
   }
 }
 
 btnLock.onclick = async () => {
-  // Lock icon soft-locks: PIN can resume, fingerprint/password also work.
-  // Only soft-lock if a PIN exists to resume with; otherwise hard-lock.
-  const status = await auth.initAuth()
-  if (status.hasPIN) {
-    await session.softLock()
-    try { chrome.storage.session.remove('masterKeyBytes') } catch (e) {}
-    credentialsList.innerHTML = ''
-    showView(viewSoftlock)
-  } else {
-    await session.lockAll()
-    try { chrome.storage.session.remove('masterKeyBytes') } catch (e) {}
-    credentialsList.innerHTML = ''
-    showView(viewLocked)
-  }
+  await session.lockAll()
+  try { await chrome.storage.session.remove(['masterKeyBytes', 'softLocked']) } catch (e) {}
+  pageState.bookmark = null
+  renderBookmarkIcon()
+  menuDropdown.classList.add('hidden')
+  await updateStatus()
+  showView(viewLocked)
 }
 
-const menuDropdown = document.getElementById('menu-dropdown')
-const menuSettings = document.getElementById('menu-settings')
+btnBookmark.onclick = () => {
+  if (pageState.busy) return
+  if (pageState.bookmark) {
+    bookmarkRemoveName.textContent = pageState.bookmark.title
+    showBookmarkPanel(bookmarkRemove)
+    return
+  }
+  bookmarkName.value = pageState.tabTitle || ''
+  bookmarkAddUrl.textContent = bookmarks.normalizeUrl(pageState.tabUrl)
+  showBookmarkPanel(bookmarkAdd)
+  bookmarkName.focus()
+  bookmarkName.select()
+}
+
+btnBookmarkAddCancel.onclick = () => showBookmarkPanel(unlockedInfo)
+btnBookmarkRemoveCancel.onclick = () => showBookmarkPanel(unlockedInfo)
+
+btnBookmarkSave.onclick = async () => {
+  const mk = session.getMasterKey()
+  if (!mk || pageState.busy) return
+  pageState.busy = true
+  try {
+    const item = await bookmarks.saveBookmark(pageState.tabUrl, bookmarkName.value, mk)
+    pageState.bookmark = item
+    renderBookmarkIcon()
+    showBookmarkPanel(unlockedInfo)
+    showMsg(msgUnlocked, 'Bookmarked: ' + item.title, 'success')
+    notifyBookmarksChanged()
+  } catch (e) {
+    showMsg(msgUnlocked, 'Could not save bookmark', 'error')
+  }
+  pageState.busy = false
+}
+
+btnBookmarkRemove.onclick = async () => {
+  const mk = session.getMasterKey()
+  if (!mk || !pageState.bookmark || pageState.busy) return
+  pageState.busy = true
+  const title = pageState.bookmark.title
+  try {
+    await bookmarks.removeBookmark(pageState.bookmark.id, mk)
+    pageState.bookmark = null
+    renderBookmarkIcon()
+    showBookmarkPanel(unlockedInfo)
+    showMsg(msgUnlocked, 'Removed: ' + title, 'success')
+    notifyBookmarksChanged()
+  } catch (e) {
+    showMsg(msgUnlocked, 'Could not remove bookmark', 'error')
+  }
+  pageState.busy = false
+}
+
+bookmarkName.onkeydown = (e) => { if (e.key === 'Enter') btnBookmarkSave.click() }
 
 btnExpand.onclick = (e) => {
   e.stopPropagation()
   menuDropdown.classList.toggle('hidden')
 }
 
+function openBookmarksWindow() {
+  chrome.windows.create({ url: 'bookmarks.html', type: 'popup', width: SIDE_WINDOW_WIDTH, height: SIDE_WINDOW_HEIGHT })
+    .catch(() => {})
+    .finally(() => window.close())
+}
+
+menuBookmarks.onclick = () => {
+  if (chrome.sidePanel && chrome.sidePanel.open && pageState.windowId !== null) {
+    chrome.sidePanel.open({ windowId: pageState.windowId })
+      .then(() => window.close())
+      .catch(() => openBookmarksWindow())
+    return
+  }
+  openBookmarksWindow()
+}
+
 menuSettings.onclick = () => {
   chrome.tabs.create({ url: 'manage.html' })
 }
 
-const menuWebsite = document.getElementById('menu-website')
 menuWebsite.onclick = () => {
-  chrome.tabs.create({ url: 'https://hiimrook.github.io/valid-vault-password-manager/' })
+  chrome.tabs.create({ url: WEBSITE_URL })
 }
 
 document.addEventListener('click', (e) => {
@@ -369,68 +401,20 @@ document.addEventListener('click', (e) => {
   }
 })
 
-if (btnAdd) btnAdd.onclick = async () => {
-  addDomain.value = activeDomain
-  addUsername.value = ''
-  addPassword.value = ''
-  if (addLoginType) addLoginType.value = 'username'
-  showView(viewAdd)
-}
-
-if (addUsername && addLoginType) {
-  addUsername.addEventListener('input', () => {
-    addLoginType.value = guessLoginType(addUsername.value)
-  })
-}
-
-if (btnCancel) btnCancel.onclick = () => {
-  showView(viewUnlocked)
-}
-
-if (btnSave) btnSave.onclick = async () => {
-  const domain = addDomain.value
-  const username = addUsername.value
-  const password = addPassword.value
-  const mk = session.getMasterKey()
-  
-  if (!domain || !username || !password) {
-    showMsg(msgAdd, 'All fields required', 'error')
-    return
-  }
-  
-  const loginType = addLoginType ? addLoginType.value : undefined
-  const result = await passwords.saveCredential(domain, username, password, mk, undefined, loginType)
-  if (result.success) {
-    showView(viewUnlocked)
-    await loadCurrentSite()
-    showMsg(msgUnlocked, 'Saved', 'success')
-  } else {
-    showMsg(msgAdd, result.error, 'error')
-  }
-}
-
 inputPassword.onkeydown = (e) => { if (e.key === 'Enter') btnPassword.click() }
 inputSoftpin.onkeydown = (e) => { if (e.key === 'Enter') btnSoftpin.click() }
 inputSoftpassword.onkeydown = (e) => { if (e.key === 'Enter') btnSoftPassword.click() }
 setupPassword.onkeydown = (e) => { if (e.key === 'Enter') btnSetupPw.click() }
 
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request.action === 'getCredentialsForDomain') {
-    const masterKey = session.getMasterKey()
-    if (!masterKey) {
-      sendResponse({ success: false, credentials: [] })
-      return
-    }
-    
-    passwords.getCredentials(request.domain, masterKey).then(result => {
-      sendResponse(result)
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'session' || !changes.masterKeyBytes) return
+  if (!changes.masterKeyBytes.newValue && session.hasMasterKey()) {
+    session.lockAll().then(() => {
+      pageState.bookmark = null
+      renderBookmarkIcon()
+      showView(viewLocked)
     })
-    return true
-  }
-  
-  if (request.action === 'openManage') {
-    chrome.tabs.create({ url: 'manage.html' })
-    sendResponse({ success: true })
   }
 })
+
 init()

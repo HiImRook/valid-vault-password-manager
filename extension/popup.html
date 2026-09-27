@@ -33,6 +33,12 @@
     .header-icon:hover { background: var(--green-faint); }
     .header-icon.lock { color: var(--green); }
     .header-icon.expand { color: var(--green); }
+    .header-left { display: flex; gap: 2px; align-items: center; }
+    .header-icon.bookmark svg { width: 20px; height: 20px; }
+    .header-icon.bookmark path { stroke: var(--green); stroke-width: 2; stroke-linejoin: round; fill: none; }
+    .header-icon.bookmark.saved path { fill: var(--green); }
+    .bm-url { font-size: 11px; color: var(--text-dim); word-break: break-all; margin: 4px 0 8px; }
+    .bm-name { color: var(--green); word-break: break-word; }
     .ham { display: inline-block; width: 20px; height: 2px; background: var(--green); position: relative; box-shadow: 0 6px 0 var(--green), 0 -6px 0 var(--green); }
     .wordmark {
       font-family: 'Orbitron', sans-serif;
@@ -81,16 +87,11 @@
     .status-bar { display: flex; gap: 6px; margin-bottom: 14px; justify-content: center; }
     .status { padding: 4px 12px; border-radius: 4px; font-size: 10px; letter-spacing: 1px; background: var(--panel); color: var(--text-dim); border: 1px solid var(--green-faint); }
     .status.active { background: var(--green); color: #05140a; border-color: var(--green); font-weight: 700; }
-    .credential-item { background: var(--panel); border: 1px solid var(--green-faint); border-radius: 6px; padding: 11px; margin: 6px 0; }
-    .credential-domain { color: var(--green); font-size: 13px; font-weight: 700; }
-    .credential-user { color: var(--text-dim); font-size: 12px; margin-top: 2px; }
-    .credential-actions { display: flex; gap: 6px; margin-top: 8px; }
     .hidden { display: none !important; }
     .msg { font-size: 11px; color: var(--text-dim); text-align: center; padding: 8px; min-height: 8px; }
     .msg.error { color: var(--danger); }
     .msg.success { color: var(--green); }
     p { font-size: 12px; color: var(--text-dim); line-height: 1.5; margin-bottom: 10px; }
-    #current-domain { color: var(--green); font-size: 13px; margin-bottom: 10px; word-break: break-all; }
   </style>
 </head>
 <body>
@@ -156,11 +157,15 @@
 
     <div id="view-unlocked" class="hidden">
       <div class="header">
-        <div class="header-icon lock" id="btn-lock" title="Lock">&#128275;</div>
+        <div class="header-left">
+          <div class="header-icon lock" id="btn-lock" title="Lock">&#128275;</div>
+          <div class="header-icon bookmark hidden" id="btn-bookmark" title="Bookmark this page"><svg viewBox="0 0 24 24"><path d="M6 3h12v18l-6-5-6 5z"/></svg></div>
+        </div>
         <div class="wordmark">VALID VAULT</div>
         <div class="menu-wrap">
           <div class="header-icon expand" id="btn-expand" title="Menu"><span class="ham"></span></div>
           <div class="menu-dropdown hidden" id="menu-dropdown">
+            <div class="menu-item" id="menu-bookmarks">Bookmarks</div>
             <div class="menu-item" id="menu-settings">Settings Menu</div>
             <div class="menu-item" id="menu-website">Website</div>
           </div>
@@ -169,29 +174,27 @@
       <div class="status-bar">
         <span class="status active" id="status-session">Session</span>
       </div>
-      <div class="section">
+      <div class="section" id="unlocked-info">
         <p style="color:var(--text-dim);font-size:13px;line-height:1.5;">Vault unlocked. Autofill is active on websites. Open the menu to manage credentials, sync, and settings.</p>
       </div>
-      <div id="msg-unlocked" class="msg"></div>
-    </div>
-
-    <div id="view-add" class="hidden">
-      <div class="wordmark solo">Add Credential</div>
-      <div class="section">
-        <input type="text" id="add-domain" placeholder="Domain">
-        <input type="text" id="add-username" placeholder="Username">
-        <input type="password" id="add-password" placeholder="Password">
-        <select id="add-login-type" style="margin-top:8px;width:100%;">
-          <option value="username">Type: Username</option>
-          <option value="email">Type: Email</option>
-          <option value="phone">Type: Phone</option>
-        </select>
-        <div class="row" style="margin-top:8px;">
-          <button id="btn-save">Save</button>
-          <button class="secondary" id="btn-cancel">Cancel</button>
+      <div class="section hidden" id="bookmark-add">
+        <div class="section-title">Add Bookmark</div>
+        <input type="text" id="bookmark-name" placeholder="Name">
+        <div class="bm-url" id="bookmark-add-url"></div>
+        <div class="row">
+          <button id="btn-bookmark-save">Save</button>
+          <button class="secondary" id="btn-bookmark-add-cancel">Cancel</button>
         </div>
       </div>
-      <div id="msg-add" class="msg"></div>
+      <div class="section hidden" id="bookmark-remove">
+        <div class="section-title">Remove Bookmark</div>
+        <p>Remove <span class="bm-name" id="bookmark-remove-name"></span> from your bookmarks?</p>
+        <div class="row">
+          <button class="danger" id="btn-bookmark-remove">Remove</button>
+          <button class="secondary" id="btn-bookmark-remove-cancel">Cancel</button>
+        </div>
+      </div>
+      <div id="msg-unlocked" class="msg"></div>
     </div>
 
   </div>
