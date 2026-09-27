@@ -94,8 +94,8 @@ function clearHideTimer() {
 
 function armHideTimer() {
   clearHideTimer()
-  if (state.revealed.size === 0 && !(state.editor && !state.editor.covered)) return
-  state.hideTimer = setTimeout(() => hideAll(), state.hideSeconds * 1000)
+  if (!state.unlocked) return
+  state.hideTimer = setTimeout(() => closeSection(), state.hideSeconds * 1000)
 }
 
 async function loadHideSeconds() {
@@ -106,7 +106,6 @@ async function loadHideSeconds() {
 }
 
 function hideAll() {
-  clearHideTimer()
   closeSuggest()
   const hadVisible = state.revealed.size > 0 || (state.editor && !state.editor.covered)
   state.revealed.clear()
@@ -115,6 +114,21 @@ function hideAll() {
     state.editor.covered = true
   }
   if (hadVisible) render()
+}
+
+function closeSection() {
+  clearHideTimer()
+  closeSuggest()
+  if (!state.unlocked) return
+  if (state.editor) {
+    captureEditor()
+    state.editor.covered = true
+  }
+  state.unlocked = false
+  state.list = []
+  state.revealed.clear()
+  state.confirmingDelete = null
+  render()
 }
 
 function lock() {
@@ -654,6 +668,7 @@ function renderGate() {
     }
     state.unlocked = true
     await reload()
+    armHideTimer()
   }))
   state.els.content.appendChild(gate)
 }
@@ -680,7 +695,7 @@ function render() {
 }
 
 function onTabHidden() {
-  hideAll()
+  closeSection()
 }
 
 async function onTabShown() {
@@ -706,7 +721,9 @@ function init(deps) {
     await reload()
   }
   window.addEventListener('blur', () => hideAll())
-  document.addEventListener('visibilitychange', () => { if (document.hidden) hideAll() })
+  document.addEventListener('visibilitychange', () => { if (document.hidden) closeSection() })
+  state.els.content.addEventListener('click', armHideTimer, true)
+  state.els.content.addEventListener('keydown', armHideTimer, true)
   window.addEventListener('scroll', () => closeSuggest(), true)
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area === 'session' && changes.masterKeyBytes && !changes.masterKeyBytes.newValue) lock()
