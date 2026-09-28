@@ -5,6 +5,32 @@ All notable changes to Local Vault will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.2] - 2026-09-28
+
+This release adds a password generator to the extension. New password and change password fields get their own V that creates a strong random password and fills both boxes, and a changed password keeps the old one on hand in case the site never accepted the change. It also polishes Settings, the Manage credential list, and the popup. Extension only; the phone app receives the generator in the v0.8.x de-drift.
+
+### Added
+- **Password generator.** New password and change password fields get an inverted V (black circle, green V). Clicking it generates a password and fills both the new and confirm boxes, which stay masked. A small note explains what happened and offers Generate a different one; it closes on its own after 5 seconds or on Escape so it never covers the form's buttons.
+- **Random and rule-aware.** Characters come from `crypto.getRandomValues` with rejection sampling, so every character is equally likely, and the result is shuffled with a Fisher-Yates pass. Every password includes an uppercase letter, a lowercase letter, a digit, and a symbol from `!@#$%^&*()-_=+[]{};:,.?/~`. Any `maxlength`, `minlength`, `pattern`, or `passwordrules` the site declares is followed, and a limit the site declares always wins.
+- **Password Generator settings.** A new Settings section sets the minimum (16 or 20, default 16) and maximum (24, 32, 48, or 64, default 24). Each maximum picks from its own range: minimum to 24, 25 to 32, 33 to 48, or 49 to 64.
+- **Change password forms.** The current password field keeps the normal V and fills the saved login, the new and confirm fields get the generator, and the save prompt offers to update the matching account.
+- **Previous password safety net.** Changing a saved password keeps the old one as a previous password, stored encrypted with the login inside the vault blob. The login picker shows it under a Previous passwords label with the date it was replaced, and picking it restores it, swapping it back with the new one. It is dropped only after the new password has been used 3 times and 14 days have passed, and counting a use does not change the login's edit time.
+- **Readable timeouts in Settings.** Auto-lock shows its value as hours, minutes, and seconds (`00h 05m 00s`), and QR stream timeout as minutes and seconds (`01m 00s`), updated as you type.
+
+### Changed
+- **Auto-lock limit raised from 1 hour to 2 hours** on the extension. The Crypto Wallets section follows the same timer, so it can stay open as long as the auto-lock setting allows.
+- **Popup border.** The popup has a green border on the sides and bottom with rounded bottom corners, drawn so the corners blend into the popup background at any display scaling.
+
+### Fixed
+- **Revealed passwords ran under the edit and delete buttons in Manage.** The password column had a fixed width. It now takes the room the row has, wraps inside its own column when needed, and keeps the buttons their full size, so passwords up to 64 characters read in full. Long usernames and emails wrap instead of being cut off. Misc Credentials uses the same fix.
+
+### Known Gaps
+- The phone app has no password generator yet and keeps its 1 hour auto-lock limit until the v0.8.x de-drift.
+- QR scanner reliability and the bookmarks QR share moved to v0.8.2, after the phone de-drift.
+
+### Notes
+- Verified with Playwright-in-Chromium tests: 43 generator checks covering field roles, both-box fill, masking, character classes, every length range over 60 generations each, site-declared limits, the change password save, and the previous password rule and restore; plus Settings readouts and limits, the Manage list with 24, 32, 48, and 64 character passwords at two window widths, and the popup at 125% display scaling.
+
 ## [0.7.1] - 2026-09-28
 
 This release closes the one place where the master key could travel unprotected. Share Master Key used to stream the raw key, so anyone who photographed the QR had the key. The key now only leaves a device wrapped under a passphrase and three security questions, and the receiving device must enter all of them before it can use it. It also fixes two locking bugs found after v0.7.0. Extension only; the phone learns the protected key format in the v0.8.x de-drift.

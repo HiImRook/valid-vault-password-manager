@@ -6,6 +6,10 @@ A local, encrypted, QR code portable password manager. No cloud, no accounts, no
 
 ---
 
+> ✅ **Password Generator - v0.7.2**
+>
+> New password and change password fields now get an inverted V that generates a strong random password and fills both the new and confirm boxes. It uses the browser's cryptographic random source, always mixes upper, lower, digits, and symbols, and follows any length or character rules the site declares. Length is set in Settings, from 16 up to 64 characters in four ranges. Changing a password keeps the old one as a labeled previous password with one-click restore, in case the site never accepted the change. Settings also shows timeouts as readable time, and the auto-lock limit is now 2 hours. See [CHANGELOG.md](CHANGELOG.md) for full details.
+
 > ✅ **Protected Master Key Transfer - v0.7.1**
 >
 > The master key no longer travels as a raw key. Share Master Key and Export Key now carry it wrapped under a passphrase and three security questions you pick, stretched with 1,000,000 PBKDF2 rounds, and the receiving device must enter all of them before it can use the key. A captured key QR or a stolen key file is useless without them. Sharing stays one click after a one-time setup, common passwords are refused, and every password prompt in Manage is now a masked Valid Vault dialog. Personal Info edits try fingerprint or device PIN first. Also fixes Crypto Wallets locking on tab switch and the auto-lock timer ignoring activity outside the Manage page. See [CHANGELOG.md](CHANGELOG.md) for full details.
@@ -16,7 +20,7 @@ A local, encrypted, QR code portable password manager. No cloud, no accounts, no
 
 > 🔧 **Phone app and QR transport: in active development**
 >
-> The phone app is being brought up to the extension's feature set (v0.8.x), and live QR transport is getting its next round of refinement (v0.7.x). Your data stays encrypted through all of it; this is feature work, and nothing about it changes how the vault is protected. Until it lands, Export Vault and Import Vault move the complete vault between browsers.
+> The phone app is being brought up to the extension's feature set (v0.8.x), and live QR scanning is getting its next round of refinement (v0.8.2). Your data stays encrypted through all of it; this is feature work, and nothing about it changes how the vault is protected. Until it lands, Export Vault and Import Vault move the complete vault between browsers.
 
 > ✅ **Extension Hotfix for v0.6.3 - v0.6.4**
 >
@@ -79,7 +83,7 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 
 **Unlock and Locking:**
 - Fingerprint, device PIN, and password all fully unlock the vault
-- Auto-lock inactivity timer in seconds, locks the vault and returns to the lock screen
+- Auto-lock inactivity timer in seconds, up to 2 hours on the extension, shown next to the setting as hours, minutes, and seconds; locks the vault and returns to the lock screen
 - Both surfaces show an inline unlock overlay on session timeout instead of a dead end
 - Website Credentials, Web Credentials, and Personal Info each require their own explicit re-unlock inside Manage; every unlock and Personal Info edit tries fingerprint or device PIN first, with the master password as the fallback in a masked dialog
 - Clicking a tagged field or a save prompt while locked opens a small Valid Vault unlock window with Windows Hello (fingerprint or device PIN) or password; the unlock runs in the extension's own origin, never in the visited page
@@ -90,6 +94,9 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 - Personal Info fields (name, phone, address) get a V tag; clicking it opens a picker with the saved value and fills only on click, including `<select>` and `<textarea>` fields (a state/country dropdown is matched by its actual option, never a blind value assignment)
 - Email fields are click-to-pick from a small on-field picker listing every saved, ranked email, never auto-filled silently
 - Login email/username and password fields get a V tag listing saved logins for the current site (and saved emails on email fields); injection only, no password reveal - that's the site's own UI if it has one
+- New password and change password fields get an inverted V that generates a random password and fills both the new and confirm boxes; the current password field on a change form keeps the normal V and fills the saved login
+- Generated passwords always include upper, lower, digit, and symbol, follow any `maxlength`, `minlength`, `pattern`, or `passwordrules` the site declares, and land in the length range chosen in Settings (minimum to 24, 25 to 32, 33 to 48, or 49 to 64)
+- Changing a password keeps the old one as a previous password, shown as a labeled second choice in the login picker with one-click restore; it is dropped only after the new password has been used 3 times and 14 days have passed
 - A save prompt shown while the vault is locked offers Unlock and Save, which opens the Valid Vault unlock window and saves once unlocked
 - A visible field tag marks anything Valid Vault has matched
 - Website Credentials reliably saves new logins from real signup flows, including submit-triggered navigation, cross-domain SSO/MFA redirects, and multi-form pages
@@ -104,7 +111,7 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 - Set once, reused after - the protection is set on the first key share or export, then Share Master Key and Export Key are one click; Change Key Passphrase replaces it
 - Common passwords are refused as a key passphrase, and the form recommends four or more random words
 - Logins, Web Credentials, and Personal Info all travel together through the same export/import/QR flow, merged by timestamp with tombstoned deletes
-- Bookmarks and Crypto Wallets travel inside the encrypted vault file (Export Vault / Import Vault) with the same tombstoned-delete merge; seed phrases are kept out of the live QR share, and a bookmarks QR share is planned for v0.7.x
+- Bookmarks and Crypto Wallets travel inside the encrypted vault file (Export Vault / Import Vault) with the same tombstoned-delete merge; seed phrases are kept out of the live QR share, and a bookmarks QR share is planned for v0.8.2
 - Syncing now requires both devices to already share the same master key; a mismatched key fails with a clear error instead of being silently reconciled
 - Importing a master key onto a browser whose vault uses a different key warns first, clears that vault on confirmation, and saves the imported key under the browser's unlock methods (extension; phone follows next release)
 - Raw key QR codes from older versions are refused; phone and extension key transfer over QR resumes when the phone learns the protected format in the phone de-drift, and the key file path works in the meantime
@@ -124,7 +131,7 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 - Android via Capacitor, with native plugins for biometric auth and file saving
 - Vendored, self-contained code only, no Google SDKs in the scan path
 
-## Current Status: v0.7.1 - Active Testing
+## Current Status: v0.7.2 - Active Testing
 
 **Completed:**
 * ✅ Master key wrap architecture, verify-by-unwrap, no stored hashes
@@ -145,10 +152,12 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 * ✅ Windows Hello unlock window for on-page unlocks; popup lock button fixed
 * ✅ Protected master key transfer: passphrase and three chosen security questions required on the receiving device for both the key QR and the key file
 * ✅ Masked Valid Vault dialogs for every password prompt in Manage, and fingerprint first for Personal Info edits
+* ✅ Password generator on new and change password fields, with length ranges set in Settings
+* ✅ Previous password safety net with one-click restore after a password change
 
 **In Development:**
 * 📋 Phone de-drift (v0.8.x): key import, whole-vault carry including bookmarks and wallets, and Personal Info on the phone
-* 📋 QR scanner reliability on real devices and a bookmarks QR share (v0.7.2)
+* 📋 QR scanner reliability on real devices and a bookmarks QR share (v0.8.2)
 * 📋 Custom div-based combobox and `contenteditable` field support
 * 📋 Continued field testing of sync, backup, and native file saving across Android versions
 * 📋 Per-method auth edit and delete on the phone Manage tab
@@ -259,6 +268,9 @@ The Website Credentials tree (meta plus every domain's credentials) is serialize
 
 **Safe Autofill Injection:**
 background.js holds the session key and does all decryption; content.js, running in the visited page's own origin, only ever receives the specific plaintext value it asked for (a name, a saved login) and never the master key itself. Unlocking from a locked page opens a small extension window, so Windows Hello and the password are handled in the extension's own origin, where the WebAuthn credential is bound.
+
+**Password Generator:**
+Passwords are drawn from `crypto.getRandomValues` with rejection sampling, so every character is equally likely, and shuffled with a Fisher-Yates pass after the required character classes are placed. Generation runs in the content script and needs no vault access; only saving the new login goes through background.js.
 
 **Protected Key Transport:**
 The master key is wrapped once under a passphrase and three chosen security answers (PBKDF2-SHA256, 1,000,000 iterations, AES-GCM), and that package is what the key QR and the key file carry. The package is saved on the device alongside a SHA-256 key identifier so it is reused only while it matches the current key. A receiving device verifies the answers by unwrapping, the same verify-by-unwrap rule as every other unlock, and keeps the package so it can share onward.

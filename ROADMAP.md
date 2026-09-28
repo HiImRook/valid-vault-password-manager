@@ -1,10 +1,21 @@
 # Valid Vault - Development Roadmap
 
-**Current Version:** v0.7.1 - **Status: Active Testing**
+**Current Version:** v0.7.2 - **Status: Active Testing**
 
 ---
 
 ## Version History (Completed)
+
+### v0.7.2 - Password Generator (Sep 2026)
+
+- ✅ Inverted V on new password and change password fields generates a random password and fills both the new and confirm boxes
+- ✅ Generated passwords always mix upper, lower, digits, and symbols, and follow any length, pattern, or password rules the site declares
+- ✅ Password Generator settings: minimum 16 or 20, maximum 24, 32, 48, or 64, each maximum with its own range (minimum to 24, 25 to 32, 33 to 48, 49 to 64)
+- ✅ Change password forms: the current password field fills the saved login, and the save prompt updates the right account
+- ✅ Previous password kept after a change, shown as a labeled second choice with one-click restore, dropped after 3 uses and 14 days
+- ✅ Settings shows auto-lock as hours, minutes, and seconds and QR stream timeout as minutes and seconds; auto-lock limit raised to 2 hours
+- ✅ Revealed passwords in Manage no longer run under the edit and delete buttons, up to 64 characters
+- ✅ Popup border on the sides and bottom with rounded bottom corners
 
 ### v0.7.1 - Protected Master Key Transfer (Sep 2026)
 
@@ -105,15 +116,9 @@
 
 ---
 
-## Upcoming After v0.7.1
+## Upcoming After v0.7.2
 
-### v0.7.2 - Scanner Reliability (Next)
-
-- QR scanner reliability on real devices and cameras, including scans that stall before completing
-- Bookmarks QR share
-- Unlock behavior quirks reported by community testing
-
-### v0.8.x - Phone De-Drift
+### v0.8.x - Phone De-Drift (Next)
 
 - Key import that survives lock and unlock with the same warning flow, working key file import, and visible scan results
 - The protected key format on the phone, so phone and extension key transfer over QR works again with the passphrase and questions
@@ -121,6 +126,12 @@
 - Personal Info tab on the phone
 
 This is feature work. The vault stays encrypted throughout, and nothing about it changes how data is protected.
+
+### v0.8.2 - Scanner Reliability
+
+- QR scanner reliability on real devices and cameras, including scans that stall before completing
+- Bookmarks QR share
+- Unlock behavior quirks reported by community testing
 
 ### Autofill Hardening
 
@@ -157,6 +168,8 @@ This is feature work. The vault stays encrypted throughout, and nothing about it
 ⚠️ **SSN and card storage deliberately deferred**, pending security work
 
 ⚠️ **Phone and extension key transfer over QR waits for the phone de-drift** - the extension now refuses unprotected key QRs, and the phone learns the protected format in v0.8.x; the key file path works between them in the meantime
+
+⚠️ **The password generator and the 2 hour auto-lock limit are extension-only for now** - the phone keeps its 1 hour limit until the v0.8.x de-drift
 
 ⚠️ **Crypto Wallets and bookmarks are extension-only for now** - the phone app receives them in the v0.8.x de-drift; both stay encrypted in the vault file in the meantime
 
