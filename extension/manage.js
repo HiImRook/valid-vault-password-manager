@@ -830,6 +830,9 @@ async function promptAuth() {
   return { success: false }
 }
 
+const aboutVersion = document.getElementById('about-version')
+if (aboutVersion) aboutVersion.textContent = 'v' + chrome.runtime.getManifest().version
+
 walletsTab.init({
   getKey: () => session.getMasterKey(),
   authenticate: async () => {
