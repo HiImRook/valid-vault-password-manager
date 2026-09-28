@@ -32,9 +32,9 @@
     .credential-item { display: flex; align-items: center; padding: 16px; border-bottom: 1px solid var(--green-faint); }
     .credential-item:last-child { border-bottom: none; }
     .credential-domain { color: var(--green); font-size: 14px; font-weight: 700; width: 200px; }
-    .credential-username { color: var(--text-dim); font-size: 13px; flex: 1; }
-    .credential-password { color: var(--text-dim); font-size: 13px; font-family: monospace; width: 150px; }
-    .credential-actions { display: flex; gap: 8px; }
+    .credential-username { color: var(--text-dim); font-size: 13px; flex: 1 1 0; min-width: 190px; overflow-wrap: anywhere; text-wrap: balance; }
+    .credential-password { color: var(--text-dim); font-size: 13px; font-family: monospace; flex: 0 1 auto; min-width: 150px; text-align: left; overflow-wrap: anywhere; text-wrap: balance; }
+    .credential-actions { display: flex; gap: 8px; flex-shrink: 0; }
     button { background: var(--green); color: #05140a; border: none; padding: 9px 16px; border-radius: 6px; cursor: pointer; font-family: inherit; font-size: 12px; font-weight: 700; letter-spacing: 0.5px; transition: background 0.15s, box-shadow 0.15s; }
     button:hover { background: #5aff80; box-shadow: 0 0 14px rgba(51,255,102,0.25); }
     button.secondary { background: transparent; color: var(--green); border: 1px solid var(--green-dim); font-weight: 400; }
@@ -51,6 +51,8 @@
     .setting-row { background: var(--bg-raise); border: 1px solid var(--green-faint); padding: 18px; margin-bottom: 12px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; }
     .setting-label { font-size: 14px; color: var(--text); }
     .setting-desc { font-size: 12px; color: var(--text-dim); margin-top: 4px; }
+    .time-input { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+    .time-readout { font-size: 13px; color: var(--green-dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
     .toggle { position: relative; width: 50px; height: 24px; background: var(--panel); border: 1px solid var(--green-faint); border-radius: 12px; cursor: pointer; }
     .toggle.active { background: var(--green); border-color: var(--green); }
     .toggle-knob { position: absolute; width: 16px; height: 16px; background: var(--text-dim); border-radius: 50%; top: 3px; left: 4px; transition: 0.2s; }
@@ -115,6 +117,8 @@
     .wv-dialog-input { width: 100%; margin-bottom: 14px; }
     .wv-dialog-actions { display: flex; gap: 8px; justify-content: flex-end; }
     .vv-form { max-height: calc(100vh - 32px); overflow-y: auto; }
+    .setting-select { background: var(--bg); border: 1px solid var(--green-faint); color: var(--text); padding: 8px 10px; border-radius: 6px; font-family: inherit; font-size: 13px; min-width: 80px; }
+    .setting-select:focus { outline: none; border-color: var(--green-dim); }
     .vv-field { margin-bottom: 12px; }
     .vv-field-label { display: block; color: var(--text); font-size: 12px; margin-bottom: 4px; }
     .vv-field-row { display: flex; gap: 6px; }
@@ -250,7 +254,7 @@
             <div class="setting-label">Auto-lock timeout (seconds)</div>
             <div class="setting-desc">Idle seconds before the vault locks.</div>
           </div>
-          <input type="number" min="10" max="3600" value="60" id="input-autolock-timeout" style="width:80px;">
+          <div class="time-input"><span class="time-readout" id="readout-autolock-timeout">00h 01m 00s</span><input type="number" min="10" max="7200" value="60" id="input-autolock-timeout" style="width:80px;"></div>
         </div>
 
         <div class="setting-row">
@@ -258,7 +262,31 @@
             <div class="setting-label">QR stream timeout (seconds)</div>
             <div class="setting-desc">Seconds a shared QR stays visible before it auto-closes.</div>
           </div>
-          <input type="number" min="5" max="600" value="30" id="input-qr-timeout" style="width:80px;">
+          <div class="time-input"><span class="time-readout" id="readout-qr-timeout">00m 30s</span><input type="number" min="5" max="600" value="30" id="input-qr-timeout" style="width:80px;"></div>
+        </div>
+
+        <h2>Password Generator</h2>
+        <div class="setting-row">
+          <div>
+            <div class="setting-label">Minimum length</div>
+            <div class="setting-desc">Shortest password in the 24 range. Higher ranges start above 24.</div>
+          </div>
+          <select id="select-gen-min" class="setting-select">
+            <option value="16">16</option>
+            <option value="20">20</option>
+          </select>
+        </div>
+        <div class="setting-row">
+          <div>
+            <div class="setting-label">Maximum length</div>
+            <div class="setting-desc">Passwords land in the range for your choice: 24 gives minimum to 24, 32 gives 25 to 32, 48 gives 33 to 48, 64 gives 49 to 64. Longer passwords run into sites with hidden length limits more often. A limit a site declares always wins.</div>
+          </div>
+          <select id="select-gen-max" class="setting-select">
+            <option value="24">24</option>
+            <option value="32">32</option>
+            <option value="48">48</option>
+            <option value="64">64</option>
+          </select>
         </div>
 
         <div class="clear-vault-section">

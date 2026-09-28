@@ -1,6 +1,26 @@
 import { encrypt, decrypt } from './crypto.js'
 import { getPasswordVault, setPasswordVault, getVaultMigrationJournal, setVaultMigrationJournal, clearVaultMigrationJournal } from './store.js'
 
+const PREVIOUS_KEEP_MS = 14 * 24 * 60 * 60 * 1000
+const PREVIOUS_KEEP_USES = 3
+
+function retirePassword(cred, oldPassword, now) {
+  if (!oldPassword || oldPassword === cred.password) return
+  cred.previousPassword = oldPassword
+  cred.previousSetAt = now
+  cred.newPasswordUses = 0
+}
+
+function clearPrevious(cred) {
+  delete cred.previousPassword
+  delete cred.previousSetAt
+  delete cred.newPasswordUses
+}
+
+function previousExpired(cred, now) {
+  return (cred.newPasswordUses || 0) >= PREVIOUS_KEEP_USES && now - (cred.previousSetAt || 0) >= PREVIOUS_KEEP_MS
+}
+
 function generateId() {
   return crypto.randomUUID()
 }
@@ -254,6 +274,7 @@ async function saveCredential(domain, username, password, masterKey, extraFields
   let existingCreatedAt = null
   let existingLoginType = null
   let existingExtraFields = []
+  let existingCred = null
   for (const cred of tree.credentials[domain]) {
     if (cred.deleted) {
       existing.push(cred)
@@ -264,6 +285,7 @@ async function saveCredential(domain, username, password, masterKey, extraFields
       existingCreatedAt = cred.createdAt
       existingLoginType = cred.loginType || null
       existingExtraFields = cred.extraFields || []
+      existingCred = cred
       continue
     }
     existing.push(cred)
@@ -280,7 +302,7 @@ async function saveCredential(domain, username, password, masterKey, extraFields
   const resolvedLoginType = loginType || existingLoginType || inferLoginType(username)
   const now = Date.now()
   const id = existingId || generateId()
-  existing.push({
+  const saved = {
     id,
     username,
     password,
@@ -288,7 +310,15 @@ async function saveCredential(domain, username, password, masterKey, extraFields
     loginType: resolvedLoginType,
     createdAt: existingCreatedAt || now,
     updatedAt: now
-  })
+  }
+  if (existingCred && existingCred.password !== password) {
+    retirePassword(saved, existingCred.password, now)
+  } else if (existingCred && existingCred.previousPassword) {
+    saved.previousPassword = existingCred.previousPassword
+    saved.previousSetAt = existingCred.previousSetAt
+    saved.newPasswordUses = existingCred.newPasswordUses || 0
+  }
+  existing.push(saved)
 
   tree.credentials[domain] = existing
   tree.meta.lastAccess = now
@@ -319,6 +349,8 @@ async function getCredentials(domain, masterKey) {
       password: cred.password,
       extraFields: cred.extraFields || [],
       loginType: cred.loginType || inferLoginType(cred.username),
+      previousPassword: cred.previousPassword || null,
+      previousSetAt: cred.previousSetAt || null,
       createdAt: cred.createdAt,
       updatedAt: cred.updatedAt
     })
@@ -363,7 +395,10 @@ async function updateCredential(credentialId, updates, masterKey) {
     if (index !== -1) {
       if (creds[index].deleted) return { success: false, error: 'Credential deleted' }
       if (updates.username) creds[index].username = updates.username
-      if (updates.password) creds[index].password = updates.password
+      if (updates.password && updates.password !== creds[index].password) {
+        retirePassword(creds[index], creds[index].password, Date.now())
+        creds[index].password = updates.password
+      }
       if (updates.extraFields) creds[index].extraFields = updates.extraFields
       if (updates.loginType) creds[index].loginType = updates.loginType
       creds[index].updatedAt = Date.now()
@@ -375,6 +410,35 @@ async function updateCredential(credentialId, updates, masterKey) {
   }
 
   return { success: false, error: 'Credential not found' }
+}
+
+function findLiveCredential(tree, domain, username) {
+  const creds = tree.credentials[domain] || []
+  return creds.find((cred) => !cred.deleted && cred.username === username) || null
+}
+
+async function noteCredentialUse(domain, username, masterKey) {
+  const tree = await readVaultTree(masterKey)
+  const cred = findLiveCredential(tree, domain, username)
+  if (!cred || !cred.previousPassword) return { success: true, changed: false }
+  cred.newPasswordUses = (cred.newPasswordUses || 0) + 1
+  if (previousExpired(cred, Date.now())) clearPrevious(cred)
+  await writeVaultTree(tree, masterKey)
+  return { success: true, changed: true }
+}
+
+async function restorePreviousPassword(domain, username, masterKey) {
+  const tree = await readVaultTree(masterKey)
+  const cred = findLiveCredential(tree, domain, username)
+  if (!cred || !cred.previousPassword) return { success: false, error: 'No previous password saved' }
+  const now = Date.now()
+  const current = cred.password
+  cred.password = cred.previousPassword
+  retirePassword(cred, current, now)
+  cred.updatedAt = now
+  tree.meta.lastAccess = now
+  await writeVaultTree(tree, masterKey)
+  return { success: true }
 }
 
 async function deleteCredential(credentialId, masterKey) {
@@ -490,6 +554,8 @@ export {
   getAllDomains,
   updateCredential,
   deleteCredential,
+  noteCredentialUse,
+  restorePreviousPassword,
   autofill,
   mergeVaults,
   migrateLegacyVault,

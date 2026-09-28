@@ -1,4 +1,4 @@
-import { saveCredential as passwordsSaveCredential, getCredentials as passwordsGetCredentials } from './passwords.js'
+import { saveCredential as passwordsSaveCredential, getCredentials as passwordsGetCredentials, noteCredentialUse as passwordsNoteUse, restorePreviousPassword as passwordsRestorePrevious } from './passwords.js'
 
 function readRawRecord(storeName, key) {
   return new Promise(function (resolve) {
@@ -100,7 +100,33 @@ async function saveCredentialViaShared(domain, username, password, extraFields, 
   return passwordsSaveCredential(domain, username, password, key, extraFields, loginType)
 }
 
+async function sharedKey() {
+  const bytes = await getSessionKeyBytes()
+  if (!bytes) return null
+  return crypto.subtle.importKey('raw', new Uint8Array(bytes), { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt'])
+}
+
+async function noteCredentialUseViaShared(domain, username) {
+  const key = await sharedKey()
+  if (!key) return { success: false, locked: true }
+  try { return await passwordsNoteUse(domain, username, key) } catch (e) { return { success: false } }
+}
+
+async function restorePreviousViaShared(domain, username) {
+  const key = await sharedKey()
+  if (!key) return { success: false, locked: true }
+  try { return await passwordsRestorePrevious(domain, username, key) } catch (e) { return { success: false } }
+}
+
 chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
+  if (request.action === 'noteCredentialUse') {
+    noteCredentialUseViaShared(request.domain, request.username).then(sendResponse)
+    return true
+  }
+  if (request.action === 'restorePreviousPassword') {
+    restorePreviousViaShared(request.domain, request.username).then(sendResponse)
+    return true
+  }
   if (request.action === 'saveCredential') {
     saveCredentialViaShared(request.domain, request.username, request.password, request.extraFields, request.loginType).then(sendResponse)
     return true

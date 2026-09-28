@@ -264,8 +264,8 @@ async function loadAllCredentials() {
         '<option value="email">📧 Email</option>' +
         '<option value="phone">📱 Phone</option>' +
         '</select>' +
-        '<div class="credential-username" style="flex:1;">Account ' + (i + 1) + '</div>' +
-        '<div class="credential-password" style="width:150px;">••••••••</div>' +
+        '<div class="credential-username">Account ' + (i + 1) + '</div>' +
+        '<div class="credential-password">••••••••</div>' +
         '<div class="credential-actions">' +
         '<button class="small secondary btn-show">👁️</button>' +
         '<button class="small secondary btn-edit">✏️</button>' +
@@ -528,8 +528,8 @@ async function loadAllWebCredentials() {
       const row = document.createElement('div')
       row.style.cssText = 'padding:12px 0;border-bottom:1px solid #1a1a1a;display:flex;align-items:center;gap:12px;'
       row.innerHTML =
-        '<div class="credential-username" style="flex:1;">Item</div>' +
-        '<div class="credential-password" style="width:150px;">\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022</div>' +
+        '<div class="credential-username">Item</div>' +
+        '<div class="credential-password">\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022</div>' +
         '<div class="credential-actions">' +
         '<button class="small secondary btn-show">\ud83d\udc41\ufe0f</button>' +
         '<button class="small secondary btn-edit">\u270f\ufe0f</button>' +
@@ -939,18 +939,69 @@ tabs.forEach(tab => {
   tab.onclick = () => showTab(tab.dataset.tab)
 })
 
+const AUTOLOCK_MIN_SEC = 10
+const AUTOLOCK_MAX_SEC = 7200
+const QR_TIMEOUT_MIN_SEC = 5
+const QR_TIMEOUT_MAX_SEC = 600
+const readoutAutolockTimeout = document.getElementById('readout-autolock-timeout')
+const readoutQrTimeout = document.getElementById('readout-qr-timeout')
+
+function formatDuration(totalSeconds, showHours) {
+  const s = Math.max(0, Math.floor(Number(totalSeconds) || 0))
+  const hours = Math.floor(s / 3600)
+  const minutes = showHours ? Math.floor((s % 3600) / 60) : Math.floor(s / 60)
+  const seconds = s % 60
+  const tail = String(minutes).padStart(2, '0') + 'm ' + String(seconds).padStart(2, '0') + 's'
+  return showHours ? String(hours).padStart(2, '0') + 'h ' + tail : tail
+}
+
+function updateTimeReadouts() {
+  if (readoutAutolockTimeout) readoutAutolockTimeout.textContent = formatDuration(inputAutolockTimeout.value, true)
+  if (readoutQrTimeout) readoutQrTimeout.textContent = formatDuration(inputQrTimeout.value, false)
+}
+
+inputAutolockTimeout.oninput = updateTimeReadouts
+inputQrTimeout.oninput = updateTimeReadouts
+
 inputAutolockTimeout.onchange = () => {
   let v = parseInt(inputAutolockTimeout.value) || 60
-  if (v < 10) v = 10; if (v > 3600) v = 3600
+  if (v < AUTOLOCK_MIN_SEC) v = AUTOLOCK_MIN_SEC; if (v > AUTOLOCK_MAX_SEC) v = AUTOLOCK_MAX_SEC
   inputAutolockTimeout.value = v
+  updateTimeReadouts()
   chrome.storage.local.set({ autoLockTimeout: v })
 }
 inputQrTimeout.onchange = async () => {
   let v = parseInt(inputQrTimeout.value) || 30
-  if (v < 5) v = 5; if (v > 600) v = 600
+  if (v < QR_TIMEOUT_MIN_SEC) v = QR_TIMEOUT_MIN_SEC; if (v > QR_TIMEOUT_MAX_SEC) v = QR_TIMEOUT_MAX_SEC
   inputQrTimeout.value = v
+  updateTimeReadouts()
   try { const a = await store.getAuth() || {}; a.qrStreamTimeout = v; await store.setAuth(a) } catch (e) {}
 }
+
+const GEN_MIN_CHOICES = [16, 20]
+const GEN_MAX_CHOICES = [24, 32, 48, 64]
+const GEN_DEFAULT_MIN = 16
+const GEN_DEFAULT_MAX = 24
+const selectGenMin = document.getElementById('select-gen-min')
+const selectGenMax = document.getElementById('select-gen-max')
+
+async function loadGeneratorSettings() {
+  if (!selectGenMin || !selectGenMax) return
+  let stored = {}
+  try { stored = await chrome.storage.local.get(['genMinLength', 'genMaxLength']) } catch (e) {}
+  selectGenMin.value = String(GEN_MIN_CHOICES.includes(stored.genMinLength) ? stored.genMinLength : GEN_DEFAULT_MIN)
+  selectGenMax.value = String(GEN_MAX_CHOICES.includes(stored.genMaxLength) ? stored.genMaxLength : GEN_DEFAULT_MAX)
+}
+
+if (selectGenMin) selectGenMin.onchange = () => {
+  const v = parseInt(selectGenMin.value)
+  if (GEN_MIN_CHOICES.includes(v)) chrome.storage.local.set({ genMinLength: v })
+}
+if (selectGenMax) selectGenMax.onchange = () => {
+  const v = parseInt(selectGenMax.value)
+  if (GEN_MAX_CHOICES.includes(v)) chrome.storage.local.set({ genMaxLength: v })
+}
+loadGeneratorSettings()
 
 const btnBackupSync = document.getElementById('btn-backup-sync')
 if (btnBackupSync) btnBackupSync.onclick = () => showTab('sync')
@@ -969,6 +1020,7 @@ async function init() {
     const nickInput = document.getElementById('key-nickname-input')
     if (nickInput) nickInput.value = a.keyNickname || 'My Master Key'
   } catch (e) { inputQrTimeout.value = 30 }
+  updateTimeReadouts()
 
   const btnRenameKey = document.getElementById('btn-rename-key')
   if (btnRenameKey) btnRenameKey.onclick = async () => {

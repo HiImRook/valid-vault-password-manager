@@ -94,6 +94,171 @@
 
   const LOGIN_TYPE_ICON = { email: '📧', phone: '📱', username: '👤' }
 
+  const GEN_MIN_CHOICES = [16, 20]
+  const GEN_MAX_CHOICES = [24, 32, 48, 64]
+  const generatorPrefs = { min: 16, max: 24 }
+
+  function applyGeneratorPrefs(stored) {
+    if (GEN_MIN_CHOICES.includes(stored.genMinLength)) generatorPrefs.min = stored.genMinLength
+    if (GEN_MAX_CHOICES.includes(stored.genMaxLength)) generatorPrefs.max = stored.genMaxLength
+  }
+
+  try {
+    chrome.storage.local.get(['genMinLength', 'genMaxLength']).then(applyGeneratorPrefs).catch(() => {})
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area !== 'local') return
+      if (changes.genMinLength) applyGeneratorPrefs({ genMinLength: changes.genMinLength.newValue })
+      if (changes.genMaxLength) applyGeneratorPrefs({ genMaxLength: changes.genMaxLength.newValue })
+    })
+  } catch (e) {}
+  const GEN_MAX_PATTERN_TRIES = 200
+  const GEN_CLASSES = {
+    upper: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ',
+    lower: 'abcdefghijklmnopqrstuvwxyz',
+    digit: '0123456789',
+    special: '!@#$%^&*()-_=+[]{};:,.?/~'
+  }
+  const CONFIRM_SIGNAL = /confirm|repeat|re-?type|re-?enter|again|verif/
+  const CURRENT_SIGNAL = /current|existing|(^|[^a-z])old/
+  const NEW_SIGNAL = /new|create|choose|set.?password|sign.?up|register/
+
+  function randomInt(limit) {
+    const range = 0x100000000
+    const cap = range - (range % limit)
+    const buf = new Uint32Array(1)
+    while (true) {
+      crypto.getRandomValues(buf)
+      if (buf[0] < cap) return buf[0] % limit
+    }
+  }
+
+  function shuffleChars(chars) {
+    for (let i = chars.length - 1; i > 0; i--) {
+      const j = randomInt(i + 1)
+      const t = chars[i]
+      chars[i] = chars[j]
+      chars[j] = t
+    }
+    return chars
+  }
+
+  function parsePasswordRules(text) {
+    const rules = { classes: null, minlength: 0, maxlength: Infinity }
+    if (!text) return rules
+    const wanted = []
+    for (const part of text.split(';')) {
+      const idx = part.indexOf(':')
+      if (idx === -1) continue
+      const name = part.slice(0, idx).trim().toLowerCase()
+      const value = part.slice(idx + 1).trim()
+      if (name === 'minlength' && Number(value) > 0) rules.minlength = Number(value)
+      if (name === 'maxlength' && Number(value) > 0) rules.maxlength = Number(value)
+      if (name === 'required' || name === 'allowed') {
+        for (const item of value.split(',')) {
+          const token = item.trim()
+          const custom = token.match(/^\[(.*)\]$/)
+          if (custom) wanted.push({ required: name === 'required', chars: custom[1].replace(/\]/g, ']') })
+          else if (token === 'ascii-printable') wanted.push({ required: name === 'required', chars: GEN_CLASSES.upper + GEN_CLASSES.lower + GEN_CLASSES.digit + GEN_CLASSES.special })
+          else if (GEN_CLASSES[token]) wanted.push({ required: name === 'required', chars: GEN_CLASSES[token] })
+        }
+      }
+    }
+    if (wanted.length) rules.classes = wanted
+    return rules
+  }
+
+  function generationPlan(fields) {
+    let minLen = 0
+    let maxLen = Infinity
+    let classes = null
+    let pattern = null
+    for (const el of fields) {
+      if (!el) continue
+      const rules = parsePasswordRules(el.getAttribute('passwordrules'))
+      if (el.minLength > 0) minLen = Math.max(minLen, el.minLength)
+      if (el.maxLength > 0) maxLen = Math.min(maxLen, el.maxLength)
+      minLen = Math.max(minLen, rules.minlength)
+      maxLen = Math.min(maxLen, rules.maxlength)
+      if (rules.classes && !classes) classes = rules.classes
+      if (el.pattern && !pattern) {
+        try { pattern = new RegExp('^(?:' + el.pattern + ')$', 'v') } catch (e) {
+          try { pattern = new RegExp('^(?:' + el.pattern + ')$', 'u') } catch (e2) { pattern = null }
+        }
+      }
+    }
+    const tierIndex = GEN_MAX_CHOICES.indexOf(generatorPrefs.max)
+    const tierFloor = tierIndex > 0 ? GEN_MAX_CHOICES[tierIndex - 1] + 1 : generatorPrefs.min
+    const span = Math.max(4, generatorPrefs.max - tierFloor)
+    let lo = Math.max(tierFloor, minLen)
+    let hi = Math.max(generatorPrefs.max, lo + span)
+    if (maxLen < lo) { lo = maxLen; hi = maxLen }
+    else if (maxLen < hi) hi = maxLen
+    if (!classes) classes = ['upper', 'lower', 'digit', 'special'].map((k) => ({ required: true, chars: GEN_CLASSES[k] }))
+    return { lo, hi, classes, pattern }
+  }
+
+  function generateOnce(plan) {
+    const length = plan.lo + randomInt(plan.hi - plan.lo + 1)
+    const pool = Array.from(new Set(plan.classes.map((c) => c.chars).join('').split(''))).join('')
+    const chars = []
+    for (const c of plan.classes) {
+      if (c.required && chars.length < length) chars.push(c.chars[randomInt(c.chars.length)])
+    }
+    while (chars.length < length) chars.push(pool[randomInt(pool.length)])
+    return shuffleChars(chars).join('')
+  }
+
+  function generatePassword(fields) {
+    const plan = generationPlan(fields)
+    let candidate = generateOnce(plan)
+    if (!plan.pattern) return candidate
+    for (let i = 0; i < GEN_MAX_PATTERN_TRIES && !plan.pattern.test(candidate); i++) candidate = generateOnce(plan)
+    return candidate
+  }
+
+  function passwordSignalText(el) {
+    const parts = [el.getAttribute('autocomplete'), el.name, el.id, el.placeholder, el.getAttribute('aria-label')]
+    if (el.labels) for (const l of el.labels) parts.push(l.textContent)
+    return parts.filter(Boolean).join(' ').toLowerCase()
+  }
+
+  function passwordRole(el) {
+    const autocomplete = (el.getAttribute('autocomplete') || '').toLowerCase()
+    const signals = passwordSignalText(el)
+    if (CONFIRM_SIGNAL.test(signals)) return 'confirm'
+    if (autocomplete.indexOf('current-password') !== -1 || CURRENT_SIGNAL.test(signals)) return 'current'
+    if (autocomplete.indexOf('new-password') !== -1 || NEW_SIGNAL.test(signals)) return 'new'
+    return null
+  }
+
+  function planPasswordGroup(fields) {
+    const roles = fields.map(passwordRole)
+    const byRole = (role) => fields[roles.indexOf(role)] || null
+    if (fields.length === 1) return roles[0] === 'new' ? { current: null, fresh: fields[0], confirm: null } : null
+    if (fields.length === 2) {
+      if (roles.indexOf('current') !== -1 && roles[0] !== roles[1]) {
+        const current = byRole('current')
+        return { current, fresh: fields.find((f) => f !== current), confirm: null }
+      }
+      if (roles.indexOf('confirm') !== -1 && roles[0] !== roles[1]) {
+        const confirm = byRole('confirm')
+        return { current: null, fresh: fields.find((f) => f !== confirm), confirm }
+      }
+      if (roles.indexOf('new') !== -1) return { current: null, fresh: fields[0], confirm: fields[1] }
+      return null
+    }
+    if (fields.length === 3) {
+      if (!roles.some(Boolean)) return null
+      const current = byRole('current') || fields[0]
+      const confirmIdx = roles.lastIndexOf('confirm')
+      const confirm = confirmIdx !== -1 && fields[confirmIdx] !== current ? fields[confirmIdx] : fields[2]
+      const fresh = fields.find((f) => f !== current && f !== confirm)
+      if (!fresh) return null
+      return { current, fresh, confirm }
+    }
+    return null
+  }
+
   function detectLoginForm(skipPasswordFields) {
     const pwFields = document.querySelectorAll('input[type="password"]')
     if (pwFields.length === 0) return null
@@ -124,6 +289,7 @@
       setNativeValue(password, cred.password)
       password.dispatchEvent(new Event('input', { bubbles: true }))
       password.dispatchEvent(new Event('change', { bubbles: true }))
+      if (!cred.isPrevious) noteCredentialUse(cred.username)
     }
     if (cred.extraFields && cred.extraFields.length) {
       const form = (password && password.closest('form')) || document
@@ -322,6 +488,23 @@
 
   const captureInFlight = new WeakSet()
 
+  function noteCredentialUse(username) {
+    try { chrome.runtime.sendMessage({ action: 'noteCredentialUse', domain: currentDomain, username }).catch(() => {}) } catch (e) {}
+  }
+
+  function resolveChangeUsername(record, fallback) {
+    if (record.accountUsername) return record.accountUsername
+    const creds = record.cachedCreds || []
+    const currentValue = record.plan.current ? record.plan.current.value : ''
+    if (currentValue) {
+      const match = creds.find((c) => c.password === currentValue || c.previousPassword === currentValue)
+      if (match) return match.username
+    }
+    if (fallback) return fallback
+    if (creds.length === 1) return creds[0].username
+    return ''
+  }
+
   async function captureAndPrompt(formFields) {
     const username = formFields && formFields.username
     const password = formFields && formFields.password
@@ -329,10 +512,12 @@
     if (password && captureInFlight.has(password)) return
     if (password) captureInFlight.add(password)
     try {
-      const u = username ? username.value : ''
+      const change = formFields.credentialChange
+      let u = username ? username.value : ''
+      if (change && change.plan.current) u = resolveChangeUsername(change, u)
       const p = password ? password.value : ''
       if (!p) return
-      const extras = collectExtraFields(password)
+      const extras = change ? [] : collectExtraFields(password)
       const loginType = classifyLoginType(username)
 
       const pendingId = 'ps_' + Date.now() + '_' + Math.random().toString(36).slice(2)
@@ -428,11 +613,88 @@
     })
   }
 
+  const credentialForms = new Map()
+  const credentialFormByEl = new WeakMap()
+
+  function passwordScope(el) {
+    return el.closest('form') || document.body
+  }
+
+  async function refreshCachedCreds(record) {
+    try {
+      const result = await chrome.runtime.sendMessage({ action: 'getCredentialsForDomain', domain: currentDomain })
+      if (result && result.success) record.cachedCreds = result.credentials
+    } catch (e) {}
+  }
+
+  function findScopeUsername(scope, exclude) {
+    const candidates = Array.from(scope.querySelectorAll('input[type="text"], input[type="email"], input[type="tel"], input:not([type])'))
+      .filter((input) => input.offsetParent !== null && !exclude.has(input))
+    return candidates.find((input) => fieldMatchesSelectors(input, USERNAME_SELECTORS)) || null
+  }
+
+  function wireCredentialForm(scope, plan) {
+    let record = credentialForms.get(scope)
+    const claimed = [plan.current, plan.fresh, plan.confirm].filter(Boolean)
+    if (!record) {
+      record = { scope, plan, cachedCreds: [], accountUsername: '', formFields: null, teardown: null }
+      credentialForms.set(scope, record)
+      refreshCachedCreds(record)
+    }
+    record.plan = plan
+    for (const el of claimed) {
+      wiredPasswordFields.add(el)
+      trackedFields.add(el)
+      credentialFormByEl.set(el, record)
+      el.setAttribute('autocomplete', 'off')
+    }
+    if (plan.current) attachVaultTag(plan.current, 'current')
+    attachVaultTag(plan.fresh, 'generate')
+    if (plan.confirm && fieldTags.has(plan.confirm)) {
+      const tag = fieldTags.get(plan.confirm)
+      tag.style.setProperty('display', 'none', 'important')
+      tagTypeByEl.set(plan.confirm, 'confirm')
+    }
+    const username = plan.current ? null : findScopeUsername(scope, new Set(claimed))
+    if (!record.formFields || record.formFields.password !== plan.fresh) {
+      if (record.teardown) record.teardown()
+      record.formFields = { username, password: plan.fresh, credentialChange: record }
+      record.teardown = wireSubmitCapture(record.formFields)
+      wiredForms.push({
+        fields: record.formFields,
+        cleanup: function () {
+          if (record.teardown) record.teardown()
+          record.teardown = null
+          credentialForms.delete(scope)
+          for (const el of claimed) trackedFields.delete(el)
+        }
+      })
+    } else {
+      record.formFields.username = username
+    }
+  }
+
+  function wireCredentialForms() {
+    const groups = new Map()
+    for (const el of document.querySelectorAll('input[type="password"]')) {
+      if (el.offsetParent === null) continue
+      const scope = passwordScope(el)
+      if (!groups.has(scope)) groups.set(scope, [])
+      groups.get(scope).push(el)
+    }
+    for (const [scope, fields] of groups) {
+      const plan = planPasswordGroup(fields)
+      if (plan) wireCredentialForm(scope, plan)
+    }
+  }
+
   function init() {
-    const fields = detectLoginForm(wiredPasswordFields)
-    if (!fields) return
-    wireLoginForm(fields)
-    init()
+    wireCredentialForms()
+    let fields = detectLoginForm(wiredPasswordFields)
+    while (fields) {
+      wireLoginForm(fields)
+      fields = detectLoginForm(wiredPasswordFields)
+    }
   }
 
   let rescanScheduled = false
@@ -628,7 +890,16 @@
     return true
   }
 
-  function createVaultTag() {
+  function applyTagVariant(tag, variant) {
+    const generate = variant === 'generate'
+    tag.title = generate ? 'Generate a strong password with Valid Vault' : 'Fill with Valid Vault'
+    tag.style.setProperty('background', generate ? '#05140a' : '#33ff66', 'important')
+    tag.style.setProperty('color', generate ? '#33ff66' : '#05140a', 'important')
+    tag.style.setProperty('box-shadow', generate ? '0 0 0 2px #33ff66,0 1px 6px rgba(0,0,0,0.5)' : '0 0 0 2px #05140a,0 1px 6px rgba(0,0,0,0.5)', 'important')
+    tag.dataset.variant = generate ? 'generate' : 'fill'
+  }
+
+  function createVaultTag(variant) {
     const tag = document.createElement('div')
     tag.textContent = 'V'
     tag.title = 'Fill with Valid Vault'
@@ -651,13 +922,14 @@
       'visibility:visible',
       'pointer-events:auto'
     ].map((rule) => rule + ' !important').join(';')
+    applyTagVariant(tag, variant)
     document.body.appendChild(tag)
     return tag
   }
 
   function positionVaultTag(tag, el) {
     const rect = el.getBoundingClientRect()
-    const hidden = el.offsetParent === null || rect.width === 0 || rect.height === 0
+    const hidden = el.offsetParent === null || rect.width === 0 || rect.height === 0 || tagTypeByEl.get(el) === 'confirm'
     tag.style.setProperty('display', hidden ? 'none' : 'flex', 'important')
     if (hidden) return
     const size = 22
@@ -693,22 +965,28 @@
   const tagTypeByEl = new WeakMap()
   const taggedFieldRecords = []
 
+  const PASSWORD_TAG_TYPES = new Set(['generate', 'current'])
+
   function attachVaultTag(el, fieldType) {
     if (fieldTags.has(el)) {
-      if (fieldType === 'login' || tagTypeByEl.get(el) !== 'login') tagTypeByEl.set(el, fieldType)
+      const existingType = tagTypeByEl.get(el)
+      if (PASSWORD_TAG_TYPES.has(fieldType) || fieldType === 'login' || (existingType !== 'login' && !PASSWORD_TAG_TYPES.has(existingType))) tagTypeByEl.set(el, fieldType)
+      applyTagVariant(fieldTags.get(el), tagTypeByEl.get(el) === 'generate' ? 'generate' : 'fill')
       positionVaultTag(fieldTags.get(el), el)
       return
     }
     if (!el.isConnected) return
     tagTypeByEl.set(el, fieldType)
-    const tag = createVaultTag()
+    const tag = createVaultTag(fieldType === 'generate' ? 'generate' : 'fill')
     positionVaultTag(tag, el)
     tag.onclick = (e) => {
       e.preventDefault()
       e.stopPropagation()
       pingActivity()
       const currentType = tagTypeByEl.get(el)
-      if (currentType === 'login' && loginFieldsByEl.has(el)) showLoginPicker(el, loginFieldsByEl.get(el))
+      if (currentType === 'generate' && credentialFormByEl.has(el)) showGeneratePicker(el, credentialFormByEl.get(el))
+      else if (currentType === 'current' && credentialFormByEl.has(el)) showCurrentPicker(el, credentialFormByEl.get(el))
+      else if (currentType === 'login' && loginFieldsByEl.has(el)) showLoginPicker(el, loginFieldsByEl.get(el))
       else showFieldPicker(el, currentType === 'login' ? 'email' : currentType)
     }
     const scrollHandler = () => positionVaultTag(tag, el)
@@ -767,11 +1045,20 @@
     return { locked: !!(r && r.locked), values: r && r.value ? [r.value] : [] }
   }
 
+  const GENERATE_NOTE_MS = 5000
+  let pickerAutoHideTimer = null
+
   function hideFieldPicker() {
+    if (pickerAutoHideTimer) { clearTimeout(pickerAutoHideTimer); pickerAutoHideTimer = null }
     if (fieldPicker) fieldPicker.host.style.display = 'none'
   }
 
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && fieldPicker && fieldPicker.host.style.display !== 'none') hideFieldPicker()
+  }, true)
+
   function openPicker(field, title) {
+    if (pickerAutoHideTimer) { clearTimeout(pickerAutoHideTimer); pickerAutoHideTimer = null }
     if (!fieldPicker) fieldPicker = createFieldPicker()
     const rect = field.getBoundingClientRect()
     fieldPicker.host.style.left = rect.left + window.scrollX + 'px'
@@ -855,6 +1142,16 @@
         addPickerItem(itemsContainer, icon + ' ' + cred.username, () => fillCredentials(cred, formFields))
       }
     }
+    const withPrevious = ranked.filter((cred) => cred.previousPassword)
+    if (withPrevious.length > 0) {
+      addPickerSection(itemsContainer, 'Previous passwords')
+      for (const cred of withPrevious) {
+        addPickerItem(itemsContainer, '↩ ' + cred.username + ' (replaced ' + shortDate(cred.previousSetAt) + ')', () => {
+          fillCredentials({ username: cred.username, password: cred.previousPassword, extraFields: [], isPrevious: true }, formFields)
+          setTimeout(() => offerRestore(field, cred), 0)
+        })
+      }
+    }
     if (data.emails.length > 0) {
       addPickerSection(itemsContainer, 'Your emails')
       for (const email of data.emails) addPickerItem(itemsContainer, email, () => fillFieldValue(field, email))
@@ -862,6 +1159,67 @@
     if (ranked.length === 0 && data.emails.length === 0) {
       addPickerEmpty(itemsContainer, data.locked ? 'Vault is locked' : 'No saved logins for this site yet. Log in or sign up and Valid Vault will offer to save it.')
     }
+  }
+
+  function shortDate(ts) {
+    try { return new Date(ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) } catch (e) { return 'recently' }
+  }
+
+  function offerRestore(field, cred) {
+    const itemsContainer = openPicker(field, 'Valid Vault: Previous password filled')
+    addPickerEmpty(itemsContainer, 'Use this if the newer password for ' + cred.username + ' did not work, for example if a password change failed.')
+    addPickerItem(itemsContainer, 'Make this the current password again', async () => {
+      try { await chrome.runtime.sendMessage({ action: 'restorePreviousPassword', domain: currentDomain, username: cred.username }) } catch (e) {}
+    })
+    addPickerItem(itemsContainer, 'Keep the newer saved password', () => {})
+  }
+
+  async function showCurrentPicker(field, record) {
+    const itemsContainer = openPicker(field, 'Valid Vault: Current password')
+    let result = null
+    try { result = await chrome.runtime.sendMessage({ action: 'getCredentialsForDomain', domain: currentDomain }) } catch (e) {}
+    if (result && result.locked) {
+      const unlocked = await unlockInline()
+      if (unlocked) { try { result = await chrome.runtime.sendMessage({ action: 'getCredentialsForDomain', domain: currentDomain }) } catch (e) {} }
+    }
+    itemsContainer.innerHTML = ''
+    const creds = (result && result.success && result.credentials) || []
+    record.cachedCreds = creds
+    if (creds.length === 0) {
+      addPickerEmpty(itemsContainer, result && result.locked ? 'Vault is locked' : 'No saved login for this site yet.')
+      return
+    }
+    addPickerSection(itemsContainer, 'Fill your current password')
+    for (const cred of creds) {
+      const icon = LOGIN_TYPE_ICON[cred.loginType || 'username'] || LOGIN_TYPE_ICON.username
+      addPickerItem(itemsContainer, icon + ' ' + cred.username, () => {
+        record.accountUsername = cred.username
+        fillFieldValue(field, cred.password)
+        noteCredentialUse(cred.username)
+      })
+    }
+    const withPrevious = creds.filter((cred) => cred.previousPassword)
+    if (withPrevious.length > 0) {
+      addPickerSection(itemsContainer, 'Previous passwords')
+      for (const cred of withPrevious) {
+        addPickerItem(itemsContainer, '↩ ' + cred.username + ' (replaced ' + shortDate(cred.previousSetAt) + ')', () => {
+          record.accountUsername = cred.username
+          fillFieldValue(field, cred.previousPassword)
+          setTimeout(() => offerRestore(field, cred), 0)
+        })
+      }
+    }
+  }
+
+  function showGeneratePicker(field, record) {
+    const confirm = record.plan.confirm
+    const password = generatePassword([field, confirm])
+    fillFieldValue(field, password)
+    if (confirm) fillFieldValue(confirm, password)
+    const itemsContainer = openPicker(field, 'Valid Vault: New password')
+    addPickerEmpty(itemsContainer, 'A strong ' + password.length + '-character password is filled in' + (confirm ? ' both boxes.' : '.') + ' Valid Vault offers to save it when you submit.')
+    addPickerItem(itemsContainer, 'Generate a different one', () => setTimeout(() => showGeneratePicker(field, record), 0))
+    pickerAutoHideTimer = setTimeout(hideFieldPicker, GENERATE_NOTE_MS)
   }
 
   document.addEventListener('click', (e) => {

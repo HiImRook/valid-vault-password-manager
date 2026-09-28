@@ -21,11 +21,15 @@
       --danger: #ff5555;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { background: var(--bg); padding-bottom: 3px; }
     body {
       width: 340px;
       font-family: "Courier New", "Consolas", "DejaVu Sans Mono", monospace;
       background: var(--bg);
       color: var(--text);
+      border: 1px solid var(--green-dim);
+      border-top: none;
+      border-radius: 0 0 12px 12px;
     }
     .container { padding: 16px; }
     .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
