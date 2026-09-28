@@ -1,10 +1,22 @@
 # Valid Vault - Development Roadmap
 
-**Current Version:** v0.7.0 - **Status: Active Testing**
+**Current Version:** v0.7.1 - **Status: Active Testing**
 
 ---
 
 ## Version History (Completed)
+
+### v0.7.1 - Protected Master Key Transfer (Sep 2026)
+
+- ✅ Share Master Key and Export Key carry the master key wrapped under a passphrase and three security questions (PBKDF2-SHA256, 1,000,000 iterations); the raw key never leaves the device
+- ✅ The receiving device must enter the passphrase and all three answers before a scanned key or key file is accepted; wrong answers change nothing
+- ✅ Users pick their three questions; the protection is set once and reused, so sharing stays one click; Change Key Passphrase replaces it
+- ✅ Common passwords refused as a key passphrase, with a four-random-words recommendation
+- ✅ Raw key QR codes from older versions refused
+- ✅ Every password prompt in Manage moved to masked Valid Vault dialogs; Personal Info edits try fingerprint or device PIN first
+- ✅ Crypto Wallets locks itself on Manage or browser tab switch and after the auto-lock time
+- ✅ Auto-lock resets on real activity anywhere in the browser, and an open Manage tab no longer locks the vault while you work elsewhere
+- ✅ About shows the version from the extension manifest
 
 ### v0.7.0 - Crypto Wallets and Encrypted Bookmarks (Sep 2026)
 
@@ -93,17 +105,18 @@
 
 ---
 
-## Upcoming After v0.7.0
+## Upcoming After v0.7.1
 
-### v0.7.x - Transport (Next)
+### v0.7.2 - Scanner Reliability (Next)
 
-- QR sync refinement, verified end to end extension to phone and phone to extension, with clear key-mismatch errors on both sides
+- QR scanner reliability on real devices and cameras, including scans that stall before completing
 - Bookmarks QR share
 - Unlock behavior quirks reported by community testing
 
 ### v0.8.x - Phone De-Drift
 
 - Key import that survives lock and unlock with the same warning flow, working key file import, and visible scan results
+- The protected key format on the phone, so phone and extension key transfer over QR works again with the passphrase and questions
 - Whole-vault carry on the phone: Web Credentials, Personal Info, bookmarks, and Crypto Wallets
 - Personal Info tab on the phone
 
@@ -124,7 +137,6 @@ This is feature work. The vault stays encrypted throughout, and nothing about it
 
 - Per-method auth edit and delete on the phone Manage tab
 - Native background-lifecycle lock guarantees on Android
-- Styled Export/Import Key modals on the extension (currently plain browser prompts)
 
 ---
 
@@ -143,6 +155,8 @@ This is feature work. The vault stays encrypted throughout, and nothing about it
 ⚠️ **Per-method auth edit and delete deferred on the phone**
 
 ⚠️ **SSN and card storage deliberately deferred**, pending security work
+
+⚠️ **Phone and extension key transfer over QR waits for the phone de-drift** - the extension now refuses unprotected key QRs, and the phone learns the protected format in v0.8.x; the key file path works between them in the meantime
 
 ⚠️ **Crypto Wallets and bookmarks are extension-only for now** - the phone app receives them in the v0.8.x de-drift; both stay encrypted in the vault file in the meantime
 
@@ -164,4 +178,4 @@ MIT License - See LICENSE file for details
 
 ---
 
-**Last Updated:** Sep 27, 2026
+**Last Updated:** Sep 28, 2026

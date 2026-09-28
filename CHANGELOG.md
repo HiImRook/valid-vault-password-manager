@@ -5,6 +5,35 @@ All notable changes to Local Vault will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.1] - 2026-09-28
+
+This release closes the one place where the master key could travel unprotected. Share Master Key used to stream the raw key, so anyone who photographed the QR had the key. The key now only leaves a device wrapped under a passphrase and three security questions, and the receiving device must enter all of them before it can use it. It also fixes two locking bugs found after v0.7.0. Extension only; the phone learns the protected key format in the v0.8.x de-drift.
+
+### Added
+- **Protected master key transfer.** Share Master Key streams the master key wrapped under a passphrase and three security answers, stretched with PBKDF2-SHA256 at 1,000,000 iterations and sealed with AES-GCM, instead of the raw key. Export Key saves the same package as a file, in the existing `valid-vault-key` format, so older key files still import.
+- **Receiving device gate.** A scanned key or imported key file opens an Accept master key dialog showing the same three questions. The key is only accepted after the passphrase and answers unwrap it; wrong answers are rejected in place and nothing changes. The device that accepts a key keeps the same package, so it can share onward with the same passphrase.
+- **Set once, one click after.** The first key share or export opens a setup form: passphrase, confirmation, and three questions the user picks from a list of ten, each with its own answer. The wrapped package is saved with a SHA-256 key identifier and reused only while it matches the current key. Change Key Passphrase replaces it after a fingerprint or password check.
+- **Passphrase strength check.** Common passwords and their obvious variations (`Password123!`, `P@ssw0rd!2024`, `Summer2024!!`) are refused, and the form recommends four or more random words plus a number and a symbol.
+- **Masked Valid Vault dialogs.** Every password prompt in Manage, including the password fallback after fingerprint and the key import confirmation, moved from plain browser prompts that showed typed text to masked dialogs with a show/hide toggle.
+
+### Changed
+- **Raw key QR codes are refused.** A key QR from an older version is rejected with a message pointing to Export Key and Import Key.
+- **Personal Info edits try fingerprint or device PIN first**, with the master password as the fallback, instead of requiring the password.
+- **About reads the version from the extension manifest**, so it always matches the installed version. It had been stuck at v0.6.2.
+- The Sync tab explains that the key stream is protected by the passphrase and answers.
+
+### Fixed
+- **Crypto Wallets stayed unlocked after switching tabs.** Switching Manage tabs or browser tabs hid the seed words but left the section open. It now locks back to its unlock button on tab switch and after the auto-lock time, keeping any edit in progress covered until unlocked again.
+- **Activity outside the Manage page did not reset auto-lock.** An open Manage tab ran its own timer that only saw activity on that page, so typing on a website with Manage open behind it still locked the vault on schedule. The page timer now reads the shared last-activity time. On websites, mouse movement, scrolling, clicks, and keys now count as activity, not only typing in form fields; only real input counts, so a page cannot fake activity to keep the vault open.
+
+### Known Gaps
+- Phone and extension key transfer over QR does not work until the phone learns the protected format in v0.8.x. The key file path works between them in the meantime, and vault QR sync is unaffected.
+- Someone who both captures the key QR and watches the passphrase and security answers being typed could still take the key. A captured QR on its own is useless.
+- QR scanner reliability on cameras under different conditions is the v0.7.2 focus.
+
+### Notes
+- Verified with Playwright-in-Chromium tests across separate browser profiles, scanning the real QR stream from one into the other through a simulated camera: setup validation, one-click reuse, wrong-answer rejection, key file import, onward sharing, refusal of a raw key QR from a real v0.7.0 sender, plus regression runs of the wallets, bookmarks, and unlock window suites.
+
 ## [0.7.0] - 2026-09-27
 
 This release adds two new encrypted sections to the vault, Crypto Wallets for seed phrases and Bookmarks, both sealed the same way as Website Credentials and both carried between browsers inside the encrypted vault file. It also moves on-page unlocking into a dedicated extension window with Windows Hello, and fixes the popup lock button. Extension only; the phone app receives these sections in the v0.8.x de-drift.

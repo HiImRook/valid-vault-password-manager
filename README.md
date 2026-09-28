@@ -6,6 +6,10 @@ A local, encrypted, QR code portable password manager. No cloud, no accounts, no
 
 ---
 
+> ✅ **Protected Master Key Transfer - v0.7.1**
+>
+> The master key no longer travels as a raw key. Share Master Key and Export Key now carry it wrapped under a passphrase and three security questions you pick, stretched with 1,000,000 PBKDF2 rounds, and the receiving device must enter all of them before it can use the key. A captured key QR or a stolen key file is useless without them. Sharing stays one click after a one-time setup, common passwords are refused, and every password prompt in Manage is now a masked Valid Vault dialog. Personal Info edits try fingerprint or device PIN first. Also fixes Crypto Wallets locking on tab switch and the auto-lock timer ignoring activity outside the Manage page. See [CHANGELOG.md](CHANGELOG.md) for full details.
+
 > ✅ **Crypto Wallets and Encrypted Bookmarks - v0.7.0**
 >
 > The extension now stores crypto wallet seed phrases and bookmarks inside the same encrypted vault as your logins. Seed phrases are organized by wallet and account, checked word by word against the standard 2048-word seed phrase list, and only visible while you choose to show them. Bookmarks are saved from a new icon in the popup and listed in a side panel with search and drag reorder. Both sections are sealed as single AES-GCM blobs, nothing about them is readable at rest, and they travel between browsers through the encrypted vault file. On-page unlocks now open a Valid Vault window with Windows Hello, and the popup lock button is fixed. See [Crypto Wallet and Bookmark Security](#crypto-wallet-and-bookmark-security) and [CHANGELOG.md](CHANGELOG.md) for full details.
@@ -77,9 +81,10 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 - Fingerprint, device PIN, and password all fully unlock the vault
 - Auto-lock inactivity timer in seconds, locks the vault and returns to the lock screen
 - Both surfaces show an inline unlock overlay on session timeout instead of a dead end
-- Website Credentials, Web Credentials, and Personal Info each require their own explicit re-unlock inside Manage; editing Personal Info specifically requires the master password, never fingerprint
+- Website Credentials, Web Credentials, and Personal Info each require their own explicit re-unlock inside Manage; every unlock and Personal Info edit tries fingerprint or device PIN first, with the master password as the fallback in a masked dialog
 - Clicking a tagged field or a save prompt while locked opens a small Valid Vault unlock window with Windows Hello (fingerprint or device PIN) or password; the unlock runs in the extension's own origin, never in the visited page
-- Crypto Wallets requires its own explicit unlock inside Manage, like the other sections
+- Crypto Wallets requires its own explicit unlock inside Manage, and locks itself again when you switch Manage tabs or browser tabs, or after the auto-lock time
+- Mouse movement, scrolling, clicks, and typing anywhere in the browser count as activity for auto-lock; only real input counts, so a page cannot fake activity to keep the vault open
 
 **Autofill (Extension):**
 - Personal Info fields (name, phone, address) get a V tag; clicking it opens a picker with the saved value and fills only on click, including `<select>` and `<textarea>` fields (a state/country dropdown is matched by its actual option, never a blind value assignment)
@@ -92,14 +97,17 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 - Custom div-based comboboxes and `contenteditable` fields remain unsupported; matching quality on unusual sites is still being hardened
 
 **Sync and Backup:**
-- Live QR sync - stream your vault or your key as a one-way fountain QR, scan it on the other device
+- Live QR sync - stream your vault or your protected key as a one-way fountain QR, scan it on the other device
 - Sovereign scanner - the standard web camera plus a vendored jsQR decoder, no Google dependency
 - Encrypted vault backup - save directly to Downloads or share the file, inert without the matching master key
-- Encrypted key backup - export the master key wrapped under a passphrase and three security questions, high-iteration KDF, never stored
+- Protected key transfer - the master key only leaves a device wrapped under a passphrase and three security questions you pick, stretched with 1,000,000 PBKDF2 rounds; the same package goes into the key QR and the key file, and the receiving device must enter all of them to accept it
+- Set once, reused after - the protection is set on the first key share or export, then Share Master Key and Export Key are one click; Change Key Passphrase replaces it
+- Common passwords are refused as a key passphrase, and the form recommends four or more random words
 - Logins, Web Credentials, and Personal Info all travel together through the same export/import/QR flow, merged by timestamp with tombstoned deletes
 - Bookmarks and Crypto Wallets travel inside the encrypted vault file (Export Vault / Import Vault) with the same tombstoned-delete merge; seed phrases are kept out of the live QR share, and a bookmarks QR share is planned for v0.7.x
 - Syncing now requires both devices to already share the same master key; a mismatched key fails with a clear error instead of being silently reconciled
 - Importing a master key onto a browser whose vault uses a different key warns first, clears that vault on confirmation, and saves the imported key under the browser's unlock methods (extension; phone follows next release)
+- Raw key QR codes from older versions are refused; phone and extension key transfer over QR resumes when the phone learns the protected format in the phone de-drift, and the key file path works in the meantime
 
 **Vault:**
 - Website Credentials are encrypted as one AES-GCM vault blob rather than per-credential, so domain names, credential IDs, and login types are no longer readable at rest
@@ -116,7 +124,7 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 - Android via Capacitor, with native plugins for biometric auth and file saving
 - Vendored, self-contained code only, no Google SDKs in the scan path
 
-## Current Status: v0.7.0 - Active Testing
+## Current Status: v0.7.1 - Active Testing
 
 **Completed:**
 * ✅ Master key wrap architecture, verify-by-unwrap, no stored hashes
@@ -135,17 +143,19 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 * ✅ Crypto Wallets: encrypted seed phrase storage by wallet and account, with on-device seed word and checksum checking
 * ✅ Encrypted bookmarks with a popup bookmark icon and a searchable, reorderable side panel
 * ✅ Windows Hello unlock window for on-page unlocks; popup lock button fixed
+* ✅ Protected master key transfer: passphrase and three chosen security questions required on the receiving device for both the key QR and the key file
+* ✅ Masked Valid Vault dialogs for every password prompt in Manage, and fingerprint first for Personal Info edits
 
 **In Development:**
 * 📋 Phone de-drift (v0.8.x): key import, whole-vault carry including bookmarks and wallets, and Personal Info on the phone
-* 📋 QR transport refinement (v0.7.x), including a bookmarks QR share
+* 📋 QR scanner reliability on real devices and a bookmarks QR share (v0.7.2)
 * 📋 Custom div-based combobox and `contenteditable` field support
 * 📋 Continued field testing of sync, backup, and native file saving across Android versions
 * 📋 Per-method auth edit and delete on the phone Manage tab
 
 ## Sync and Backup Model
 
-Master key transport is deliberate. The primary path is a live QR stream: one device shows its key or vault as a fountain QR, the other scans it. For disaster recovery there is an offline path: Export Vault saves the encrypted vault directly to Downloads or through the native share sheet, and Export Key writes the master key wrapped under a passphrase plus three security questions, stretched with a high-iteration KDF, never stored.
+Master key transport is deliberate. The primary path is a live QR stream: one device shows its vault or its protected key as a fountain QR, the other scans it. The key is always wrapped under a passphrase plus three security questions the owner picks, stretched with 1,000,000 PBKDF2 rounds, and the receiving device has to enter all of them before the key can be used, so a captured QR is as useless as a stolen file. For disaster recovery there is an offline path: Export Vault saves the encrypted vault directly to Downloads or through the native share sheet, and Export Key saves the same protected key package as a file.
 
 Because importing a key now persists, the same vault file genuinely works the same way everywhere: set a password in Chrome, export the vault, import the key and the vault into Firefox with the same password, add a credential there, export again, and Chrome picks up the change on its next import. No server, no account, just timestamp-based merge.
 
@@ -156,7 +166,7 @@ Since Website Credentials moved to single-blob encryption, merging requires both
 **Encryption at rest:**
 - Passwords are wrapped with PBKDF2-SHA256 at 600,000 iterations
 - On Android, the master key is additionally wrapped by a hardware Keystore key gated on device authentication
-- Exported key files are wrapped at a higher iteration count, gated by a passphrase and security questions that are never stored
+- The master key only leaves a device wrapped at 1,000,000 PBKDF2 iterations under a passphrase and three security answers, in both the key QR and the key file; the passphrase and answers are never stored
 - No verification hashes are stored; the AES-GCM auth tag is the only verifier
 - Website Credentials are stored as a single encrypted blob, so no domain name, credential ID, timestamp, login type, username, password, or extra field is readable from the raw database row
 
@@ -164,7 +174,7 @@ Since Website Credentials moved to single-blob encryption, merging requires both
 
 **Locking is enforced end to end.** A manual or timeout lock clears the shared session key everywhere it was stored, so a locked session cannot silently resume.
 
-**Personal Info gets a stricter gate.** Viewing it requires a normal unlock; adding or editing any field requires the master password specifically, not fingerprint.
+**Fingerprint first, password as the fallback.** Unlocking a section in Manage and editing Personal Info try fingerprint or device PIN first, the strongest local method, and fall back to the master password in a masked dialog. Importing a key still asks for the browser's password directly, because the imported key is re-locked under that password.
 
 **Autofill never exposes the master key.** background.js is the only place the session key lives; content.js, running in the page's own context, only ever receives specific plaintext values it explicitly requested for injection. Unlocking from a page opens a separate extension window, so the password and the WebAuthn credential are only ever handled in the extension's own origin, never typed into or triggered from the visited page.
 
@@ -177,7 +187,7 @@ Since Website Credentials moved to single-blob encryption, merging requires both
 - Physical access to an unlocked device is outside the threat model
 - Auto-lock is a foreground inactivity timer; exact timing while backgrounded is subject to OS suspension
 - A captured save-prompt is tracked per browser tab, not per destination page, for up to 45 seconds - deliberately, so it survives a cross-domain SSO/MFA redirect. The tradeoff is a narrow window where an unrelated page loaded in that same tab could recover the same prompt
-- Live QR transport is protected by physical privacy, not by a handshake
+- Live QR transport has no handshake. A captured vault stream is ciphertext under the master key, and a captured key stream is wrapped under the passphrase and three security answers, so neither is usable on its own. Someone who both captures the key QR and watches the passphrase and answers being typed could still take the key
 
 ## Crypto Wallet and Bookmark Security
 
@@ -250,6 +260,9 @@ The Website Credentials tree (meta plus every domain's credentials) is serialize
 **Safe Autofill Injection:**
 background.js holds the session key and does all decryption; content.js, running in the visited page's own origin, only ever receives the specific plaintext value it asked for (a name, a saved login) and never the master key itself. Unlocking from a locked page opens a small extension window, so Windows Hello and the password are handled in the extension's own origin, where the WebAuthn credential is bound.
 
+**Protected Key Transport:**
+The master key is wrapped once under a passphrase and three chosen security answers (PBKDF2-SHA256, 1,000,000 iterations, AES-GCM), and that package is what the key QR and the key file carry. The package is saved on the device alongside a SHA-256 key identifier so it is reused only while it matches the current key. A receiving device verifies the answers by unwrapping, the same verify-by-unwrap rule as every other unlock, and keeps the package so it can share onward.
+
 **Sealed Sections:**
 Crypto Wallets and Bookmarks share one small module, sealed.js, that serializes a section, deflate-compresses it, and encrypts it as one AES-GCM blob with a fresh IV per write. Each section merges by permanent record IDs with tombstoned deletes, so the same vault file converges on every device.
 
@@ -289,7 +302,7 @@ Contributions welcome. This project maintains a compact, readable codebase with 
 Report security issues via GitHub Security Advisories.
 
 **Audit Status:**
-Pre-1.0, under active testing. Community review welcome. auth.js, crypto.js, session.js, sealed.js, wallets.js, and the native plugins are the surfaces that matter.
+Pre-1.0, under active testing. Community review welcome. auth.js, crypto.js, session.js, keypackage.js, sealed.js, wallets.js, and the native plugins are the surfaces that matter.
 
 ## License
 
