@@ -1,18 +1,7 @@
-import { deriveKeyFromSecret, generateSalt, wrapMasterKey, unwrapMasterKey } from './crypto.js'
 import { getAuth } from './store.js'
 
-// Session model:
-// - masterKey (CryptoKey) held in memory = unlocked (per-context).
-// - Hard unlock: fingerprint OR password (setMasterKey). Both fully unlock.
-// - Session PIN: wraps the master-key bytes with a PIN-derived key. Stored in
-//   chrome.storage.session so it is SHARED across popup + manage + background
-//   and auto-clears when the browser closes. Lets an inactivity SOFT-lock be
-//   resumed quickly with the PIN.
-// - Manual lock = hard lock: wipes masterKey AND the shared PIN wrap. PIN cannot resume.
-// - Inactivity timeout = SOFT lock IF a session PIN is set; else hard lock.
-
 const session = {
-  masterKey: null,          // CryptoKey when unlocked, null when locked
+  masterKey: null,
   unlockedDomains: new Set(),
   lastActivity: 0,
   timeoutId: null,
@@ -20,6 +9,10 @@ const session = {
 }
 
 const DEFAULT_AUTOLOCK_SEC = 60
+const TIMEOUT_CHECK_MS = 2000
+const PIN_KEY = 'sessionPin'
+const SOFT_KEY = 'softLocked'
+const SHARED_ACTIVITY_KEY = 'lastActivity'
 
 async function getTimeouts() {
   let seconds = DEFAULT_AUTOLOCK_SEC
@@ -29,15 +22,7 @@ async function getTimeouts() {
       if (r.autoLockTimeout) seconds = r.autoLockTimeout
     }
   } catch (e) {}
-  // single auto-lock tier: hard lock at the configured seconds; soft threshold set
-  // just above it so the hard path is always the one that fires (no app PIN anymore)
   return { softMs: seconds * 1000 + 1, hardMs: seconds * 1000 }
-}
-const PIN_KEY = 'sessionPin'   // chrome.storage.session: { salt:[], wrapped:{iv,wrapped} }
-const SOFT_KEY = 'softLocked'  // chrome.storage.session: true when idle/manual soft-locked
-
-async function cryptoKeyToBytes(cryptoKey) {
-  return new Uint8Array(await crypto.subtle.exportKey('raw', cryptoKey))
 }
 
 function haveStorage() {
@@ -52,16 +37,6 @@ async function readPin() {
   } catch (e) { return null }
 }
 
-async function writePin(obj) {
-  if (!haveStorage()) return
-  try { await chrome.storage.session.set({ [PIN_KEY]: obj }) } catch (e) {}
-}
-
-async function removePin() {
-  if (!haveStorage()) return
-  try { await chrome.storage.session.remove(PIN_KEY) } catch (e) {}
-}
-
 async function writeSoftFlag(v) {
   if (!haveStorage()) return
   try {
@@ -69,9 +44,18 @@ async function writeSoftFlag(v) {
     else await chrome.storage.session.remove(SOFT_KEY)
   } catch (e) {}
 }
+
 async function readSoftFlag() {
   if (!haveStorage()) return false
   try { const r = await chrome.storage.session.get(SOFT_KEY); return !!(r && r[SOFT_KEY]) } catch (e) { return false }
+}
+
+async function readSharedActivity() {
+  if (!haveStorage()) return 0
+  try {
+    const r = await chrome.storage.session.get(SHARED_ACTIVITY_KEY)
+    return r && typeof r[SHARED_ACTIVITY_KEY] === 'number' ? r[SHARED_ACTIVITY_KEY] : 0
+  } catch (e) { return 0 }
 }
 
 function setMasterKey(key) {
@@ -90,13 +74,6 @@ function hasMasterKey() {
   return session.masterKey !== null
 }
 
-// ---- Session PIN (shared via chrome.storage.session) ----
-
-// async: reads shared storage
-
-
-
-// async: reads shared storage
 async function isSoftLocked() {
   const soft = await readSoftFlag()
   if (!soft) return false
@@ -104,28 +81,23 @@ async function isSoftLocked() {
   return pin !== null
 }
 
-
-// ---- Domains ----
-
 function unlockDomain(domain) { session.unlockedDomains.add(domain) }
 function lockDomain(domain) { session.unlockedDomains.delete(domain) }
 function isDomainUnlocked(domain) { return session.unlockedDomains.has(domain) }
 function getUnlockedDomains() { return Array.from(session.unlockedDomains) }
 
-// ---- Activity / timeout ----
-
 function resetActivity() { session.lastActivity = Date.now() }
 
 async function checkTimeout() {
   if (!session.masterKey) return false
+  const shared = await readSharedActivity()
+  if (shared > session.lastActivity) session.lastActivity = shared
   const elapsed = Date.now() - session.lastActivity
   const { softMs, hardMs } = await getTimeouts()
-  // hard-lock takes over at the longer threshold
   if (elapsed >= hardMs) {
     await lockAll()
     return true
   }
-  // soft-lock at the shorter threshold IF a permanent PIN exists to resume with
   if (elapsed >= softMs) {
     const status = await getAuthPinPresent()
     if (status) { await softLock() } else { await lockAll() }
@@ -134,7 +106,6 @@ async function checkTimeout() {
   return false
 }
 
-// checks whether a permanent auth PIN exists (in vault auth data)
 async function getAuthPinPresent() {
   try {
     const auth = await getAuth()
@@ -145,7 +116,7 @@ async function getAuthPinPresent() {
 
 function startTimeout() {
   stopTimeout()
-  session.timeoutId = setInterval(() => { checkTimeout() }, 2000)
+  session.timeoutId = setInterval(() => { checkTimeout() }, TIMEOUT_CHECK_MS)
 }
 
 function stopTimeout() {
@@ -155,8 +126,6 @@ function stopTimeout() {
   }
 }
 
-// Soft lock: clear the live master key but KEEP the shared PIN wrap so
-// resumeWithPin can restore it. Fingerprint/password still work too.
 async function softLock() {
   session.masterKey = null
   session.unlockedDomains.clear()
@@ -166,7 +135,6 @@ async function softLock() {
   stopTimeout()
 }
 
-// Hard lock: wipe everything, including the shared session PIN. Full re-auth required.
 async function lockAll() {
   session.masterKey = null
   session.unlockedDomains.clear()
@@ -177,7 +145,6 @@ async function lockAll() {
   stopTimeout()
 }
 
-// Clears the persisted service-worker copy of the master key bytes.
 async function clearStorageSession() {
   if (!haveStorage()) return
   try { await chrome.storage.session.remove('masterKeyBytes') } catch (e) {}

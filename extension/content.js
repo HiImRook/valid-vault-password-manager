@@ -10,14 +10,12 @@
     try { chrome.runtime.sendMessage({ action: 'activity' }) } catch (e) {}
   }
 
-  document.addEventListener('input', (e) => {
-    const t = e.target
-    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT')) pingActivity()
-  }, true)
-  document.addEventListener('keydown', (e) => {
-    const t = e.target
-    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT')) pingActivity()
-  }, true)
+  const ACTIVITY_EVENTS = ['mousemove', 'mousedown', 'keydown', 'input', 'wheel', 'scroll', 'touchstart', 'touchmove']
+  for (const type of ACTIVITY_EVENTS) {
+    window.addEventListener(type, (e) => {
+      if (e.isTrusted) pingActivity()
+    }, { capture: true, passive: true })
+  }
 
   function setNativeValue(el, value) {
     const proto = el.tagName === 'TEXTAREA'
