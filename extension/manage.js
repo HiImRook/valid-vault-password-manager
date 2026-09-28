@@ -11,7 +11,9 @@ import * as pairing from './pairing.js'
 import QRCode from './qrcode.js'
 import { splitIntoFrames, createFrameCollector } from './frames.js'
 import { createEncoder, createDecoder } from './fountain.js'
-import { generateSalt, deriveKeyFromSecret, masterKeyToCryptoKey, wrapMasterKey, unwrapMasterKey, decrypt } from './crypto.js'
+import { masterKeyToCryptoKey, decrypt } from './crypto.js'
+import { formDialog, askSecret } from './dialogs.js'
+import * as keypackage from './keypackage.js'
 import { getPasswordVault, setPasswordVault } from './store.js'
 
 
@@ -633,14 +635,6 @@ var personalInfoUnlocked = false
 
 
 
-async function promptPasswordOnly() {
-  const pw = window.prompt('Enter your master password to make this change:')
-  if (!pw) return { success: false }
-  const result = await auth.authenticatePassword(pw)
-  if (result.success) return { success: true, masterKey: result.masterKey }
-  return { success: false, error: result.error }
-}
-
 async function loadPersonalInfo() {
   if (!personalInfoUnlocked) {
     personalInfoContent.innerHTML = '<div style="padding:24px;text-align:center;"><button id="btn-unlock-personalinfo">\ud83d\udd10 Unlock to view Personal Info</button></div>'
@@ -726,8 +720,8 @@ async function getFieldValue(profile, fieldKey) {
 }
 
 async function editPersonalInfoField(fieldKey) {
-  const authResult = await promptPasswordOnly()
-  if (!authResult.success) { showMsg(msgPersonalInfo, authResult.error || 'Password required', 'error'); return }
+  const authResult = await promptAuth()
+  if (!authResult.success) { showMsg(msgPersonalInfo, 'Authentication required', 'error'); return }
   const masterKey = authResult.masterKey
   session.setMasterKey(masterKey)
 
@@ -753,8 +747,8 @@ async function editPersonalInfoField(fieldKey) {
 }
 
 async function addEmail() {
-  const authResult = await promptPasswordOnly()
-  if (!authResult.success) { showMsg(msgPersonalInfo, authResult.error || 'Password required', 'error'); return }
+  const authResult = await promptAuth()
+  if (!authResult.success) { showMsg(msgPersonalInfo, 'Authentication required', 'error'); return }
   const masterKey = authResult.masterKey
   session.setMasterKey(masterKey)
 
@@ -774,8 +768,8 @@ async function addEmail() {
 }
 
 async function moveEmail(emailId, direction) {
-  const authResult = await promptPasswordOnly()
-  if (!authResult.success) { showMsg(msgPersonalInfo, authResult.error || 'Password required', 'error'); return }
+  const authResult = await promptAuth()
+  if (!authResult.success) { showMsg(msgPersonalInfo, 'Authentication required', 'error'); return }
   const masterKey = authResult.masterKey
   session.setMasterKey(masterKey)
 
@@ -798,8 +792,8 @@ async function moveEmail(emailId, direction) {
 }
 
 async function deleteEmail(emailId) {
-  const authResult = await promptPasswordOnly()
-  if (!authResult.success) { showMsg(msgPersonalInfo, authResult.error || 'Password required', 'error'); return }
+  const authResult = await promptAuth()
+  if (!authResult.success) { showMsg(msgPersonalInfo, 'Authentication required', 'error'); return }
   const masterKey = authResult.masterKey
   session.setMasterKey(masterKey)
 
@@ -827,7 +821,7 @@ async function promptAuth() {
     if (result.success) return { success: true, masterKey: result.masterKey }
   }
 
-  const pw = prompt('Enter Password:')
+  const pw = await askSecret('Unlock', 'Master password', status.hasFingerprint ? 'Fingerprint did not complete. Enter your master password instead.' : 'Enter your master password.')
   if (pw) {
     const result = await auth.authenticatePassword(pw)
     if (result.success) return { success: true, masterKey: result.masterKey }
@@ -995,7 +989,6 @@ async function init() {
 
 
 const msgSync = document.getElementById('msg-sync')
-const EXPORT_ITERATIONS = 1000000
 
 function syncMsg(t, kind) { showMsg(msgSync, t, kind || 'success') }
 
@@ -1057,8 +1050,10 @@ const _btnShareVault = document.getElementById('btn-share-vault'); if (_btnShare
 const _btnShareKey = document.getElementById('btn-share-key'); if (_btnShareKey) _btnShareKey.onclick = async function () {
   const mk = session.getMasterKey()
   if (!mk) { syncMsg('Unlock your vault first', 'error'); return }
-  const raw = new Uint8Array(await crypto.subtle.exportKey('raw', mk))
-  streamShare(JSON.stringify({ kind: 'key', key: Array.from(raw) }), 'Scan this with your new device to give it the master key')
+  let pkg = null
+  try { pkg = await ensureKeyPackage(mk) } catch (e) { syncMsg('Could not prepare the key: ' + (e && e.message ? e.message : e), 'error'); return }
+  if (!pkg) return
+  streamShare(JSON.stringify({ kind: 'keyfile', key: pkg }), 'Scan this with your other device. It will ask for your passphrase and answers before accepting the key.')
 }
 const _btnStopShare = document.getElementById('btn-stop-share'); if (_btnStopShare) _btnStopShare.onclick = stopShare
 
@@ -1085,23 +1080,6 @@ function readFileText(cb) {
     r.readAsText(f)
   }
   input.click()
-}
-
-const SECURITY_QUESTIONS = [
-  'Name of your first pet', 'City where you were born', 'Name of your first street',
-  'Your mothers maiden name', 'Name of your first school', 'Your childhood best friend first name',
-  'Make of your first car', 'Name of your first employer', 'Your favorite childhood teacher last name',
-  'The street you grew up on'
-]
-function pickThreeQuestions() {
-  const idx = []; const pool = SECURITY_QUESTIONS.slice()
-  for (let i = 0; i < 3; i++) { const r = Math.floor(Math.random() * pool.length); idx.push(SECURITY_QUESTIONS.indexOf(pool[r])); pool.splice(r, 1) }
-  return idx
-}
-function combineSecret(passphrase, qIdx, answers) {
-  const parts = [passphrase]
-  for (let i = 0; i < qIdx.length; i++) parts.push(String(qIdx[i]) + ':' + answers[i])
-  return parts.join('\u0000')
 }
 
 const _btnExportVault = document.getElementById('btn-export-vault'); if (_btnExportVault) _btnExportVault.onclick = async function () {
@@ -1136,65 +1114,108 @@ const _btnImportVault = document.getElementById('btn-import-vault'); if (_btnImp
     } catch (e) { syncMsg('Import failed: ' + (e && e.message ? e.message : e), 'error') }
   })
 }
-const _btnExportKey = document.getElementById('btn-export-key'); if (_btnExportKey) _btnExportKey.onclick = async function () {
-  const mk = session.getMasterKey()
-  if (!mk) { syncMsg('Unlock first', 'error'); return }
-  const qIdx = pickThreeQuestions()
-  showExportKeyModal(qIdx)
-}
-const _btnImportKey = document.getElementById('btn-import-key'); if (_btnImportKey) _btnImportKey.onclick = function () {
-  readFileText(function (text) {
-    if (!text) { syncMsg('No file selected', 'error'); return }
-    try { const fileObj = JSON.parse(text); if (fileObj.format !== 'valid-vault-key') { syncMsg('Not a key file', 'error'); return } showImportKeyModal(fileObj) }
-    catch (e) { syncMsg('Could not read the file', 'error') }
+const PASSPHRASE_TIP = 'Use four or more random words plus a number and a symbol, like copper-lantern-mosaic-drift7!. Capitalization matters.'
+const ANSWER_TIP = 'One word. Capitalization matters.'
+
+async function setupKeyPackage(mk, isChange) {
+  const defaults = keypackage.pickThreeQuestions()
+  const nickname = await keypackage.getNickname()
+  const questionOptions = keypackage.SECURITY_QUESTIONS.map((label, value) => ({ label, value }))
+  const fields = [
+    { label: 'Passphrase', secret: true, hint: PASSPHRASE_TIP },
+    { label: 'Confirm passphrase', secret: true }
+  ]
+  defaults.forEach((q, i) => {
+    fields.push({ label: 'Question ' + (i + 1), options: questionOptions, value: q })
+    fields.push({ label: 'Answer ' + (i + 1), secret: true, hint: ANSWER_TIP })
+  })
+  return formDialog({
+    title: isChange ? 'Change key protection' : 'Protect your master key',
+    text: (isChange ? 'This replaces the passphrase and answers for new key shares and key files. Key files you already saved keep their old passphrase. ' : 'Your master key only leaves this device wrapped under a passphrase and three security answers. Another device must enter all of them to accept it. You set this once; Share Master Key and Export Key reuse it. ') + 'Pick questions you will always remember the answers to. A lost passphrase or answer cannot be recovered.',
+    fields,
+    okLabel: 'Save',
+    busyLabel: 'Securing...',
+    validate: async (values) => {
+      const problem = keypackage.passphraseProblem(values[0])
+      if (problem) return { error: problem, focus: 0 }
+      if (values[0] !== values[1]) return { error: 'The passphrases do not match.', focus: 1 }
+      const qIdx = [values[2], values[4], values[6]].map(Number)
+      if (new Set(qIdx).size !== qIdx.length) return { error: 'Choose three different questions.', focus: 2 }
+      const answers = [values[3], values[5], values[7]]
+      const blank = answers.findIndex((a) => !a)
+      if (blank !== -1) return { error: 'All three answers are required.', focus: 3 + blank * 2 }
+      const pkg = await keypackage.buildPackage(mk, values[0], qIdx, answers, nickname)
+      await keypackage.savePackage(mk, pkg)
+      return { value: pkg }
+    }
   })
 }
 
+async function ensureKeyPackage(mk) {
+  const saved = await keypackage.getSavedPackage(mk)
+  if (saved) return saved
+  return setupKeyPackage(mk, false)
+}
 
-async function showExportKeyModal(qIdx) {
-  const pass = window.prompt('Set an export passphrase (12+ chars, letter/number/symbol, capitalization matters):')
-  if (!pass) return
-  if (pass.length < 12 || !/[a-zA-Z]/.test(pass) || !/[0-9]/.test(pass) || !/[^a-zA-Z0-9]/.test(pass)) { syncMsg('Passphrase must be 12+ chars with a letter, number, and symbol', 'error'); return }
-  const answers = []
-  for (let i = 0; i < qIdx.length; i++) {
-    const a = window.prompt(SECURITY_QUESTIONS[qIdx[i]] + ' (one word, capitalization matters):')
-    if (!a) { syncMsg('All three answers are required', 'error'); return }
-    answers.push(a)
+async function unlockKeyPackage(pkg, sourceLabel) {
+  const fields = [{ label: 'Passphrase', secret: true }]
+    .concat(pkg.questions.map((q) => ({ label: keypackage.SECURITY_QUESTIONS[q], secret: true, hint: ANSWER_TIP })))
+  return formDialog({
+    title: 'Accept master key',
+    text: sourceLabel + ': ' + (pkg.nickname || 'Master Key') + '. Enter the passphrase and the three answers it was protected with.',
+    fields,
+    okLabel: 'Unlock key',
+    busyLabel: 'Checking...',
+    validate: async (values) => {
+      if (!values[0]) return { error: 'Enter the passphrase.', focus: 0 }
+      try {
+        return { value: await keypackage.openPackage(pkg, values[0], values.slice(1)) }
+      } catch (e) {
+        return { error: 'Wrong passphrase or answers. Check capitalization and try again.', focus: 0 }
+      }
+    }
+  })
+}
+
+async function acceptKeyPackage(pkg, sourceLabel) {
+  const importedKey = await unlockKeyPackage(pkg, sourceLabel)
+  if (!importedKey) { syncMsg('Key import cancelled. Nothing changed.', 'error'); return }
+  const adopted = await adoptImportedKey(importedKey)
+  if (adopted) {
+    try { await keypackage.savePackage(importedKey, pkg) } catch (e) {}
   }
+}
+
+const _btnExportKey = document.getElementById('btn-export-key'); if (_btnExportKey) _btnExportKey.onclick = async function () {
+  const mk = session.getMasterKey()
+  if (!mk) { syncMsg('Unlock first', 'error'); return }
   try {
-    const mk = session.getMasterKey()
-    const secret = combineSecret(pass, qIdx, answers)
-    const salt = await generateSalt()
-    const wrapKey = await deriveKeyFromSecret(secret, salt, EXPORT_ITERATIONS)
-    const rawMaster = new Uint8Array(await crypto.subtle.exportKey('raw', mk))
-    const wrapped = await wrapMasterKey(rawMaster, wrapKey)
-    const authRec = await store.getAuth() || {}
-    const nickname = authRec.keyNickname || 'My Master Key'
-    const fileObj = { format: 'valid-vault-key', version: 1, nickname: nickname, questions: qIdx, salt: Array.from(salt), iterations: EXPORT_ITERATIONS, wrapped: wrapped }
-    const fname = nickname.replace(/[^a-z0-9]+/gi, '-').toLowerCase() + '.vaultkey'
-    if (downloadFile(fname, JSON.stringify(fileObj))) syncMsg('Key exported. Store the file, passphrase, and answers safely.', 'success')
+    const pkg = await ensureKeyPackage(mk)
+    if (!pkg) return
+    const fname = (pkg.nickname || 'master-key').replace(/[^a-z0-9]+/gi, '-').toLowerCase() + '.vaultkey'
+    if (downloadFile(fname, JSON.stringify(pkg))) syncMsg('Key exported. Keep the file, passphrase, and answers safe.', 'success')
     else syncMsg('Could not save the file', 'error')
   } catch (e) { syncMsg('Export failed: ' + (e && e.message ? e.message : e), 'error') }
 }
-async function showImportKeyModal(fileObj) {
-  const pass = window.prompt('Key file: ' + (fileObj.nickname || 'Master Key') + '\nEnter passphrase:')
-  if (!pass) return
-  const answers = []
-  for (let i = 0; i < fileObj.questions.length; i++) {
-    const a = window.prompt(SECURITY_QUESTIONS[fileObj.questions[i]] + ' (capitalization matters):')
-    if (a == null) return
-    answers.push(a)
-  }
+const _btnImportKey = document.getElementById('btn-import-key'); if (_btnImportKey) _btnImportKey.onclick = function () {
+  readFileText(async function (text) {
+    if (!text) { syncMsg('No file selected', 'error'); return }
+    let fileObj = null
+    try { fileObj = JSON.parse(text) } catch (e) { syncMsg('Could not read the file', 'error'); return }
+    if (!keypackage.isKeyPackage(fileObj)) { syncMsg('Not a key file', 'error'); return }
+    try { await acceptKeyPackage(fileObj, 'Key file') }
+    catch (e) { syncMsg('Key import failed: ' + (e && e.message ? e.message : e), 'error') }
+  })
+}
+const _btnChangeKeyProtection = document.getElementById('btn-change-key-protection'); if (_btnChangeKeyProtection) _btnChangeKeyProtection.onclick = async function () {
+  const mk = session.getMasterKey()
+  if (!mk) { syncMsg('Unlock first', 'error'); return }
+  const authResult = await promptAuth()
+  if (!authResult.success) { syncMsg('Authentication required', 'error'); return }
   try {
-    const secret = combineSecret(pass, fileObj.questions, answers)
-    const salt = new Uint8Array(fileObj.salt)
-    const wrapKey = await deriveKeyFromSecret(secret, salt, fileObj.iterations || EXPORT_ITERATIONS)
-    let importedKey
-    try {
-      importedKey = await unwrapMasterKey(fileObj.wrapped, wrapKey)
-    } catch (e) { syncMsg('Wrong passphrase or answers.', 'error'); return }
-    await adoptImportedKey(importedKey)
-  } catch (e) { syncMsg('Key import failed: ' + (e && e.message ? e.message : e), 'error') }
+    const pkg = await setupKeyPackage(mk, true)
+    if (pkg) syncMsg('Key protection updated. New key shares and key files use it.', 'success')
+  } catch (e) { syncMsg('Could not update key protection: ' + (e && e.message ? e.message : e), 'error') }
 }
 
 const KEY_MISMATCH_MSG = 'This vault was made with a different master key. Import that master key first, then import the vault.'
@@ -1290,13 +1311,13 @@ async function clearLocalVaultData() {
 
 async function choosePasswordForImport(status) {
   if (status.hasPassword) {
-    const current = window.prompt('Enter this browser\'s master password to confirm the key import:')
+    const current = await askSecret('Confirm key import', 'This browser\'s master password', 'The imported key gets locked under this browser\'s password so it survives lock and unlock.')
     if (!current) { syncMsg('Key import cancelled. Nothing changed.', 'error'); return null }
     const check = await auth.authenticatePassword(current)
     if (!check.success) { syncMsg('Wrong password. Key import cancelled, nothing changed.', 'error'); return null }
     if (passwordMeetsRule(current)) return current
   }
-  const fresh = window.prompt('Set a master password for this browser (12+ characters, letter, number, symbol):')
+  const fresh = await askSecret('Set a master password', 'New master password', 'This browser has no password yet. Set one for the imported key: 12+ characters with a letter, a number, and a symbol.')
   if (!fresh) { syncMsg('Key import cancelled. Nothing changed.', 'error'); return null }
   if (!passwordMeetsRule(fresh)) { syncMsg('Password must be 12+ characters with a letter, a number, and a symbol. Key import cancelled, nothing changed.', 'error'); return null }
   return fresh
@@ -1411,9 +1432,13 @@ const _qrScanBox = document.getElementById('qr-scan-box'); if (_qrScanBox) _qrSc
 async function handleImported(payloadText) {
   try {
     const data = JSON.parse(payloadText)
+    if (data.kind === 'keyfile') {
+      if (!keypackage.isKeyPackage(data.key)) { syncMsg('That key code is damaged or incomplete. Scan it again.', 'error'); return }
+      await acceptKeyPackage(data.key, 'Scanned key')
+      return
+    }
     if (data.kind === 'key') {
-      const importedKey = await masterKeyToCryptoKey(new Uint8Array(data.key))
-      await adoptImportedKey(importedKey)
+      syncMsg('Refused: this code carries an unprotected master key from an older version. Update the other device, or move the key with Export Key and Import Key.', 'error')
       return
     }
     if (data.kind === 'vault') {

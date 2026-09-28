@@ -114,6 +114,16 @@
     .wv-dialog-text { color: var(--text); font-size: 13px; line-height: 1.5; margin-bottom: 14px; word-break: break-word; }
     .wv-dialog-input { width: 100%; margin-bottom: 14px; }
     .wv-dialog-actions { display: flex; gap: 8px; justify-content: flex-end; }
+    .vv-form { max-height: calc(100vh - 32px); overflow-y: auto; }
+    .vv-field { margin-bottom: 12px; }
+    .vv-field-label { display: block; color: var(--text); font-size: 12px; margin-bottom: 4px; }
+    .vv-field-row { display: flex; gap: 6px; }
+    .vv-field-input { flex: 1; min-width: 0; }
+    .vv-eye { padding: 6px 10px; font-size: 11px; }
+    .vv-field-select { background: var(--bg); border: 1px solid var(--green-faint); color: var(--text); padding: 9px; border-radius: 6px; font-family: inherit; font-size: 13px; }
+    .vv-field-select:focus { outline: none; border-color: var(--green-dim); }
+    .vv-field-hint { color: var(--text-dim); font-size: 11px; margin-top: 4px; line-height: 1.4; }
+    .vv-form-error { color: var(--danger); font-size: 12px; min-height: 16px; margin-bottom: 8px; }
     @media (max-width: 760px) { .wv-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   </style>
 </head>
@@ -169,7 +179,7 @@
 
       <div id="tab-personal" class="hidden">
         <h1>Personal Info</h1>
-        <p style="color:var(--text-dim);font-size:13px;margin-bottom:14px;">Used by autofill on signup and profile forms. Viewing requires unlock; adding or editing any field requires your master password. Social Security numbers and card info are deferred for now, held back for later, added security work.</p>
+        <p style="color:var(--text-dim);font-size:13px;margin-bottom:14px;">Used by autofill on signup and profile forms. Viewing requires unlock; adding or editing any field asks for your fingerprint or device PIN, with your master password as the fallback. Social Security numbers and card info are deferred for now, held back for later, added security work.</p>
         <div id="personalinfo-content"></div>
         <div id="msg-personalinfo" class="msg hidden"></div>
       </div>
@@ -189,7 +199,7 @@
         <h1>Sync</h1>
 
         <h2>Share</h2>
-        <p style="color:var(--text-dim);font-size:13px;margin-bottom:10px;">Show a QR for another device to scan. Do this somewhere private, anyone who sees it can capture it.</p>
+        <p style="color:var(--text-dim);font-size:13px;margin-bottom:10px;">Show a QR for another device to scan. The vault stays encrypted under your master key, and the master key is wrapped under your passphrase and three security answers, so the receiving device must enter them before it can use the key.</p>
         <div style="display:flex;gap:10px;flex-wrap:wrap;">
           <button id="btn-share-vault">Share Vault</button>
           <button id="btn-share-key" class="secondary">Share Master Key</button>
@@ -210,6 +220,7 @@
         <div style="display:flex;gap:10px;flex-wrap:wrap;">
           <button id="btn-export-key">Export Key</button>
           <button id="btn-import-key" class="secondary">Import Key</button>
+          <button id="btn-change-key-protection" class="secondary">Change Key Passphrase</button>
         </div>
 
         <h2 style="margin-top:28px;">Scan a Device</h2>
