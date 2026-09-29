@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" href="favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="512x512" href="favicon-512.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <title>Valid Vault - local, encrypted password manager</title>
 <meta name="description" content="Valid Vault is a local, encrypted password manager. No cloud, no accounts, no servers. Password generator, click-to-fill autofill, and QR transfer between your own devices.">
 <style>
@@ -107,7 +110,7 @@
   .closer p { margin: 0; color: var(--text); }
   .note { background: var(--bg-raise); border-left: 3px solid var(--amber); padding: 16px 20px; color: var(--text-dim); font-size: 14px; margin-top: 20px; }
   .note strong { color: var(--amber); }
-  .crt-roll { position: fixed; left: 0; right: 0; top: -25vh; height: 25vh; background: linear-gradient(to bottom, rgba(51,255,102,0) 0%, rgba(51,255,102,0.019) 70%, rgba(180,255,200,0.038) 96%, rgba(51,255,102,0) 100%); pointer-events: none; z-index: 98; animation: crt-roll 9s linear infinite; }
+  .crt-roll { position: fixed; left: 0; right: 0; top: -25vh; height: 25vh; background: linear-gradient(to bottom, rgba(51,255,102,0) 0%, rgba(51,255,102,0.017) 70%, rgba(180,255,200,0.034) 96%, rgba(51,255,102,0) 100%); pointer-events: none; z-index: 98; animation: crt-roll 9s linear infinite; }
   @keyframes crt-roll { from { transform: translateY(0); } to { transform: translateY(150vh); } }
   @keyframes crt-flicker { 0% { opacity: 1; } 48% { opacity: 0.92; } 50% { opacity: 1; } 97% { opacity: 0.95; } }
   @media (prefers-reduced-motion: reduce) { .crt-roll { display: none; } body::before { animation: none; } }
