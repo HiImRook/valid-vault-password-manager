@@ -4,6 +4,8 @@ A local, encrypted, QR code portable password manager. No cloud, no accounts, no
 
 **Status: Active testing.** Core functionality works end to end, and the project is being hardened through real device use before a wider release. See [ROADMAP.md](ROADMAP.md) for what's tested and what's still in progress.
 
+**Community:** updates, support, and bug reports on the [Valid Vault Discord](https://discord.gg/2SP383cJs9).
+
 ---
 
 > ✅ **Password Generator - v0.7.2**
@@ -289,6 +291,10 @@ Scanning uses the web camera through getUserMedia, drawing frames to a canvas th
 
 **Single-File Bundle:**
 build.js assembles the source modules into one self-contained HTML file. No module loader, no CDN, no external requests at runtime.
+
+## Community
+
+Join the [Valid Vault Discord](https://discord.gg/2SP383cJs9) for release announcements, support, and bug reports.
 
 ## Related Projects
 

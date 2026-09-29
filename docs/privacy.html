@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Privacy Policy — Valid Vault</title>
+<title>Privacy Policy - Valid Vault</title>
 <style>
   :root {
     --bg: #0a0e0a; --bg-raise: #0d130d; --green: #33ff66;
@@ -17,11 +17,13 @@
   .wrap { max-width: 780px; margin: 0 auto; padding: 0 24px; }
   .topnav { position: sticky; top: 0; z-index: 90; background: rgba(10,14,10,0.85); backdrop-filter: blur(6px); border-bottom: 1px solid var(--green-faint); }
   .nav-inner { display: flex; align-items: center; justify-content: space-between; height: 56px; }
-  .nav-brand { color: var(--green); font-weight: 700; letter-spacing: 2px; font-size: 15px; text-decoration: none; text-shadow: 0 0 6px rgba(51,255,102,0.4); }
+  .nav-brand { color: var(--green); font-weight: 700; letter-spacing: 2px; font-size: 15px; text-decoration: none; white-space: nowrap; text-shadow: 0 0 6px rgba(51,255,102,0.4); }
   .nav-links { display: flex; gap: 26px; }
   .nav-links a { color: var(--text-dim); font-size: 14px; text-decoration: none; letter-spacing: 1px; }
   .nav-links a:hover { color: var(--green); text-shadow: 0 0 6px rgba(51,255,102,0.5); }
   @media (max-width: 560px) { .nav-links { gap: 16px; } .nav-links a { font-size: 13px; } .nav-brand { font-size: 14px; } }
+  @media (max-width: 460px) { .nav-links .opt { display: none; } .nav-links { gap: 10px; } .nav-links a { font-size: 11px; letter-spacing: 0; } .nav-brand { font-size: 12px; letter-spacing: 1px; } }
+  @media (max-width: 360px) { .nav-links { gap: 8px; } .nav-brand { font-size: 11px; letter-spacing: 0; } }
   .doc { padding: 60px 0 40px; }
   .doc h1 { color: var(--green); font-size: clamp(30px, 6vw, 46px); font-weight: 700; letter-spacing: 2px; text-shadow: 0 0 8px rgba(51,255,102,0.4); margin-bottom: 10px; }
   .updated { color: var(--text-dim); font-size: 14px; margin-bottom: 40px; }
@@ -47,8 +49,8 @@
   <div class="wrap nav-inner">
     <a class="nav-brand" href="index.html">Valid Vault</a>
     <div class="nav-links">
-      <a href="index.html">Home</a>
       <a href="index.html#features">Features</a>
+      <a class="opt" href="index.html#security">Security</a>
       <a href="index.html#install">Install</a>
       <a href="privacy.html">Privacy</a>
     </div>
@@ -57,7 +59,7 @@
 <div class="doc">
   <div class="wrap">
     <h1>Privacy Policy</h1>
-    <p class="updated">Last updated: August 2026</p>
+    <p class="updated">Last updated: September 2026</p>
 
     <h2>Scope</h2>
     <p>This Privacy Policy describes how the Valid Vault browser extension and Android application handle information. Both are built from the same source code and are governed by this policy.</p>
@@ -66,24 +68,33 @@
     <p>Valid Vault does not collect any information. The application has no servers, no backend, and no user accounts. It does not use analytics or telemetry, and it does not transmit information to the developer or to any third party.</p>
 
     <h2>Information Stored on Your Device</h2>
-    <p>To function as a password manager, Valid Vault stores the following on your device in encrypted form:</p>
+    <p>To function as a password manager, Valid Vault stores the following on your device, encrypted with AES-256-GCM under a master key only you can unlock:</p>
     <ul>
-      <li>Credentials you save, including site, username, and password</li>
-      <li>Your selected unlock method, such as fingerprint (WebAuthn), PIN, or password</li>
-      <li>Application settings</li>
+      <li>Website logins you save, including site, username, password, and a replaced password kept for restore after a change</li>
+      <li>Personal information you enter for form filling, such as name, phone, address, and email addresses</li>
+      <li>Miscellaneous credentials you enter, such as Wi-Fi passwords or license keys</li>
+      <li>Crypto wallet seed phrases and notes you enter</li>
+      <li>Bookmarks you save, including page address and title</li>
+      <li>Your unlock methods, stored only as wrapped copies of the master key, never as passwords or password hashes</li>
+      <li>Application settings, such as the auto-lock time and password generator length</li>
     </ul>
-    <p class="dim">This data is stored locally, in your browser's local storage or your device's application storage. It is not transmitted to the developer or any third party.</p>
+    <p class="dim">This data is stored locally, in the browser extension's own storage or the Android app's storage. It is not transmitted to the developer or any third party.</p>
 
     <h2>Permissions</h2>
     <p>The browser extension requests the following permissions solely to operate as a password manager. Each permission is used locally on your device and is not used to collect or transmit information:</p>
     <ul>
-      <li><strong>Host access:</strong> to detect login forms on websites you visit and fill saved credentials into them. Page content is not collected or transmitted.</li>
-      <li><strong>activeTab:</strong> to read the domain of the current page so the matching saved credentials can be offered.</li>
+      <li><strong>Host access:</strong> to detect login, signup, and personal info forms on websites you visit and fill your saved details into them when you click the Valid Vault tag on a field. Field attributes are read to identify fields, and the values you submit in a login form are read only to offer saving them. No other page content is read, stored, or transmitted.</li>
+      <li><strong>activeTab:</strong> to read the address and title of the current tab when you open the popup, so the page can be saved to or removed from your bookmarks.</li>
       <li><strong>Storage:</strong> to store the encrypted vault and application settings locally on your device.</li>
+      <li><strong>Alarms:</strong> to lock the vault after the idle time you choose.</li>
+      <li><strong>Side panel:</strong> to show your encrypted bookmarks in the browser side panel.</li>
     </ul>
 
+    <h2>Activity and Auto-Lock</h2>
+    <p>To keep the vault open while you are using your browser, the extension notes that real mouse, scroll, click, or key activity happened and resets the auto-lock timer. It does not record what you typed, what you clicked, or where. Only the time of the last activity is kept, in memory, and it is cleared when the browser closes.</p>
+
     <h2>Device-to-Device Sync</h2>
-    <p>Valid Vault allows credentials to be moved between a user's own devices using QR codes. One device displays data as a QR code and another device scans it. This transfer occurs directly between the devices and does not involve a server or any external service.</p>
+    <p>Valid Vault allows the vault to be moved between a user's own devices using QR codes or an exported file. One device displays the encrypted vault as a QR code and another device scans it, or the user saves and opens the encrypted file themselves. The vault stays encrypted throughout, and the master key only leaves a device wrapped under a passphrase and security questions chosen by the user. This transfer occurs directly between the user's devices and does not involve a server or any external service.</p>
 
     <h2>Third Parties</h2>
     <p>Valid Vault does not share information with third parties. It contains no advertising, no analytics providers, and no external services that receive user information.</p>
@@ -92,7 +103,7 @@
     <p>All data is stored on your device and remains under your control. You may clear the vault within the application's settings, or remove the extension or uninstall the application to delete its stored data from your device.</p>
 
     <h2>Children's Privacy</h2>
-    <p>Valid Vault is a general-purpose application and is not directed at children. It does not collect personal information from any user.</p>
+    <p>Valid Vault is a general-purpose application and is not directed at children. It does not collect personal information from any user; anything entered stays encrypted on the user's own device.</p>
 
     <h2>Changes to This Policy</h2>
     <p>Any changes to this policy will be posted on this page with an updated date.</p>
