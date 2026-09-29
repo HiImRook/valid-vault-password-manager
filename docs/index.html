@@ -90,12 +90,13 @@
   @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
   @media (max-width: 600px) { header { min-height: 66vh; } .logo { letter-spacing: 4px; } }
   .hero-center { display: flex; flex-direction: column; align-items: center; text-align: center; }
-  .hero-center .logo { text-align: center; }
+  .hero-center .logo { text-align: center; margin-top: -16px; }
+  .hero-center .tagline { margin-top: 44px; }
   .hero-center .tagline { margin-left: auto; margin-right: auto; }
   .hero-globe { display: flex; justify-content: center; margin: 0 0 22px; }
   .hero-globe canvas { filter: drop-shadow(0 0 5px rgba(51,255,102,0.4)); width: 340px; height: 340px; }
   .cta-row { justify-content: center; }
-  @media (max-width: 600px) { .hero-globe canvas { width: 260px; height: 260px; } }
+  @media (max-width: 600px) { .hero-globe canvas { width: 260px; height: 260px; } .hero-center .logo { margin-top: -12px; } .hero-center .tagline { margin-top: 40px; } }
   section p { color: var(--text); margin-bottom: 16px; }
   section em { color: var(--text); font-style: normal; border-bottom: 1px solid var(--green-dim); padding-bottom: 1px; }
   section ul { list-style: none; margin: 4px 0 20px; }
