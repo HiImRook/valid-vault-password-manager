@@ -1,3 +1,6 @@
+<img width="768" height="900" alt="valid-vault-stacked-spin-transparent-768x900" src="https://github.com/user-attachments/assets/5d3240bb-9d24-4cd3-b539-d529a2730cbc" />
+
+
 # Valid Vault Password Manager
 
 A local, encrypted, QR code portable password manager. No cloud, no accounts, no sync servers. Your credentials live on your device, encrypted under keys only you can produce, and move between devices over a fully local QR stream or an encrypted backup file.
