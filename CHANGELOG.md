@@ -5,6 +5,32 @@ All notable changes to Local Vault will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.3] - 2026-09-30
+
+This release lets every browser on one computer share one vault. Uni-Vault links each browser to a single encrypted vault file and keeps them in sync automatically, with no exporting or importing after the first link. It also adds a searchable User Guide inside the extension, makes fingerprint or device PIN the first choice when importing a key, and closes a gap where unlock methods could be changed without authenticating again. Extension only.
+
+### Added
+- **Uni-Vault.** Export Vault now opens a Save dialog and offers to link the browser to that file; Import Vault offers to link another browser to the same file. Linked browsers read from and write to that one encrypted file: a change reaches the file within about a second, and other linked browsers pick it up within seconds while Manage is open, within about 30 seconds otherwise, and at every unlock. Merging uses the existing rules, so the newest edit wins and deletes carry across. Each browser keeps its own working copy, so autofill stays instant and nothing is lost if the file is briefly unreachable. Choosing Backup only or Merge once keeps the old one-time behavior, and while a browser is linked, Export Vault saves a separate backup copy without moving the link.
+- **Uni-Vault safety.** A damaged file, a file replaced with something else, or a file made with a different master key is refused, left untouched, and never overwritten; the browser keeps working with its own copy and Sync explains why. A browser writes to the file only when it has changes of its own, so linked browsers never rewrite the file back and forth. A new Uni-Vault panel in Sync shows the linked file and last sync time with Reconnect and Unlink, and the popup shows Reconnect if the browser ever drops its permission. Clear Vault also unlinks.
+- **Brave detection.** Brave ships the File System Access API switched off, which Uni-Vault needs. In Brave without that setting, Sync says Uni-Vault is switched off in Brave and points to the User Guide, and Export Vault and Import Vault keep working as before.
+- **User Guide.** A new User Guide item in the popup menu, between Bookmarks and Settings Menu, opens a full guide in a new tab: first setup, fingerprint and PIN versus password, what locking protects, every timer and length setting, autofill, the password generator, password habits, the master key and passphrase, Uni-Vault, moving between browsers and devices, backups and cold storage, ten recommended setups for different users, troubleshooting, and honest limits. It has a search box at the top right that highlights every match, counts them, and steps through them with Enter and Shift+Enter, plus the same CRT effects as the website.
+
+### Changed
+- **Key import offers fingerprint or device PIN first.** Importing a key by file or QR asks how this browser should lock the imported key, with Fingerprint or device PIN (recommended) selected and a master password as the fallback. An existing fingerprint is relinked in place with a single Windows Hello prompt, and an existing password becomes an optional backup. On devices without Windows Hello, it goes straight to the password as before.
+- **About links** now include Discord, listed first, and open in a new tab instead of replacing the Manage page.
+
+### Fixed
+- **Unlock methods could be changed without authenticating again.** While the vault was unlocked, Edit and Delete for fingerprint and password, and Clear Vault, went ahead without asking. They now ask for fingerprint, device PIN, or password first.
+- **Two password prompts showed typed text.** Setting a master password from Manage and editing a saved login's password used plain browser prompts. Both are now masked Valid Vault dialogs.
+
+### Known Gaps
+- Uni-Vault needs Brave's File System Access API setting switched on; the User Guide explains how. Chrome and Edge work out of the box.
+- Uni-Vault syncs browsers on the same computer. Moving the vault between devices is still Export and Import or QR.
+- Whether a browser remembers file permission across restarts depends on the browser. If it asks again, Reconnect restores it in one click.
+
+### Notes
+- Verified with Playwright-in-Chromium tests: 18 Uni-Vault checks across two browser profiles sharing one file (linking, merging both ways, website saves with no Manage page open, deletes, refusing damaged and wrong-key files, recovery, unlink, and the Brave fallback), 17 fingerprint-first key import checks with a virtual authenticator, re-authentication and masked prompt checks, 18 User Guide and search checks, and regression runs of the key transport, wallets, and generator suites.
+
 ## [0.7.2] - 2026-09-28
 
 This release adds a password generator to the extension. New password and change password fields get their own V that creates a strong random password and fills both boxes, and a changed password keeps the old one on hand in case the site never accepted the change. It also polishes Settings, the Manage credential list, and the popup. Extension only; the phone app receives the generator in the v0.8.x de-drift.

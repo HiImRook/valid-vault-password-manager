@@ -11,6 +11,10 @@ A local, encrypted, QR code portable password manager. No cloud, no accounts, no
 
 ---
 
+> ✅ **Uni-Vault and User Guide - v0.7.3**
+>
+> Every browser on one computer can now share one vault. Uni-Vault links each browser to a single encrypted vault file and keeps them in sync automatically: save a login in Chrome and it shows up in Edge on its own. A damaged file, a replaced file, or a file made with a different key is refused and never overwritten. Uni-Vault works in Chrome and Edge; Brave ships the browser feature it needs switched off, and the new User Guide shows the one setting that turns it back on. The User Guide itself is new too, searchable and opened from the popup menu, covering setup, every setting, and recommended setups for different users. Key import now offers fingerprint or device PIN first with a password as the fallback, and changing unlock methods or clearing the vault now asks for fingerprint, PIN, or password again. See [CHANGELOG.md](CHANGELOG.md) for full details.
+
 > ✅ **Password Generator - v0.7.2**
 >
 > New password and change password fields now get an inverted V that generates a strong random password and fills both the new and confirm boxes. It uses the browser's cryptographic random source, always mixes upper, lower, digits, and symbols, and follows any length or character rules the site declares. Length is set in Settings, from 16 up to 64 characters in four ranges. Changing a password keeps the old one as a labeled previous password with one-click restore, in case the site never accepted the change. Settings also shows timeouts as readable time, and the auto-lock limit is now 2 hours. See [CHANGELOG.md](CHANGELOG.md) for full details.
@@ -73,7 +77,7 @@ Valid Vault is a self-hosted password manager built on a master key wrap archite
 
 No cloud service holds your data. No company can be subpoenaed for it or breached for it, and there is never any data for anyone to sell. You cannot leak what you never sent anywhere.
 
-**One vault, many surfaces.** The same master key that unlocks your vault on one browser unlocks the same vault file on another browser, or on the phone. Import a key once and it becomes that browser's key going forward, export the vault, import it elsewhere, and every surface stays in sync through the same timestamp-based merge logic, no server involved.
+**One vault, many surfaces.** The same master key that unlocks your vault on one browser unlocks the same vault file on another browser, or on the phone. Import a key once and it becomes that browser's key going forward. On one computer, Uni-Vault links every browser to a single encrypted vault file and keeps them in sync automatically. Between devices, moving the vault is a manual Export and Import or QR share, merged by the same timestamp-based logic, no server involved.
 
 ---
 
@@ -93,6 +97,7 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 - Website Credentials, Web Credentials, and Personal Info each require their own explicit re-unlock inside Manage; every unlock and Personal Info edit tries fingerprint or device PIN first, with the master password as the fallback in a masked dialog
 - Clicking a tagged field or a save prompt while locked opens a small Valid Vault unlock window with Windows Hello (fingerprint or device PIN) or password; the unlock runs in the extension's own origin, never in the visited page
 - Crypto Wallets requires its own explicit unlock inside Manage, and locks itself again when you switch Manage tabs or browser tabs, or after the auto-lock time
+- Changing or deleting an unlock method and Clear Vault always ask for fingerprint, device PIN, or password again, even while the vault is unlocked
 - Mouse movement, scrolling, clicks, and typing anywhere in the browser count as activity for auto-lock; only real input counts, so a page cannot fake activity to keep the vault open
 
 **Autofill (Extension):**
@@ -104,11 +109,15 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 - Changing a password keeps the old one as a previous password, shown as a labeled second choice in the login picker with one-click restore; it is dropped only after the new password has been used 3 times and 14 days have passed
 - A save prompt shown while the vault is locked offers Unlock and Save, which opens the Valid Vault unlock window and saves once unlocked
 - A visible field tag marks anything Valid Vault has matched
+- Passwords are never copied to the clipboard; autofill places them directly into the field you clicked
 - Website Credentials reliably saves new logins from real signup flows, including submit-triggered navigation, cross-domain SSO/MFA redirects, and multi-form pages
 - Each saved login now classifies its `loginType` (username, email, or phone) for more reliable matching
 - Custom div-based comboboxes and `contenteditable` fields remain unsupported; matching quality on unusual sites is still being hardened
 
 **Sync and Backup:**
+- Uni-Vault - link every browser on one computer to a single encrypted vault file; saves reach the file within about a second and other linked browsers pick them up within about 30 seconds, or within seconds while Manage is open, merged by timestamp with tombstoned deletes
+- Uni-Vault refuses a damaged file, a replaced file, or a file made with a different key and never overwrites it; each browser keeps its own working copy, and Sync shows the linked file and last sync time with Reconnect and Unlink
+- Uni-Vault works in Chrome and Edge out of the box; Brave needs its File System Access API setting switched on, explained in the User Guide, and Export and Import work in Brave as before
 - Live QR sync - stream your vault or your protected key as a one-way fountain QR, scan it on the other device
 - Sovereign scanner - the standard web camera plus a vendored jsQR decoder, no Google dependency
 - Encrypted vault backup - save directly to Downloads or share the file, inert without the matching master key
@@ -119,6 +128,7 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 - Bookmarks and Crypto Wallets travel inside the encrypted vault file (Export Vault / Import Vault) with the same tombstoned-delete merge; seed phrases are kept out of the live QR share, and a bookmarks QR share is planned for v0.8.2
 - Syncing now requires both devices to already share the same master key; a mismatched key fails with a clear error instead of being silently reconciled
 - Importing a master key onto a browser whose vault uses a different key warns first, clears that vault on confirmation, and saves the imported key under the browser's unlock methods (extension; phone follows next release)
+- Key import offers fingerprint or device PIN first, with a master password as the fallback; a password on that browser becomes an optional backup
 - Raw key QR codes from older versions are refused; phone and extension key transfer over QR resumes when the phone learns the protected format in the phone de-drift, and the key file path works in the meantime
 
 **Vault:**
@@ -136,7 +146,7 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 - Android via Capacitor, with native plugins for biometric auth and file saving
 - Vendored, self-contained code only, no Google SDKs in the scan path
 
-## Current Status: v0.7.2 - Active Testing
+## Current Status: v0.7.3 - Active Testing
 
 **Completed:**
 * ✅ Master key wrap architecture, verify-by-unwrap, no stored hashes
@@ -159,6 +169,9 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 * ✅ Masked Valid Vault dialogs for every password prompt in Manage, and fingerprint first for Personal Info edits
 * ✅ Password generator on new and change password fields, with length ranges set in Settings
 * ✅ Previous password safety net with one-click restore after a password change
+* ✅ Uni-Vault: every browser on one computer shares one encrypted vault file, synced automatically
+* ✅ Searchable User Guide in the extension, with setups for different users
+* ✅ Fingerprint-first key import, and re-authentication for unlock method changes and Clear Vault
 
 **In Development:**
 * 📋 Phone de-drift (v0.8.x): key import, whole-vault carry including bookmarks and wallets, and Personal Info on the phone
@@ -171,7 +184,7 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 
 Master key transport is deliberate. The primary path is a live QR stream: one device shows its vault or its protected key as a fountain QR, the other scans it. The key is always wrapped under a passphrase plus three security questions the owner picks, stretched with 1,000,000 PBKDF2 rounds, and the receiving device has to enter all of them before the key can be used, so a captured QR is as useless as a stolen file. For disaster recovery there is an offline path: Export Vault saves the encrypted vault directly to Downloads or through the native share sheet, and Export Key saves the same protected key package as a file.
 
-Because importing a key now persists, the same vault file genuinely works the same way everywhere: set a password in Chrome, export the vault, import the key and the vault into Firefox with the same password, add a credential there, export again, and Chrome picks up the change on its next import. No server, no account, just timestamp-based merge.
+Because importing a key persists, the same vault file works the same way everywhere. On one computer, Uni-Vault does the rest: link Chrome and Edge to the same vault file, add a credential in either, and the other picks it up on its own. Between devices, export the vault and import it on the other side, or share it over QR. No server, no account, just timestamp-based merge.
 
 Since Website Credentials moved to single-blob encryption, merging requires both devices to already hold the same master key. If the local and incoming keys don't match, sync now fails with a clear error rather than silently picking one key or reconciling the difference.
 
@@ -188,7 +201,7 @@ Since Website Credentials moved to single-blob encryption, merging requires both
 
 **Locking is enforced end to end.** A manual or timeout lock clears the shared session key everywhere it was stored, so a locked session cannot silently resume.
 
-**Fingerprint first, password as the fallback.** Unlocking a section in Manage and editing Personal Info try fingerprint or device PIN first, the strongest local method, and fall back to the master password in a masked dialog. Importing a key still asks for the browser's password directly, because the imported key is re-locked under that password.
+**Fingerprint first, password as the fallback.** Unlocking a section in Manage and editing Personal Info try fingerprint or device PIN first, the strongest local method, and fall back to the master password in a masked dialog. Importing a key offers fingerprint or device PIN first to lock the imported key, with a master password as the fallback, and changing unlock methods or clearing the vault always asks again.
 
 **Autofill never exposes the master key.** background.js is the only place the session key lives; content.js, running in the page's own context, only ever receives specific plaintext values it explicitly requested for injection. Unlocking from a page opens a separate extension window, so the password and the WebAuthn credential are only ever handled in the extension's own origin, never typed into or triggered from the visited page.
 
@@ -196,12 +209,12 @@ Since Website Credentials moved to single-blob encryption, merging requires both
 
 **No competitor-targeting logic exists or is planned.** Autofill competes on being fully local and already-unlocked in memory, not on hiding another password manager's UI.
 
-**Design boundaries:**
-- Website Credentials migrate to single-blob encryption automatically on first unlock; older vaults are read once, converted, verified, and backed up under an encrypted recovery journal during that migration
-- Physical access to an unlocked device is outside the threat model
-- Auto-lock is a foreground inactivity timer; exact timing while backgrounded is subject to OS suspension
-- A captured save-prompt is tracked per browser tab, not per destination page, for up to 45 seconds - deliberately, so it survives a cross-domain SSO/MFA redirect. The tradeoff is a narrow window where an unrelated page loaded in that same tab could recover the same prompt
-- Live QR transport has no handshake. A captured vault stream is ciphertext under the master key, and a captured key stream is wrapped under the passphrase and three security answers, so neither is usable on its own. Someone who both captures the key QR and watches the passphrase and answers being typed could still take the key
+**Design choices:**
+- Website Credentials move to single-blob encryption automatically on first unlock. The migration verifies every entry after it converts them and keeps an encrypted recovery copy until it finishes, so an interrupted upgrade rolls back safely.
+- An unlocked vault only autofills. Viewing entries, changing unlock methods, and clearing the vault all ask for your fingerprint, device PIN, or password again.
+- Auto-lock runs on inactivity while the browser is active, and closing the browser always locks the vault. While the browser is in the background, the operating system may delay the timer slightly.
+- A save prompt stays with its browser tab for 45 seconds, so it survives sign-ins that hop across domains for SSO or MFA. After that it expires.
+- QR transfers pair two devices in one scan. A vault stream is encrypted under your master key, and a key stream is locked with your passphrase and three security answers, so a captured QR can't be used on its own. Type those answers privately, as you would any password.
 
 ## Crypto Wallet and Bookmark Security
 
@@ -234,10 +247,9 @@ Seed phrases are the highest-value secret most people own, and the common places
 - Merging is deterministic and never silently overwrites. Each account carries a permanent random ID, the newest edit wins per account, and deletes carry across as tombstones. The same seed saved twice in one wallet keeps the older copy. When two different accounts share a name, the older one keeps it and newer ones become `.1`, `.2`, computed the same way on every device, so any number of devices merged in any order reach the same result. Re-importing a file that was already merged changes nothing.
 - Wallet names match exactly, so `Metamask` and `metamask` stay separate.
 
-**Honest limits:**
-- Malware running on a machine while the vault is unlocked can read whatever the vault can read. This is true of every password manager, and it is why auto-lock and hide-on-blur exist.
-- Physical access to an already-unlocked device is outside the threat model.
-- Losing the master key, and every backup of it, means losing the seed phrases stored here. Keep your wallet's own recovery backup as well.
+**Limits and how they are covered:**
+- Malware that reaches the browser gets very little. Valid Vault never puts a password on the clipboard, where most password stealers look, the master key stays in the extension's background and never enters a web page, seed phrases and bookmarks are never sent to any page, and unlocking happens in Valid Vault's own window. The most it can reach is what autofill places into a page, one login at a time, only on the site that login belongs to, and the password lands masked. Malware with full control of the operating system can watch anything on that computer, as with any software, which auto-lock, hide-on-blur, and a kept-updated system round out.
+- Physical access is covered in layers. An unlocked vault still asks for fingerprint, PIN, or password before showing anything in Manage, changing unlock methods, or clearing the vault, and taking the vault anywhere else needs the master key, which only leaves a device behind a passphrase and three security answers. What remains is someone learning those secrets, for example by watching you type them, and the rule for that is the oldest one in security: never show or tell anyone your password.
 
 ## Quick Start - Forks and Experimentation Highly Encouraged!
 
@@ -276,6 +288,9 @@ background.js holds the session key and does all decryption; content.js, running
 
 **Password Generator:**
 Passwords are drawn from `crypto.getRandomValues` with rejection sampling, so every character is equally likely, and shuffled with a Fisher-Yates pass after the required character classes are placed. Generation runs in the content script and needs no vault access; only saving the new login goes through background.js.
+
+**Uni-Vault:**
+linkedvault.js links a browser to one vault file the user picks, through the browser's File System Access API. Each sync reads the file, refuses anything that is not a readable vault under the current master key, merges it into the local copy with the existing merge logic, and writes back only when this browser has changes of its own, so linked browsers never ping-pong writes. The browser saves through a temporary copy and swaps it in only when complete, and the local copy always stays intact, so an unreachable or bad file never costs data.
 
 **Protected Key Transport:**
 The master key is wrapped once under a passphrase and three chosen security answers (PBKDF2-SHA256, 1,000,000 iterations, AES-GCM), and that package is what the key QR and the key file carry. The package is saved on the device alongside a SHA-256 key identifier so it is reused only while it matches the current key. A receiving device verifies the answers by unwrapping, the same verify-by-unwrap rule as every other unlock, and keeps the package so it can share onward.
@@ -317,13 +332,16 @@ Contributions welcome. This project maintains a compact, readable codebase with 
   - Complete file implementations (no fragments)
   - No new dependencies without discussion
 
+**Join the Discord** Join the Discord for release announcements, setup help, and a direct line to report bugs or request features.
+https://discord.gg/2SP383cJs9
+
 ## Security
 
 **Vulnerability Reporting:**
 Report security issues via GitHub Security Advisories.
 
 **Audit Status:**
-Pre-1.0, under active testing. Community review welcome. auth.js, crypto.js, session.js, keypackage.js, sealed.js, wallets.js, and the native plugins are the surfaces that matter.
+Pre-1.0, under active testing. Community review welcome. auth.js, crypto.js, session.js, keypackage.js, sealed.js, wallets.js, linkedvault.js, and the native plugins are the surfaces that matter.
 
 ## License
 

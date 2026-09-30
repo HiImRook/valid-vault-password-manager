@@ -1,10 +1,20 @@
 # Valid Vault - Development Roadmap
 
-**Current Version:** v0.7.2 - **Status: Active Testing**
+**Current Version:** v0.7.3 - **Status: Active Testing**
 
 ---
 
 ## Version History (Completed)
+
+### v0.7.3 - Uni-Vault and User Guide (Sep 2026)
+
+- ✅ Uni-Vault: every browser on one computer linked to one encrypted vault file and kept in sync automatically
+- ✅ Uni-Vault refuses damaged, replaced, or wrong-key files and never overwrites them; Reconnect and Unlink in Sync, Reconnect in the popup
+- ✅ Brave detection with a User Guide section explaining the one Brave setting Uni-Vault needs
+- ✅ Searchable User Guide opened from the popup menu, covering setup, every setting, security, transport, backups, and recommended setups
+- ✅ Key import offers fingerprint or device PIN first, with a password as the fallback
+- ✅ Changing unlock methods and Clear Vault require re-authentication; remaining password prompts masked
+- ✅ Discord link in About, and About links open in a new tab
 
 ### v0.7.2 - Password Generator (Sep 2026)
 
@@ -116,7 +126,7 @@
 
 ---
 
-## Upcoming After v0.7.2
+## Upcoming After v0.7.3
 
 ### v0.8.x - Phone De-Drift (Next)
 
@@ -171,6 +181,10 @@ This is feature work. The vault stays encrypted throughout, and nothing about it
 
 ⚠️ **The password generator and the 2 hour auto-lock limit are extension-only for now** - the phone keeps its 1 hour limit until the v0.8.x de-drift
 
+⚠️ **Uni-Vault needs a browser setting in Brave** - Brave ships the File System Access API switched off; Chrome and Edge work out of the box, and Brave users can switch it on or keep using Export and Import
+
+⚠️ **Uni-Vault syncs browsers on one computer** - moving the vault between devices is still Export and Import or QR
+
 ⚠️ **Crypto Wallets and bookmarks are extension-only for now** - the phone app receives them in the v0.8.x de-drift; both stay encrypted in the vault file in the meantime
 
 ⚠️ **A lost key-file passphrase and answers cannot be recovered. Writing these down and storing them safely is highly recommended.**
@@ -191,4 +205,4 @@ MIT License - See LICENSE file for details
 
 ---
 
-**Last Updated:** Sep 28, 2026
+**Last Updated:** Sep 30, 2026
