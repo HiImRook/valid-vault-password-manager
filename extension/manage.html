@@ -227,6 +227,14 @@
           <button id="btn-change-key-protection" class="secondary">Change Key Passphrase</button>
         </div>
 
+        <h2 style="margin-top:28px;">Uni-Vault</h2>
+        <p style="color:var(--text-dim);font-size:13px;margin-bottom:10px;">Link every browser on this computer to one encrypted vault file so they share one vault and stay in sync automatically. Export Vault creates the file; Import Vault links another browser to it.</p>
+        <div id="univault-status" style="color:var(--text);font-size:13px;margin-bottom:10px;">Checking...</div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;">
+          <button id="btn-univault-reconnect" class="hidden">Reconnect</button>
+          <button id="btn-univault-unlink" class="secondary hidden">Unlink</button>
+        </div>
+
         <h2 style="margin-top:28px;">Scan a Device</h2>
         <p style="color:var(--text-dim);font-size:13px;margin-bottom:10px;">Read a key or vault streamed from another device.</p>
         <div id="qr-scan-box" style="border:1px dashed var(--green-dim);border-radius:8px;width:280px;max-width:100%;aspect-ratio:1/1;display:flex;align-items:center;justify-content:center;text-align:center;color:var(--green);cursor:pointer;position:relative;overflow:hidden;">Tap to open scanner</div>

@@ -392,6 +392,26 @@ async function removePIN() {
   return { success: true }
 }
 
+async function rewrapFingerprint(newMasterKey) {
+  try {
+    const auth = await getAuth()
+    if (!auth || !auth.fingerprintEnabled || !auth.fingerprintCredentialId || !auth.fingerprintPrfSalt) {
+      return { success: false, error: 'No fingerprint enrolled' }
+    }
+    const prfOutput = await evaluatePrf(new Uint8Array(auth.fingerprintCredentialId), new Uint8Array(auth.fingerprintPrfSalt))
+    if (!prfOutput) return { success: false, error: 'PRF evaluation failed' }
+    const wrappingKey = await deriveKeyFromPrfOutput(prfOutput, PRF_INFO)
+    const raw = new Uint8Array(await crypto.subtle.exportKey('raw', newMasterKey))
+    const latest = await getAuth() || auth
+    latest.fingerprintWrappedKey = await wrapMasterKey(raw, wrappingKey)
+    latest.fingerprintEnabled = true
+    await setAuth(latest)
+    return { success: true }
+  } catch (error) {
+    return { success: false, error: error.message }
+  }
+}
+
 function startPasswordCreation() {
   return startCreationTimer('password')
 }
@@ -526,6 +546,7 @@ export {
   initAuth,
   startFingerprintEnrollment,
   enrollFingerprint,
+  rewrapFingerprint,
   authenticateFingerprint,
   startPINCreation,
   setPIN,

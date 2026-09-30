@@ -2,6 +2,7 @@ import * as auth from './auth.js'
 import * as session from './session.js'
 import * as bookmarks from './bookmarks.js'
 import { masterKeyToCryptoKey } from './crypto.js'
+import * as uniVault from './linkedvault.js'
 
 const MASTER_KEY_LENGTH = 32
 const SIDE_WINDOW_WIDTH = 380
@@ -39,6 +40,7 @@ const btnLock = document.getElementById('btn-lock')
 const btnExpand = document.getElementById('btn-expand')
 const menuDropdown = document.getElementById('menu-dropdown')
 const menuBookmarks = document.getElementById('menu-bookmarks')
+const menuGuide = document.getElementById('menu-guide')
 const menuSettings = document.getElementById('menu-settings')
 const menuWebsite = document.getElementById('menu-website')
 const msgUnlocked = document.getElementById('msg-unlocked')
@@ -86,6 +88,26 @@ function showView(view) {
   viewLocked.classList.add('hidden')
   viewUnlocked.classList.add('hidden')
   view.classList.remove('hidden')
+  if (view === viewUnlocked) checkUniVault()
+}
+
+const uniVaultReconnectBox = document.getElementById('univault-reconnect')
+const btnUniVaultReconnect = document.getElementById('btn-univault-reconnect')
+
+async function checkUniVault() {
+  try {
+    const mk = session.getMasterKey()
+    if (!mk || !(await uniVault.getLink())) { uniVaultReconnectBox.classList.add('hidden'); return }
+    const result = await uniVault.syncNow(mk)
+    uniVaultReconnectBox.classList.toggle('hidden', result.state !== 'needs-permission')
+  } catch (e) {}
+}
+
+btnUniVaultReconnect.onclick = async () => {
+  const mk = session.getMasterKey()
+  if (!mk) return
+  const result = await uniVault.reconnect(mk)
+  uniVaultReconnectBox.classList.toggle('hidden', result.state === 'ok')
 }
 
 function showMsg(el, msg, type) {
@@ -385,6 +407,10 @@ menuBookmarks.onclick = () => {
     return
   }
   openBookmarksWindow()
+}
+
+menuGuide.onclick = () => {
+  chrome.tabs.create({ url: 'guide.html' })
 }
 
 menuSettings.onclick = () => {

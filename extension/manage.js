@@ -14,6 +14,7 @@ import { createEncoder, createDecoder } from './fountain.js'
 import { masterKeyToCryptoKey, decrypt } from './crypto.js'
 import { formDialog, askSecret } from './dialogs.js'
 import * as keypackage from './keypackage.js'
+import * as uniVault from './linkedvault.js'
 import { getPasswordVault, setPasswordVault } from './store.js'
 
 
@@ -355,7 +356,7 @@ async function loadAllCredentials() {
           session.setMasterKey(masterKey)
         }
         
-        const newPassword = window.prompt('New password for this login (username stays the same; a different username is a separate login):')
+        const newPassword = await askSecret('Edit password', 'New password for this login', 'The username stays the same. A different username is a separate login.')
         if (!newPassword) return
         const result = await passwords.updateCredential(cred.id, { password: newPassword }, masterKey)
         if (result.success) {
@@ -849,8 +850,7 @@ function escapeHtml(str) {
   return div.innerHTML
 }
 
-async function ensureUnlocked() {
-  if (session.hasMasterKey()) return session.getMasterKey()
+async function requireFreshAuth() {
   const authResult = await promptAuth()
   if (!authResult.success) return null
   session.setMasterKey(authResult.masterKey)
@@ -858,7 +858,7 @@ async function ensureUnlocked() {
 }
 
 btnEditFp.onclick = async () => {
-  const mk = await ensureUnlocked()
+  const mk = await requireFreshAuth()
   if (!mk) { showMsg(msgManage, 'Authentication required', 'error'); return }
   auth.startFingerprintEnrollment()
   const result = await auth.enrollFingerprint(mk)
@@ -872,9 +872,9 @@ btnEditFp.onclick = async () => {
 
 
 btnEditPw.onclick = async () => {
-  const mk = await ensureUnlocked()
+  const mk = await requireFreshAuth()
   if (!mk) { showMsg(msgManage, 'Authentication required', 'error'); return }
-  const pw = prompt('Enter a password (12+ characters, letter, number, symbol):')
+  const pw = await askSecret('Set master password', 'New master password', '12+ characters with a letter, a number, and a symbol.')
   if (!pw) return
   if (pw.length < 12) { showMsg(msgManage, 'Password must be 12+ characters', 'error'); return }
   if (!/[a-zA-Z]/.test(pw) || !/[0-9]/.test(pw) || !/[^a-zA-Z0-9]/.test(pw)) { showMsg(msgManage, 'Password needs a letter, a number, and a symbol', 'error'); return }
@@ -889,6 +889,7 @@ btnEditPw.onclick = async () => {
 }
 
 btnDelFp.onclick = async () => {
+  if (!(await requireFreshAuth())) { showMsg(msgManage, 'Authentication required', 'error'); return }
   if (confirm('Delete fingerprint authentication?')) {
     const result = await auth.removeFingerprint()
     if (result.success) {
@@ -902,6 +903,7 @@ btnDelFp.onclick = async () => {
 
 
 btnDelPw.onclick = async () => {
+  if (!(await requireFreshAuth())) { showMsg(msgManage, 'Authentication required', 'error'); return }
   if (confirm('Delete password authentication?')) {
     const result = await auth.removePassword()
     if (result.success) {
@@ -916,6 +918,7 @@ btnDelPw.onclick = async () => {
 
 
 btnClearVault.onclick = async () => {
+  if (!(await requireFreshAuth())) { showMsg(msgSettings, 'Authentication required to clear the vault', 'error'); return }
   const confirm1 = confirm(
     'Delete all vault data permanently?\n\n' +
     'Recommendation: Back up to another device first.\n\n' +
@@ -927,6 +930,7 @@ btnClearVault.onclick = async () => {
   const confirm2 = confirm('Final confirmation: This will delete everything. Continue?')
   
   if (confirm2) {
+    await uniVault.clearLink()
     await store.clearAll()
     await session.lockAll()
     await session.clearStorageSession()
@@ -1021,6 +1025,8 @@ async function init() {
     if (nickInput) nickInput.value = a.keyNickname || 'My Master Key'
   } catch (e) { inputQrTimeout.value = 30 }
   updateTimeReadouts()
+  refreshUniVault()
+  uniVaultTick()
 
   const btnRenameKey = document.getElementById('btn-rename-key')
   if (btnRenameKey) btnRenameKey.onclick = async () => {
@@ -1137,38 +1143,179 @@ function readFileText(cb) {
   input.click()
 }
 
+function backupFileName(nickname) {
+  const safeName = nickname ? '-' + nickname.replace(/[\\/:*?"<>|]+/g, '').replace(/\s+/g, '-') : ''
+  return 'valid-vault-backup' + safeName + '.vault'
+}
+
+const VAULT_FILE_TYPES = [{ description: 'Valid Vault vault', accept: { 'application/json': ['.vault'] } }]
+
 const _btnExportVault = document.getElementById('btn-export-vault'); if (_btnExportVault) _btnExportVault.onclick = async function () {
   const mk = session.getMasterKey()
   if (!mk) { syncMsg('Unlock first', 'error'); return }
-  const vaultData = await getPasswordVault()
-  const webCredsData = await store.getWebCredsVault()
-  const personalInfoData = await store.getPersonalInfo()
-  const bookmarksData = await store.getBookmarksVault()
-  const walletsData = await store.getWalletVault()
-  if (!vaultData && !webCredsData && !personalInfoData && !bookmarksData && !walletsData) { syncMsg('Nothing to export yet', 'error'); return }
+  const bundle = await uniVault.buildBundle()
+  if (!uniVault.bundleHasData(bundle)) { syncMsg('Nothing to export yet', 'error'); return }
   let nickname = ''
   try { const a = await store.getAuth() || {}; nickname = (a.keyNickname || '').trim() } catch (e) {}
-  
-  const safeName = nickname ? '-' + nickname.replace(/[\\/:*?"<>|]+/g, '').replace(/\s+/g, '-') : ''
-  const fname = 'valid-vault-backup' + safeName + '.vault'
-  if (downloadFile(fname, JSON.stringify({ format: 'valid-vault-vault', version: 1, vault: vaultData, webcreds: webCredsData, personalInfo: personalInfoData, bookmarks: bookmarksData, wallets: walletsData })))
-    syncMsg('Vault exported. It stays encrypted, useless without your master key.', 'success')
-  else syncMsg('Could not save the file', 'error')
-}
-const _btnImportVault = document.getElementById('btn-import-vault'); if (_btnImportVault) _btnImportVault.onclick = function () {
-  readFileText(async function (text) {
-    if (!text) { syncMsg('No file selected', 'error'); return }
+  const fname = backupFileName(nickname)
+  if (!uniVault.uniVaultSupported()) {
+    if (downloadFile(fname, JSON.stringify(bundle))) syncMsg('Vault exported. It stays encrypted, useless without your master key.', 'success')
+    else syncMsg('Could not save the file', 'error')
+    return
+  }
+  let handle
+  try { handle = await window.showSaveFilePicker({ suggestedName: fname, types: VAULT_FILE_TYPES }) } catch (e) {
+    syncMsg('Export cancelled. Nothing was saved.', 'error')
+    return
+  }
+  const linked = await uniVault.getLink()
+  if (linked) {
     try {
-      const fileObj = JSON.parse(text)
-      if (fileObj.format !== 'valid-vault-vault') { syncMsg('Not a Valid Vault backup file', 'error'); return }
-      const mk = session.getMasterKey()
-      if (!mk) { syncMsg('Unlock first', 'error'); return }
-      await importVaultBundle(fileObj, mk)
-      syncMsg('Vault merged.', 'success')
-      if (loginCredsUnlocked) loadAllCredentials()
-    } catch (e) { syncMsg('Import failed: ' + (e && e.message ? e.message : e), 'error') }
+      const writable = await handle.createWritable()
+      await writable.write(JSON.stringify(bundle))
+      await writable.close()
+      syncMsg('Backup saved. It stays encrypted, useless without your master key. This browser stays linked to ' + linked.name + '.', 'success')
+    } catch (e) { syncMsg('Could not save the file', 'error') }
+    return
+  }
+  const choice = await formDialog({
+    title: 'Use this as your Uni-Vault file?',
+    text: 'Link this browser to ' + handle.name + ' and it stays up to date automatically. Every browser on this computer that imports the same file shares one vault. Choose Backup only to save a one-time copy, for example on a USB drive.',
+    okLabel: 'Link this file',
+    cancelLabel: 'Backup only'
   })
+  if (choice) {
+    const result = await uniVault.linkNew(handle, mk)
+    if (result.state === 'ok') syncMsg('Uni-Vault linked to ' + handle.name + '. In your other browsers, use Import Key, then Import Vault and pick this same file.', 'success')
+    else syncMsg(result.message || 'Could not link the file.', 'error')
+  } else {
+    try {
+      const writable = await handle.createWritable()
+      await writable.write(JSON.stringify(bundle))
+      await writable.close()
+      syncMsg('Backup saved. It stays encrypted, useless without your master key.', 'success')
+    } catch (e) { syncMsg('Could not save the file', 'error') }
+  }
+  refreshUniVault()
 }
+
+async function importVaultText(text) {
+  if (!text) { syncMsg('No file selected', 'error'); return }
+  try {
+    const fileObj = JSON.parse(text)
+    if (fileObj.format !== uniVault.VAULT_FILE_FORMAT) { syncMsg('Not a Valid Vault backup file', 'error'); return }
+    const mk = session.getMasterKey()
+    if (!mk) { syncMsg('Unlock first', 'error'); return }
+    await uniVault.mergeBundle(fileObj, mk)
+    syncMsg('Vault merged.', 'success')
+    refreshAfterSync()
+  } catch (e) { syncMsg('Import failed: ' + (e && e.message ? e.message : e), 'error') }
+}
+
+const _btnImportVault = document.getElementById('btn-import-vault'); if (_btnImportVault) _btnImportVault.onclick = async function () {
+  if (!uniVault.uniVaultSupported()) { readFileText(importVaultText); return }
+  const mk = session.getMasterKey()
+  if (!mk) { syncMsg('Unlock first', 'error'); return }
+  let handle
+  try { [handle] = await window.showOpenFilePicker({ types: VAULT_FILE_TYPES, multiple: false }) } catch (e) {
+    syncMsg('No file selected', 'error')
+    return
+  }
+  const linked = await uniVault.getLink()
+  const choice = await formDialog({
+    title: 'Link this vault file?',
+    text: (linked ? 'This browser is linked to ' + linked.name + '. ' : '') + 'Link to ' + handle.name + ' and this browser merges it now and keeps it up to date automatically, sharing one vault with every browser that uses the same file. Choose Merge once to only copy its contents in, for example from a backup.',
+    okLabel: 'Link this file',
+    cancelLabel: 'Merge once'
+  })
+  if (choice) {
+    const result = await uniVault.linkExisting(handle, mk)
+    if (result.state === 'ok') syncMsg('Uni-Vault linked to ' + handle.name + '. This browser now stays in sync with it.', 'success')
+    else syncMsg(result.message || 'Could not link the file.', 'error')
+    refreshAfterSync()
+    refreshUniVault()
+    return
+  }
+  try { await importVaultText(await (await handle.getFile()).text()) } catch (e) { syncMsg('Could not read the file', 'error') }
+}
+
+const uniVaultStatusEl = document.getElementById('univault-status')
+const btnUniVaultReconnect = document.getElementById('btn-univault-reconnect')
+const btnUniVaultUnlink = document.getElementById('btn-univault-unlink')
+const UNIVAULT_POLL_MS = 5000
+
+function timeAgo(ts) {
+  if (!ts) return 'not yet'
+  const secs = Math.max(0, Math.round((Date.now() - ts) / 1000))
+  if (secs < 60) return 'just now'
+  if (secs < 3600) return Math.round(secs / 60) + ' min ago'
+  return new Date(ts).toLocaleString()
+}
+
+async function refreshUniVault() {
+  if (!uniVaultStatusEl) return
+  const info = await uniVault.getStatus()
+  if (!uniVault.uniVaultSupported() && !info.linked) {
+    uniVaultStatusEl.textContent = uniVault.isBrave()
+      ? 'Uni-Vault is switched off in Brave. Brave blocks the browser feature it needs. See the User Guide, Uni-Vault on One Computer, for the one setting that fixes it.'
+      : 'This browser does not support Uni-Vault. Use Export Vault and Import Vault to move changes between browsers.'
+    btnUniVaultReconnect.classList.add('hidden')
+    btnUniVaultUnlink.classList.add('hidden')
+    return
+  }
+  if (!info.linked) {
+    uniVaultStatusEl.textContent = 'Not linked. Export Vault or Import Vault to link a vault file.'
+    btnUniVaultReconnect.classList.add('hidden')
+    btnUniVaultUnlink.classList.add('hidden')
+    return
+  }
+  const state = info.status ? info.status.state : 'ok'
+  let text = 'Linked to ' + info.name + '. Last synced ' + timeAgo(info.syncedAt) + '.'
+  if (state !== 'ok' && info.status && info.status.message) text = 'Linked to ' + info.name + '. ' + info.status.message
+  uniVaultStatusEl.textContent = text
+  btnUniVaultReconnect.classList.toggle('hidden', state === 'ok')
+  btnUniVaultUnlink.classList.remove('hidden')
+}
+
+function refreshAfterSync() {
+  if (loginCredsUnlocked) loadAllCredentials()
+  if (webCredsUnlocked) loadAllWebCredentials()
+  if (personalInfoUnlocked) loadPersonalInfo()
+}
+
+async function uniVaultTick() {
+  const mk = session.getMasterKey()
+  if (!mk || document.hidden) return
+  const link = await uniVault.getLink()
+  if (!link) return
+  const result = await uniVault.syncNow(mk)
+  if (result.merged) refreshAfterSync()
+  refreshUniVault()
+}
+
+if (btnUniVaultReconnect) btnUniVaultReconnect.onclick = async () => {
+  const mk = session.getMasterKey()
+  if (!mk) { syncMsg('Unlock first', 'error'); return }
+  const result = await uniVault.reconnect(mk)
+  if (result.state === 'ok') syncMsg('Vault file reconnected.', 'success')
+  else syncMsg(result.message || 'Could not reconnect the vault file.', 'error')
+  if (result.merged) refreshAfterSync()
+  refreshUniVault()
+}
+
+if (btnUniVaultUnlink) btnUniVaultUnlink.onclick = async () => {
+  if (!window.confirm('Unlink this browser from the vault file? This browser keeps its own copy of everything. The file is not deleted.')) return
+  await uniVault.clearLink()
+  syncMsg('Unlinked. This browser keeps its own copy.', 'success')
+  refreshUniVault()
+}
+
+setInterval(uniVaultTick, UNIVAULT_POLL_MS)
+
+chrome.runtime.onMessage.addListener((request) => {
+  if (request && request.action === 'vaultSynced') { refreshAfterSync(); refreshUniVault() }
+})
+
 const PASSPHRASE_TIP = 'Use four or more random words plus a number and a symbol, like copper-lantern-mosaic-drift7!. Capitalization matters.'
 const ANSWER_TIP = 'One word. Capitalization matters.'
 
@@ -1273,83 +1420,10 @@ const _btnChangeKeyProtection = document.getElementById('btn-change-key-protecti
   } catch (e) { syncMsg('Could not update key protection: ' + (e && e.message ? e.message : e), 'error') }
 }
 
-const KEY_MISMATCH_MSG = 'This vault was made with a different master key. Import that master key first, then import the vault.'
-const LOCAL_MISMATCH_MSG = 'This browser\'s saved data uses a different master key than the one unlocked. Import the matching master key first.'
 const VAULT_STORES = ['passwords', 'webcreds', 'personalInfo', 'vaultMigration', 'bookmarks', 'wallets']
 
 function passwordMeetsRule(pw) {
   return !!pw && pw.length >= 12 && /[a-zA-Z]/.test(pw) && /[0-9]/.test(pw) && /[^a-zA-Z0-9]/.test(pw)
-}
-
-async function rowOpensWith(row, key) {
-  if (!row) return true
-  try { await passwords.decryptAnyRowToTree(row, key); return true } catch (e) { return false }
-}
-
-async function webCredsOpenWith(vault, key) {
-  if (!vault || !vault.credentials) return true
-  for (const category of Object.keys(vault.credentials)) {
-    for (const cred of vault.credentials[category]) {
-      if (cred.deleted) continue
-      try { await decrypt(cred.name, key); return true } catch (e) { return false }
-    }
-  }
-  return true
-}
-
-async function personalInfoOpensWith(record, key) {
-  if (!record || !record.data) return true
-  try { await decrypt(record.data, key); return true } catch (e) { return false }
-}
-
-async function localVaultOpensWith(key) {
-  if (!(await rowOpensWith(await getPasswordVault(), key))) return false
-  if (!(await webCredsOpenWith(await store.getWebCredsVault(), key))) return false
-  if (!(await personalInfoOpensWith(await store.getPersonalInfo(), key))) return false
-  if (!(await bookmarks.rowOpensWith(await store.getBookmarksVault(), key))) return false
-  return wallets.rowOpensWith(await store.getWalletVault(), key)
-}
-
-async function importVaultBundle(bundle, mk) {
-  if (!(await rowOpensWith(bundle.vault, mk))) throw new Error(KEY_MISMATCH_MSG)
-  if (!(await webCredsOpenWith(bundle.webcreds, mk))) throw new Error(KEY_MISMATCH_MSG)
-  if (!(await personalInfoOpensWith(bundle.personalInfo, mk))) throw new Error(KEY_MISMATCH_MSG)
-  if (!(await bookmarks.rowOpensWith(bundle.bookmarks, mk))) throw new Error(KEY_MISMATCH_MSG)
-  if (!(await wallets.rowOpensWith(bundle.wallets, mk))) throw new Error(KEY_MISMATCH_MSG)
-  if (!(await localVaultOpensWith(mk))) throw new Error(LOCAL_MISMATCH_MSG)
-
-  if (bundle.vault) {
-    const localRow = await getPasswordVault()
-    const incomingTree = await passwords.decryptAnyRowToTree(bundle.vault, mk)
-    if (!localRow) {
-      await passwords.writeVaultTree(incomingTree, mk)
-    } else {
-      const localTree = await passwords.decryptAnyRowToTree(localRow, mk)
-      const merged = passwords.mergeVaults(localTree, incomingTree)
-      merged.meta.lastAccess = Date.now()
-      await passwords.writeVaultTree(merged, mk)
-    }
-  }
-  if (bundle.webcreds) {
-    const localWc = await store.getWebCredsVault()
-    const incomingWc = bundle.webcreds
-    if (!localWc) { await store.setWebCredsVault(incomingWc) }
-    else {
-      const mergedWc = await webcreds.mergeWebCredsVaults(localWc, incomingWc, mk)
-      mergedWc.meta.lastAccess = Date.now()
-      await store.setWebCredsVault(mergedWc)
-    }
-  }
-  if (bundle.personalInfo) {
-    const localPi = await store.getPersonalInfo()
-    await store.setPersonalInfo(personalinfo.mergeProfiles(localPi, bundle.personalInfo))
-  }
-  if (bundle.bookmarks) {
-    await bookmarks.importRow(bundle.bookmarks, mk)
-  }
-  if (bundle.wallets) {
-    await wallets.importRow(bundle.wallets, mk)
-  }
 }
 
 async function clearLocalVaultData() {
@@ -1378,8 +1452,83 @@ async function choosePasswordForImport(status) {
   return fresh
 }
 
+async function platformUnlockAvailable() {
+  try {
+    return !!(window.PublicKeyCredential && await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable())
+  } catch (e) {
+    return false
+  }
+}
+
+async function chooseImportLock() {
+  if (!(await platformUnlockAvailable())) return 'password'
+  const values = await formDialog({
+    title: 'Lock the imported key',
+    text: 'Choose how this browser unlocks the imported key. Fingerprint or device PIN is recommended: the unlock secret stays inside Windows Hello, so nothing saved in the browser can be guessed at. A password works on any device, but anyone who copies your browser data can try guessing it offline.',
+    fields: [{
+      label: 'Unlock with',
+      options: [
+        { value: 'device', label: 'Fingerprint or device PIN (recommended)' },
+        { value: 'password', label: 'Master password' }
+      ],
+      value: 'device'
+    }],
+    okLabel: 'Continue'
+  })
+  if (!values) return null
+  return values[0]
+}
+
+async function lockWithDevice(importedKey, status) {
+  if (status.hasFingerprint) {
+    const rewrapped = await auth.rewrapFingerprint(importedKey)
+    if (rewrapped.success) return true
+  }
+  try {
+    auth.startFingerprintEnrollment()
+    const fp = await auth.enrollFingerprint(importedKey)
+    return !!fp.success
+  } catch (e) {
+    return false
+  }
+}
+
+async function settleBackupPassword(importedKey, status) {
+  if (!status.hasPassword) return ''
+  const keep = window.confirm('Keep a master password on this browser as a backup unlock?\n\nOK: set the password for the imported key (you can reuse this browser\'s current password).\nCancel: turn password unlock off. You can add one later in Manage.')
+  if (keep) {
+    const pw = await askSecret('Backup password', 'Master password', 'Set the backup password for the imported key: 12+ characters with a letter, a number, and a symbol.')
+    if (pw && passwordMeetsRule(pw)) {
+      auth.startPasswordCreation()
+      const result = await auth.setPassword(pw, importedKey)
+      if (result.success) return ''
+    }
+  }
+  await auth.removePassword()
+  return ' Password unlock is off on this browser until you set one in Manage.'
+}
+
+async function relinkFingerprint(importedKey, status) {
+  if (!status.hasFingerprint) return ''
+  let relinked = false
+  if (window.confirm('Relink fingerprint unlock to the imported key? You will be asked for your fingerprint or device PIN. Cancel turns fingerprint unlock off until you re-enroll it in Manage.')) {
+    const rewrapped = await auth.rewrapFingerprint(importedKey)
+    relinked = !!rewrapped.success
+    if (!relinked) {
+      try {
+        auth.startFingerprintEnrollment()
+        const fp = await auth.enrollFingerprint(importedKey)
+        relinked = !!fp.success
+      } catch (e) {}
+    }
+  }
+  if (relinked) return ''
+  await auth.removeFingerprint()
+  return ' Fingerprint unlock is off until you re-enroll it in Manage.'
+}
+
 async function adoptImportedKey(importedKey) {
-  const matches = await localVaultOpensWith(importedKey)
+  const matches = await uniVault.localVaultOpensWith(importedKey)
   if (!matches) {
     const proceed = window.confirm(
       'WARNING: This browser\'s current vault was made with a different master key.\n\n' +
@@ -1391,29 +1540,32 @@ async function adoptImportedKey(importedKey) {
   }
 
   const status = await auth.initAuth()
-  const password = await choosePasswordForImport(status)
-  if (!password) return false
+  let method = await chooseImportLock()
+  if (!method) { syncMsg('Key import cancelled. Nothing changed.', 'error'); return false }
 
-  if (!matches) await clearLocalVaultData()
-
-  auth.startPasswordCreation()
-  const result = await auth.setPassword(password, importedKey)
-  if (!result.success) { syncMsg('Could not save the imported key: ' + result.error, 'error'); return false }
-
-  let fingerprintNote = ''
-  if (status.hasFingerprint) {
-    let relinked = false
-    if (window.confirm('Relink fingerprint unlock to the imported key? You will be asked for your fingerprint. Cancel turns fingerprint unlock off until you re-enroll it in Manage.')) {
-      try {
-        auth.startFingerprintEnrollment()
-        const fp = await auth.enrollFingerprint(importedKey)
-        relinked = !!fp.success
-      } catch (e) {}
+  let note = ''
+  if (method === 'device') {
+    const locked = await lockWithDevice(importedKey, status)
+    if (!locked) {
+      if (!window.confirm('Fingerprint or device PIN did not complete. Lock the imported key with a master password instead?')) {
+        syncMsg('Key import cancelled. Nothing changed.', 'error')
+        return false
+      }
+      method = 'password'
+    } else {
+      if (!matches) await clearLocalVaultData()
+      note = await settleBackupPassword(importedKey, status)
     }
-    if (!relinked) {
-      await auth.removeFingerprint()
-      fingerprintNote = ' Fingerprint unlock is off until you re-enroll it in Manage.'
-    }
+  }
+
+  if (method === 'password') {
+    const password = await choosePasswordForImport(status)
+    if (!password) return false
+    if (!matches) await clearLocalVaultData()
+    auth.startPasswordCreation()
+    const result = await auth.setPassword(password, importedKey)
+    if (!result.success) { syncMsg('Could not save the imported key: ' + result.error, 'error'); return false }
+    note = await relinkFingerprint(importedKey, status)
   }
 
   session.setMasterKey(importedKey)
@@ -1427,8 +1579,8 @@ async function adoptImportedKey(importedKey) {
   await loadAllCredentials()
 
   syncMsg(matches
-    ? 'Master key imported and saved on this browser.' + fingerprintNote
-    : 'Master key imported and saved. Now import or scan the vault from your other device.' + fingerprintNote, 'success')
+    ? 'Master key imported and saved on this browser.' + note
+    : 'Master key imported and saved. Now import or scan the vault from your other device.' + note, 'success')
   return true
 }
 
@@ -1499,7 +1651,7 @@ async function handleImported(payloadText) {
     if (data.kind === 'vault') {
       const mk = session.getMasterKey()
       if (!mk) { syncMsg('QR sync not enabled. Import master key first', 'error'); return }
-      await importVaultBundle(data, mk)
+      await uniVault.mergeBundle(data, mk)
       syncMsg('Sync complete.', 'success')
       if (loginCredsUnlocked) loadAllCredentials()
       return

@@ -1,3 +1,5 @@
+import * as uniVault from './linkedvault.js'
+import { masterKeyToCryptoKey } from './crypto.js'
 import { saveCredential as passwordsSaveCredential, getCredentials as passwordsGetCredentials, noteCredentialUse as passwordsNoteUse, restorePreviousPassword as passwordsRestorePrevious } from './passwords.js'
 
 function readRawRecord(storeName, key) {
@@ -353,9 +355,37 @@ async function checkInactivity() {
   }
 }
 
+const UNIVAULT_CHANGE_DELAY_MS = 800
+const UNIVAULT_UNLOCK_DELAY_MS = 300
+const uniVaultState = { timer: null }
+
+async function backgroundUniVaultSync() {
+  try {
+    if (!(await uniVault.getLink())) return
+    const bytes = await getSessionKeyBytes()
+    if (!bytes) return
+    const key = await masterKeyToCryptoKey(new Uint8Array(bytes))
+    await uniVault.syncNow(key)
+  } catch (e) {}
+}
+
+function queueUniVaultSync(delay) {
+  if (uniVaultState.timer) clearTimeout(uniVaultState.timer)
+  uniVaultState.timer = setTimeout(function () {
+    uniVaultState.timer = null
+    backgroundUniVaultSync()
+  }, delay)
+}
+
 chrome.alarms.create(INACTIVITY_ALARM, { periodInMinutes: 0.5 })
 chrome.alarms.onAlarm.addListener(function (alarm) {
   if (alarm.name === INACTIVITY_ALARM || alarm.name === AUTOLOCK_ALARM) checkInactivity()
+  if (alarm.name === INACTIVITY_ALARM) backgroundUniVaultSync()
+})
+
+chrome.storage.onChanged.addListener(function (changes, area) {
+  if (area === 'local' && changes.vaultChangedAt) queueUniVaultSync(UNIVAULT_CHANGE_DELAY_MS)
+  if (area === 'session' && changes.masterKeyBytes && changes.masterKeyBytes.newValue) queueUniVaultSync(UNIVAULT_UNLOCK_DELAY_MS)
 })
 
 chrome.storage.onChanged.addListener(function (changes, area) {

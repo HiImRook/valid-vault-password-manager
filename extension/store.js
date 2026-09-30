@@ -1,5 +1,6 @@
 const DB_NAME = 'ValidVault'
 const DB_VERSION = 5
+const VAULT_CHANGE_STAMP = 'vaultChangedAt'
 
 let db = null
 
@@ -87,6 +88,18 @@ async function remove(storeName, key) {
   })
 }
 
+async function markVaultChanged() {
+  try {
+    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) await chrome.storage.local.set({ [VAULT_CHANGE_STAMP]: Date.now() })
+  } catch (e) {}
+}
+
+async function putVault(storeName, data) {
+  const result = await put(storeName, data)
+  await markVaultChanged()
+  return result
+}
+
 async function getAuth() {
   return get('auth', 'primary')
 }
@@ -100,7 +113,7 @@ async function getPasswordVault() {
 }
 
 async function setPasswordVault(vaultData) {
-  return put('passwords', { id: 'vault', ...vaultData })
+  return putVault('passwords', { id: 'vault', ...vaultData })
 }
 
 async function getWalletVault() {
@@ -108,7 +121,7 @@ async function getWalletVault() {
 }
 
 async function setWalletVault(vaultData) {
-  return put('wallets', { id: 'vault', ...vaultData })
+  return putVault('wallets', { id: 'vault', ...vaultData })
 }
 
 async function getWebCredsVault() {
@@ -116,7 +129,7 @@ async function getWebCredsVault() {
 }
 
 async function setWebCredsVault(vaultData) {
-  return put('webcreds', { id: 'vault', ...vaultData })
+  return putVault('webcreds', { id: 'vault', ...vaultData })
 }
 
 async function getPersonalInfo() {
@@ -124,7 +137,7 @@ async function getPersonalInfo() {
 }
 
 async function setPersonalInfo(profileData) {
-  return put('personalInfo', { id: 'profile', ...profileData })
+  return putVault('personalInfo', { id: 'profile', ...profileData })
 }
 
 async function getVaultMigrationJournal() {
@@ -144,7 +157,7 @@ async function getBookmarksVault() {
 }
 
 async function setBookmarksVault(vaultData) {
-  return put('bookmarks', { id: 'vault', ...vaultData })
+  return putVault('bookmarks', { id: 'vault', ...vaultData })
 }
 
 async function clearAll() {

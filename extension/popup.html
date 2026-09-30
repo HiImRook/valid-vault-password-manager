@@ -170,6 +170,7 @@
           <div class="header-icon expand" id="btn-expand" title="Menu"><span class="ham"></span></div>
           <div class="menu-dropdown hidden" id="menu-dropdown">
             <div class="menu-item" id="menu-bookmarks">Bookmarks</div>
+            <div class="menu-item" id="menu-guide">User Guide</div>
             <div class="menu-item" id="menu-settings">Settings Menu</div>
             <div class="menu-item" id="menu-website">Website</div>
           </div>
@@ -180,6 +181,10 @@
       </div>
       <div class="section" id="unlocked-info">
         <p style="color:var(--text-dim);font-size:13px;line-height:1.5;">Vault unlocked. Autofill is active on websites. Open the menu to manage credentials, sync, and settings.</p>
+      </div>
+      <div class="section hidden" id="univault-reconnect">
+        <p style="color:var(--text-dim);font-size:12px;line-height:1.5;margin-bottom:8px;">Your Uni-Vault file needs permission again.</p>
+        <button id="btn-univault-reconnect">Reconnect vault file</button>
       </div>
       <div class="section hidden" id="bookmark-add">
         <div class="section-title">Add Bookmark</div>
