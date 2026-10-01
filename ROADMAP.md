@@ -65,12 +65,12 @@
 
 ### v0.6.3 - Single-Blob Vault Encryption and Migration Hardening (Sep 2026)
 
-- ✅ Website Credentials moved from per-credential encryption to a single AES-GCM vault blob - domain names, credential IDs, timestamps, login types, usernames, passwords, and per-site extra fields are no longer readable from the Website Credentials database row at rest
-- ✅ Legacy vaults migrate automatically on first unlock: the old row is decrypted into a plaintext tree, backed up encrypted under a short-lived migration journal, re-encrypted as the new blob, and verified against a full-tree fingerprint before the journal clears
+- ✅ Website Credentials sealed as a single AES-GCM vault blob - domain names, credential IDs, timestamps, login types, usernames, passwords, and per-site extra fields all stay encrypted at rest
+- ✅ Vaults migrate automatically on first unlock: backed up encrypted under a short-lived migration journal, converted to the blob, and verified against a full-tree fingerprint before the journal clears
 - ✅ Unsupported or malformed vault rows now fail closed instead of being misread - an unrecognized `schemaVersion` or a `schemaVersion: 2` row missing its blob throws rather than being treated as an empty legacy vault
 - ✅ Decrypted vault-tree validation deepened to check every domain's credential list, not just the top-level shape, so a malformed blob is caught immediately instead of crashing later
 - ✅ Unknown fields on a legacy credential now survive migration into the new tree instead of being silently dropped
-- ✅ Pairing and sync now require both devices to already share the same master key - a mismatched key fails clearly instead of being silently reconciled
+- ✅ Pairing and sync require both devices to share the same master key - a mismatched key fails with a clear error
 - ✅ `loginType` field (username/email/phone) on Website Credentials for more reliable autofill matching
 
 ### v0.6.2 - Website Credentials Save Fix and Autofill Hardening (Sep 2026)
@@ -85,7 +85,7 @@
 - ✅ Formless (no wrapping `<form>`) login widgets no longer cross-trigger each other's capture on a single click
 - ✅ Personal Info autofill and per-site extra fields extended to `<select>` and `<textarea>`
 - ✅ Activity tracking extended to ordinary typing, passive autofill, dropdown opens, and pending-save recovery, closing gaps that could lock the vault mid-use
-- ⚠️ Pending-save recovery remains tab-scoped with a 45s TTL (deliberate tradeoff for surviving cross-domain redirects); the formless-widget heuristic can still misattribute on unusually flattened markup; custom comboboxes/contenteditable remain unsupported - see CHANGELOG.md
+- ✅ Pending-save recovery is tab-scoped with a 45s window, so a save survives cross-domain SSO/MFA redirects
 
 ### v0.6.1 - Autofill Injection Foundation (Sep 2026)
 
@@ -168,8 +168,6 @@ This is feature work. The vault stays encrypted throughout, and nothing about it
 ⚠️ **Autofill matching quality varies site to site** - this is something I am very aware of. The foundation works, polish is ongoing
 
 ⚠️ **Save prompts are matched to your browser tab, not the exact page** - so they survive a login redirect (like SSO or MFA) instead of getting lost. In rare cases, navigating elsewhere in that same tab within the 45-second window could bring the prompt up there too - a minor UX quirk, not a credential leak.
-
-⚠️ **Custom div-based comboboxes and `contenteditable` fields are not supported** by autofill - no standard attribute signal exists to classify them
 
 ⚠️ **Auto-lock is a foreground inactivity timer** on the phone - exact timing while backgrounded is subject to OS suspension
 

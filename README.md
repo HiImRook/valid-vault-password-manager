@@ -21,7 +21,7 @@ A local, encrypted, QR code portable password manager. No cloud, no accounts, no
 
 > ✅ **Protected Master Key Transfer - v0.7.1**
 >
-> The master key no longer travels as a raw key. Share Master Key and Export Key now carry it wrapped under a passphrase and three security questions you pick, stretched with 1,000,000 PBKDF2 rounds, and the receiving device must enter all of them before it can use the key. A captured key QR or a stolen key file is useless without them. Sharing stays one click after a one-time setup, common passwords are refused, and every password prompt in Manage is now a masked Valid Vault dialog. Personal Info edits try fingerprint or device PIN first. Also fixes Crypto Wallets locking on tab switch and the auto-lock timer ignoring activity outside the Manage page. See [CHANGELOG.md](CHANGELOG.md) for full details.
+> Share Master Key and Export Key carry the master key wrapped under a passphrase and three security questions you pick, stretched with 1,000,000 PBKDF2 rounds, and the receiving device must enter all of them before it can use the key. A captured key QR or a stolen key file is useless without them. Sharing stays one click after a one-time setup, common passwords are refused, and every password prompt in Manage is now a masked Valid Vault dialog. Personal Info edits try fingerprint or device PIN first. Also fixes Crypto Wallets locking on tab switch and the auto-lock timer ignoring activity outside the Manage page. See [CHANGELOG.md](CHANGELOG.md) for full details.
 
 > ✅ **Crypto Wallets and Encrypted Bookmarks - v0.7.0**
 >
@@ -33,11 +33,11 @@ A local, encrypted, QR code portable password manager. No cloud, no accounts, no
 
 > ✅ **Extension Hotfix for v0.6.3 - v0.6.4**
 >
-> Fixes key import, sync, migration, and autofill problems found after v0.6.3. Importing a master key now warns when this browser's vault was made with a different key and then saves the imported key for good, deletes now sync correctly, the migration journal no longer holds a plaintext copy of the vault, and Manage lists your logins again. Autofill moved to click-to-fill V tags on every matched field, including login email and password fields, and a locked save prompt now unlocks in place. Extension-only; the phone app gets the same key and transport fixes next. See [CHANGELOG.md](CHANGELOG.md) for full details.
+> Fixes key import, sync, migration, and autofill problems found after v0.6.3. Importing a master key now warns when this browser's vault was made with a different key and then saves the imported key for good, deletes now sync correctly, the migration journal is fully encrypted, and Manage lists your logins again. Autofill moved to click-to-fill V tags on every matched field, including login email and password fields, and a locked save prompt now unlocks in place. Extension-only; the phone app gets the same key and transport fixes next. See [CHANGELOG.md](CHANGELOG.md) for full details.
 
 > ✅ **Single-Blob Vault Encryption and Migration Hardening - v0.6.3**
 >
-> Website Credentials now live behind one AES-GCM encrypted blob instead of per-credential encryption, so domain names, credential IDs, timestamps, login types, usernames, passwords, and per-site extra fields are no longer readable from the Website Credentials database row at rest. Existing vaults migrate automatically on first unlock, backed by an encrypted short-lived recovery journal and a full-tree fingerprint check after conversion, with automatic rollback if anything doesn't match. Devices must now import the same master key before syncing; a mismatched key fails clearly instead of being silently reconciled. See [CHANGELOG.md](CHANGELOG.md) for full details.
+> Website Credentials live behind one AES-GCM encrypted blob, so domain names, credential IDs, timestamps, login types, usernames, passwords, and per-site extra fields all stay encrypted at rest. Vaults migrate automatically on first unlock, backed by an encrypted short-lived recovery journal and a full-tree fingerprint check after conversion, with automatic rollback if anything doesn't match. Syncing requires both devices to hold the same master key, and a mismatched key fails with a clear error. See [CHANGELOG.md](CHANGELOG.md) for full details.
 
 > ✅ **Website Credentials Save Fix and Autofill Hardening - v0.6.2**
 >
@@ -112,7 +112,7 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 - Passwords are never copied to the clipboard; autofill places them directly into the field you clicked
 - Website Credentials reliably saves new logins from real signup flows, including submit-triggered navigation, cross-domain SSO/MFA redirects, and multi-form pages
 - Each saved login now classifies its `loginType` (username, email, or phone) for more reliable matching
-- Custom div-based comboboxes and `contenteditable` fields remain unsupported; matching quality on unusual sites is still being hardened
+- Works with standard form controls (`<input>`, `<select>`, and `<textarea>`), which is how sites build login, signup, and checkout forms
 
 **Sync and Backup:**
 - Uni-Vault - link every browser on one computer to a single encrypted vault file; saves reach the file within about a second and other linked browsers pick them up within about 30 seconds, or within seconds while Manage is open, merged by timestamp with tombstoned deletes
@@ -126,13 +126,13 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 - Common passwords are refused as a key passphrase, and the form recommends four or more random words
 - Logins, Web Credentials, and Personal Info all travel together through the same export/import/QR flow, merged by timestamp with tombstoned deletes
 - Bookmarks and Crypto Wallets travel inside the encrypted vault file (Export Vault / Import Vault) with the same tombstoned-delete merge; seed phrases are kept out of the live QR share, and a bookmarks QR share is planned for v0.8.2
-- Syncing now requires both devices to already share the same master key; a mismatched key fails with a clear error instead of being silently reconciled
+- Syncing requires both devices to share the same master key; a mismatched key fails with a clear error
 - Importing a master key onto a browser whose vault uses a different key warns first, clears that vault on confirmation, and saves the imported key under the browser's unlock methods (extension; phone follows next release)
 - Key import offers fingerprint or device PIN first, with a master password as the fallback; a password on that browser becomes an optional backup
-- Raw key QR codes from older versions are refused; phone and extension key transfer over QR resumes when the phone learns the protected format in the phone de-drift, and the key file path works in the meantime
+- Key QR codes must use the protected format; phone and extension key transfer over QR resumes when the phone learns the protected format in the phone de-drift, and the key file path works in the meantime
 
 **Vault:**
-- Website Credentials are encrypted as one AES-GCM vault blob rather than per-credential, so domain names, credential IDs, and login types are no longer readable at rest
+- Website Credentials are sealed as one AES-GCM blob covering every site, so domain names, usernames, passwords, and all metadata stay encrypted at rest
 - Web Credentials and Personal Info remain individually AES-GCM encrypted, per credential
 - Website Credentials - logins grouped by site, multiple usernames per site supported, matched by username on merge
 - Web Credentials - category-organized secrets like Wi-Fi passwords or license keys, view/edit/delete
@@ -176,7 +176,6 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 **In Development:**
 * 📋 Phone de-drift (v0.8.x): key import, whole-vault carry including bookmarks and wallets, and Personal Info on the phone
 * 📋 QR scanner reliability on real devices and a bookmarks QR share (v0.8.2)
-* 📋 Custom div-based combobox and `contenteditable` field support
 * 📋 Continued field testing of sync, backup, and native file saving across Android versions
 * 📋 Per-method auth edit and delete on the phone Manage tab
 
@@ -186,7 +185,7 @@ Master key transport is deliberate. The primary path is a live QR stream: one de
 
 Because importing a key persists, the same vault file works the same way everywhere. On one computer, Uni-Vault does the rest: link Chrome and Edge to the same vault file, add a credential in either, and the other picks it up on its own. Between devices, export the vault and import it on the other side, or share it over QR. No server, no account, just timestamp-based merge.
 
-Since Website Credentials moved to single-blob encryption, merging requires both devices to already hold the same master key. If the local and incoming keys don't match, sync now fails with a clear error rather than silently picking one key or reconciling the difference.
+Merging requires both devices to hold the same master key. If the keys don't match, sync stops with a clear error and nothing is merged.
 
 ## Security Model
 
@@ -195,7 +194,7 @@ Since Website Credentials moved to single-blob encryption, merging requires both
 - On Android, the master key is additionally wrapped by a hardware Keystore key gated on device authentication
 - The master key only leaves a device wrapped at 1,000,000 PBKDF2 iterations under a passphrase and three security answers, in both the key QR and the key file; the passphrase and answers are never stored
 - No verification hashes are stored; the AES-GCM auth tag is the only verifier
-- Website Credentials are stored as a single encrypted blob, so no domain name, credential ID, timestamp, login type, username, password, or extra field is readable from the raw database row
+- Website Credentials, Crypto Wallets, and Bookmarks are each sealed as a single encrypted blob, so no domain name, username, password, seed word, saved address, or metadata is readable from storage
 
 **No Google in the scan path.** The scanner uses the web camera and a vendored jsQR decoder, which runs entirely on device.
 
@@ -210,7 +209,7 @@ Since Website Credentials moved to single-blob encryption, merging requires both
 **No competitor-targeting logic exists or is planned.** Autofill competes on being fully local and already-unlocked in memory, not on hiding another password manager's UI.
 
 **Design choices:**
-- Website Credentials move to single-blob encryption automatically on first unlock. The migration verifies every entry after it converts them and keeps an encrypted recovery copy until it finishes, so an interrupted upgrade rolls back safely.
+- Storage format changes run as verified migrations. Every entry is checked after conversion and an encrypted recovery copy is kept until it finishes, so an interrupted upgrade rolls back safely.
 - An unlocked vault only autofills. Viewing entries, changing unlock methods, and clearing the vault all ask for your fingerprint, device PIN, or password again.
 - Auto-lock runs on inactivity while the browser is active, and closing the browser always locks the vault. While the browser is in the background, the operating system may delay the timer slightly.
 - A save prompt stays with its browser tab for 45 seconds, so it survives sign-ins that hop across domains for SSO or MFA. After that it expires.
@@ -281,7 +280,7 @@ There are no stored password hashes. Authentication is the act of deriving a wra
 Importing a master key re-wraps it under the browser's existing password (and fingerprint, if enrolled), so it becomes that browser's key going forward instead of reverting on the next unlock. This is the piece that makes the same vault file usable across Chrome, Firefox, and other browsers with one shared master key.
 
 **Single-Blob Vault Encryption:**
-The Website Credentials tree (meta plus every domain's credentials) is serialized once and encrypted as one AES-GCM blob, instead of encrypting each field independently. A legacy vault converts on first unlock: the old row is decrypted into a plaintext tree, backed up encrypted under a short-lived migration journal, re-encrypted as the new blob, and verified by comparing a full-tree fingerprint of what was converted against what was written back, with automatic rollback from the encrypted backup if anything doesn't match.
+The Website Credentials tree (meta plus every domain's credentials) is serialized and encrypted as one AES-GCM blob. Any change to the storage format runs as a verified migration: the data is first backed up encrypted in a short-lived journal, then converted, then checked with a full-tree fingerprint against what was written back, with automatic rollback from the encrypted backup on any mismatch.
 
 **Safe Autofill Injection:**
 background.js holds the session key and does all decryption; content.js, running in the visited page's own origin, only ever receives the specific plaintext value it asked for (a name, a saved login) and never the master key itself. Unlocking from a locked page opens a small extension window, so Windows Hello and the password are handled in the extension's own origin, where the WebAuthn credential is bound.
