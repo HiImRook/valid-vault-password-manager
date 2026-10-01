@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" href="favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="512x512" href="favicon-512.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<title>User Guide - Valid Vault</title>
+<style>
+  :root {
+    --bg: #0a0e0a; --bg-raise: #0d130d; --green: #33ff66;
+    --green-dim: #1f9e40; --green-faint: #12351c; --text: #b8f0c4; --text-dim: #6fae7f; --amber: #ffb84d;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { background: var(--bg); color: var(--text); font-family: "Courier New", "Consolas", "DejaVu Sans Mono", monospace; line-height: 1.7; font-size: 16px; overflow-x: hidden; position: relative; }
+  .wrap { max-width: 780px; margin: 0 auto; padding: 0 24px; }
+  .topnav { position: sticky; top: 0; z-index: 90; background: rgba(10,14,10,0.85); backdrop-filter: blur(6px); border-bottom: 1px solid var(--green-faint); }
+  .nav-inner { display: flex; align-items: center; justify-content: space-between; height: 56px; }
+  .nav-brand { color: var(--green); font-weight: 700; letter-spacing: 2px; font-size: 15px; text-decoration: none; white-space: nowrap; text-shadow: 0 0 6px rgba(51,255,102,0.4); }
+  .nav-links { display: flex; gap: 26px; }
+  .nav-links a { color: var(--text-dim); font-size: 14px; text-decoration: none; letter-spacing: 1px; }
+  .nav-links a:hover { color: var(--green); text-shadow: 0 0 6px rgba(51,255,102,0.5); }
+  @media (max-width: 560px) { .nav-links { gap: 16px; } .nav-links a { font-size: 13px; } .nav-brand { font-size: 14px; } }
+  @media (max-width: 460px) { .nav-links .opt { display: none; } .nav-links { gap: 10px; } .nav-links a { font-size: 11px; letter-spacing: 0; } .nav-brand { font-size: 12px; letter-spacing: 1px; } }
+  @media (max-width: 360px) { .nav-links { gap: 8px; } .nav-brand { font-size: 11px; letter-spacing: 0; } }
+  .doc { padding: 60px 0 40px; }
+  .doc h1 { color: var(--green); font-size: clamp(30px, 6vw, 46px); font-weight: 700; letter-spacing: 2px; text-shadow: 0 0 8px rgba(51,255,102,0.4); margin-bottom: 10px; }
+  .updated { color: var(--text-dim); font-size: 14px; margin-bottom: 40px; }
+  .doc h2 { color: var(--green); font-size: 20px; letter-spacing: 1px; margin: 40px 0 14px; text-shadow: 0 0 6px rgba(51,255,102,0.3); }
+  .doc h2::before { content: "// "; color: var(--green-dim); }
+  .doc p { margin-bottom: 16px; color: var(--text); }
+  .doc p.dim { color: var(--text-dim); }
+  .doc strong { color: var(--green); font-weight: 700; }
+  .doc ul { list-style: none; margin: 0 0 16px; }
+  .doc ul li { padding-left: 22px; position: relative; color: var(--text-dim); margin-bottom: 8px; }
+  .doc ul li::before { content: ">"; position: absolute; left: 0; color: var(--green-dim); }
+  a.inline { color: var(--green); text-decoration: none; border-bottom: 1px solid var(--green-faint); }
+  a.inline:hover { border-bottom-color: var(--green); }
+  footer { border-top: 1px solid var(--green-faint); padding: 40px 0; margin-top: 40px; }
+  .foot-bottom { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; color: var(--text-dim); font-size: 13px; }
+  .foot-bottom a { color: var(--text-dim); text-decoration: none; }
+  .foot-bottom a:hover { color: var(--green); }
+  .doc .lede { color: var(--text-dim); margin-bottom: 30px; }
+  .toc { background: var(--bg-raise); border: 1px solid var(--green-faint); border-left: 3px solid var(--green-dim); padding: 18px 22px; margin-bottom: 20px; }
+  .toc-title { color: var(--green); font-weight: 700; letter-spacing: 1px; margin-bottom: 10px; }
+  .toc-links { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px 24px; }
+  .toc-links a { color: var(--text-dim); text-decoration: none; font-size: 14px; }
+  .toc-links a::before { content: "> "; color: var(--green-dim); }
+  .toc-links a:hover { color: var(--green); }
+  .doc section { scroll-margin-top: 70px; border-top: 1px solid var(--green-faint); margin-top: 44px; }
+  .doc section h2 { margin-top: 36px; }
+  .doc h3 { color: var(--text); font-size: 17px; letter-spacing: 0.5px; margin: 28px 0 10px; }
+  .doc em { font-style: normal; color: var(--text); border-bottom: 1px solid var(--green-dim); }
+  .doc ul li strong, .doc ol li strong { color: var(--text); }
+  .doc ol { list-style: none; counter-reset: s; margin: 4px 0 16px; }
+  .doc ol li { counter-increment: s; position: relative; padding: 8px 0 8px 40px; color: var(--text-dim); border-bottom: 1px solid var(--green-faint); }
+  .doc ol li:last-child { border-bottom: none; }
+  .doc ol li::before { content: counter(s, decimal-leading-zero); position: absolute; left: 0; top: 8px; color: var(--green); font-weight: 700; }
+  .doc a:not(.inline) { color: var(--green); }
+  .box { background: var(--bg-raise); border: 1px solid var(--green-faint); border-left: 3px solid var(--green-dim); padding: 16px 20px; margin: 16px 0 20px; }
+  .box p:last-child { margin-bottom: 0; }
+  .box.warn { border-left-color: var(--amber); }
+  .box.warn strong, .box.warn .box-title { color: var(--amber); }
+  .box-title { color: var(--green); font-weight: 700; margin-bottom: 6px; letter-spacing: 0.5px; }
+  .table-wrap { overflow-x: auto; }
+  .doc table { width: 100%; border-collapse: collapse; margin: 12px 0 20px; font-size: 14px; }
+  .doc th { text-align: left; color: var(--green); font-weight: 700; padding: 10px 12px; border-bottom: 1px solid var(--green-dim); background: var(--bg-raise); }
+  .doc td { padding: 10px 12px; border-bottom: 1px solid var(--green-faint); color: var(--text-dim); vertical-align: top; }
+  .doc td:first-child { color: var(--text); white-space: nowrap; }
+  .profiles { display: grid; grid-template-columns: repeat(2, 1fr); gap: 2px; margin: 12px 0 20px; }
+  .profile { background: var(--bg-raise); border: 1px solid var(--green-faint); padding: 18px 20px; }
+  .profile-name { color: var(--green); font-weight: 700; letter-spacing: 0.5px; margin-bottom: 10px; }
+  .profile-name::before { content: "> "; color: var(--green-dim); }
+  .profile dl { display: grid; grid-template-columns: 96px 1fr; gap: 4px 10px; font-size: 13px; margin-bottom: 10px; }
+  .profile dt { color: var(--text-dim); }
+  .profile dd { color: var(--text); }
+  .doc .profile p { font-size: 13px; color: var(--text-dim); margin: 0; }
+  .faq dt { color: var(--green); font-weight: 700; margin-top: 18px; }
+  .faq dd { color: var(--text-dim); margin: 6px 0 0; }
+  .key { display: inline-block; border: 1px solid var(--green-dim); padding: 0 6px; font-size: 13px; color: var(--text); }
+  @media (max-width: 640px) { .toc-links, .profiles { grid-template-columns: 1fr; } .doc td:first-child { white-space: normal; } }
+  body::before { content:""; position: fixed; inset: 0; background: repeating-linear-gradient(to bottom, rgba(51,255,102,0.022) 0px, rgba(51,255,102,0.022) 1px, rgba(0,0,0,0) 1px, rgba(0,0,0,0) 2px, rgba(0,0,0,0.28) 2px, rgba(0,0,0,0.28) 3px); pointer-events: none; z-index: 100; animation: crt-flicker 6s steps(1,end) infinite; }
+  body::after { content:""; position: fixed; inset: 0; background: radial-gradient(ellipse at center, rgba(0,0,0,0) 55%, rgba(0,0,0,0.45) 100%); pointer-events: none; z-index: 99; }
+  .crt-roll { position: fixed; left: 0; right: 0; top: -25vh; height: 25vh; background: linear-gradient(to bottom, rgba(51,255,102,0) 0%, rgba(51,255,102,0.017) 70%, rgba(180,255,200,0.034) 96%, rgba(51,255,102,0) 100%); pointer-events: none; z-index: 98; animation: crt-roll 9s linear infinite; }
+  @keyframes crt-roll { from { transform: translateY(0); } to { transform: translateY(150vh); } }
+  @keyframes crt-flicker { 0% { opacity: 1; } 48% { opacity: 0.92; } 50% { opacity: 1; } 97% { opacity: 0.95; } }
+  @media (prefers-reduced-motion: reduce) { .crt-roll { display: none; } body::before { animation: none; } html { scroll-behavior: auto; } }
+</style>
+</head>
+<body>
+<div class="crt-roll"></div>
+
+<nav class="topnav">
+  <div class="wrap nav-inner">
+    <a class="nav-brand" href="index.html">Valid Vault</a>
+    <div class="nav-links">
+      <a href="index.html#features">Features</a>
+      <a class="opt" href="index.html#security">Security</a>
+      <a href="index.html#install">Install</a>
+      <a href="guide.html">Guide</a>
+      <a href="privacy.html">Privacy</a>
+    </div>
+  </div>
+</nav>
+<div class="doc">
+  <div class="wrap">
+    <h1>User Guide</h1>
+    <p class="lede">How to set up Valid Vault, what every setting does, and how to tune it for the way you use your computer. Each section explains the recommended choice and why, so you can decide for yourself.</p>
+
+    <div class="toc">
+      <div class="toc-title">Contents</div>
+      <div class="toc-links">
+      <a href="#start">Getting Started</a>
+      <a href="#unlock">Fingerprint, PIN, or Password</a>
+      <a href="#lock">Locking and Timers</a>
+      <a href="#autofill">Autofill</a>
+      <a href="#generator">Password Generator</a>
+      <a href="#habits">Password Habits</a>
+      <a href="#storage">What You Can Store</a>
+      <a href="#keys">Your Master Key</a>
+      <a href="#univault">Uni-Vault on One Computer</a>
+      <a href="#transport">Browsers and Devices</a>
+      <a href="#backups">Backups and Cold Storage</a>
+      <a href="#profiles">Setups for Different Users</a>
+      <a href="#trouble">Troubleshooting</a>
+      <a href="#limits">Honest Limits</a>
+      </div>
+    </div>
+
+    <section id="start">
+      <h2>Getting Started</h2>
+      <p>Valid Vault keeps everything on your own device, encrypted. There is no account, no server, and no company holding a copy. That also means nobody can reset your access for you, so the few minutes you spend on setup and backups matter.</p>
+
+      <h3>How the vault is locked</h3>
+      <p>When you set up Valid Vault, it creates one random <strong>256-bit master key</strong>. That key encrypts your logins, notes, wallets, and bookmarks. The key itself is never saved as is. Each unlock method you set up (fingerprint or device PIN, and optionally a password) holds its own locked copy of it. Unlocking is the act of opening one of those copies. A wrong fingerprint, PIN, or password simply fails to open it. There is no stored password hash anywhere for anyone to test guesses against.</p>
+
+      <h3>First setup</h3>
+      <ol>
+        <li><strong>Open the popup</strong> by clicking the Valid Vault icon in your browser toolbar. Pin it to the toolbar so it is always one click away.</li>
+        <li><strong>Enroll Fingerprint / PIN.</strong> This uses Windows Hello, which covers your fingerprint reader and your Windows device PIN. This is the recommended method. The next section explains why.</li>
+        <li><strong>Add a password only if you want one.</strong> It is optional. If you add it, it needs 12 or more characters with a letter, a number, and a symbol, and longer is much better.</li>
+        <li><strong>Finish &amp; Unlock.</strong> You need at least one unlock method.</li>
+        <li><strong>Back up your key right away.</strong> In the menu, open Settings Menu, then Sync, and use Export Key. Store that file as described in <a href="#backups" style="color:var(--green);">Backups and Cold Storage</a>. Do this before you save anything important.</li>
+        <li><strong>Pick your timers</strong> in Settings using <a href="#profiles" style="color:var(--green);">Setups for Different Users</a> as a starting point.</li>
+      </ol>
+    </section>
+
+    <section id="unlock">
+      <h2>Fingerprint, PIN, or Password</h2>
+      <p>Valid Vault gives you the choice. Here is how each method protects you, so you can choose with your eyes open.</p>
+
+      <h3>The risk with a password</h3>
+      <p>Your encrypted vault is stored in your browser's profile on disk. A password-locked copy of your master key is stored there too. If someone ever copies your browser profile (malware, a stolen laptop without disk encryption, a backup that leaks), they can take that copy to their own hardware and guess passwords as fast as their machines allow, with no lockout and no limit on attempts.</p>
+      <ul>
+        <li>Valid Vault stretches every password guess through <strong>600,000 rounds of PBKDF2</strong>, which makes each guess slow and expensive. A long, random password holds up against that for longer than anyone will ever try.</li>
+        <li>A short, reused, or predictable password does not. The stretching buys time; it cannot rescue a weak password.</li>
+        <li>A typed password can also be seen. Someone watching your keyboard, a hidden camera, or a keylogger can capture it.</li>
+      </ul>
+
+      <h3>How fingerprint and device PIN avoid that</h3>
+      <p>When you enroll fingerprint or device PIN, the secret that unlocks your master key lives inside Windows Hello, backed by the security chip in your computer. It never leaves that chip and is never written to your browser profile.</p>
+      <ul>
+        <li><strong>Nothing on disk can be guessed at.</strong> A copied browser profile contains a locked key with no way to test guesses against it.</li>
+        <li><strong>Guessing the device PIN is capped.</strong> Windows limits wrong PIN attempts and locks out repeated guessing, so a 4 to 6 digit PIN stays safe in a way a 6 character password never could.</li>
+        <li><strong>Nothing to shoulder surf or keylog</strong> when you use your fingerprint.</li>
+        <li><strong>It is fast</strong>, which makes short auto-lock times painless. That is a big part of staying safe day to day.</li>
+      </ul>
+
+      <h3>Which to choose</h3>
+      <ul>
+        <li><strong>Have a fingerprint reader:</strong> use fingerprint. It is the strongest and the most convenient.</li>
+        <li><strong>No fingerprint reader:</strong> use your device PIN through the same Fingerprint / PIN option. It is still stronger than a password, for the reasons above.</li>
+        <li><strong>Want a password as a backup unlock:</strong> that is your choice. Make it a long passphrase you use nowhere else, such as four or more random words with a number and a symbol. Understand that it adds a copy of your key on disk that can be guessed at offline.</li>
+        <li><strong>Password only:</strong> supported, for devices without Windows Hello. Use the longest passphrase you can comfortably type.</li>
+      </ul>
+
+      <div class="box warn">
+        <div class="box-title">The one trade-off of fingerprint / PIN only</div>
+        <p>If Windows Hello is reset, the computer is replaced, or Windows is reinstalled, the fingerprint and PIN link to your vault is gone with it. That is exactly why the key file backup matters: import your key file on the new setup and you are back in. With a key file in cold storage, a fingerprint / PIN only setup is both the most secure and fully recoverable.</p>
+      </div>
+
+      <h3>Changing methods later</h3>
+      <p>In Settings Menu, Manage, the Unlock Methods cards let you enroll, re-enroll, or delete each method. You always keep at least one: fingerprint cannot be deleted without a password in place, and the password cannot be deleted without fingerprint in place.</p>
+    </section>
+
+    <section id="lock">
+      <h2>Locking and Timers</h2>
+
+      <h3>What locking does</h3>
+      <p>While unlocked, your master key sits only in the browser's memory. Locking erases it from memory everywhere at once: the popup, every open Manage page, the bookmarks panel, and autofill on every tab. After a lock, nothing can be read until you unlock again. Closing the browser always locks.</p>
+      <p>You can lock by hand at any time with the padlock in the popup, and the vault locks itself through the auto-lock timer.</p>
+
+      <h3>What stays protected while unlocked</h3>
+      <p>Unlocked means autofill is ready to use. The vault itself stays closed to anyone who sits down at your computer. Even while unlocked:</p>
+      <ul>
+        <li><strong>Viewing anything in Manage</strong> (logins, Misc Credentials, Personal Info, Crypto Wallets) asks for your fingerprint, PIN, or password again, section by section.</li>
+        <li><strong>Changing your unlock methods or clearing the vault</strong> asks for your fingerprint, PIN, or password again.</li>
+        <li><strong>Passwords are never shown in the popup and never copied to the clipboard.</strong> Autofill places a password straight into the field you clicked.</li>
+        <li><strong>Anything that leaves the device stays locked.</strong> A shared or exported vault is encrypted under your master key, and your key only travels under your passphrase and three answers.</li>
+      </ul>
+      <p>What an unlocked vault does allow is autofill itself: someone at your computer could use the V tags to sign in to your sites on that computer, and could browse your bookmarks list. The auto-lock timer is what closes that window.</p>
+
+      <h3>Auto-lock timeout</h3>
+      <p>Settings, <strong>Auto-lock timeout (seconds)</strong>, from 10 seconds up to 2 hours. The readout next to the box shows the time as hours, minutes, and seconds.</p>
+      <ul>
+        <li><strong>What it measures:</strong> idle time. Every real mouse movement, scroll, click, or key press, on any website or Valid Vault page, resets the clock.</li>
+        <li><strong>Only real input counts.</strong> A web page cannot fake activity to keep your vault open. Reading a long article without touching the mouse counts as idle.</li>
+        <li><strong>When it runs out:</strong> the vault locks within a few seconds, exactly as if you had pressed the padlock.</li>
+        <li><strong>Sleep and hibernate:</strong> if the computer sleeps past your timeout, the vault is locked when it wakes.</li>
+        <li><strong>Crypto Wallets</strong> follows this same timer and closes itself when it runs out, in addition to closing whenever you switch tabs.</li>
+      </ul>
+
+      <div class="table-wrap"><table>
+        <tr><th>Setting</th><th>What it means for you</th></tr>
+        <tr><td>30 to 60 seconds</td><td>Locks almost as soon as you stop. Best on shared or public machines and for high-value vaults. Comfortable with fingerprint, since you will unlock often. Shorter than 30 seconds gets in the way more than it helps.</td></tr>
+        <tr><td>2 to 5 minutes</td><td>A strong everyday balance. Short coffee breaks lock the vault; a paused task does not.</td></tr>
+        <tr><td>10 to 30 minutes</td><td>Convenient for a private home computer. Your vault still needs your fingerprint or PIN to view anything, but autofill stays ready for anyone at your computer during that time.</td></tr>
+        <tr><td>1 to 2 hours</td><td>Maximum convenience for a single-user machine in a private space. Pair it with locking Windows (<span class="key">Win</span> + <span class="key">L</span>) every time you get up.</td></tr>
+      </table></div>
+
+      <div class="box">
+        <div class="box-title">Rule of thumb</div>
+        <p>Set the timer to the longest time you would be comfortable walking away and leaving the screen on for a stranger. Fingerprint makes a short timer cost almost nothing, which is why the two go together.</p>
+      </div>
+
+      <h3>QR stream timeout</h3>
+      <p>Settings, <strong>QR stream timeout (seconds)</strong>, from 5 seconds to 10 minutes. This is how long a Share Vault or Share Master Key QR code stays on screen before it closes itself. You can always close it sooner.</p>
+      <ul>
+        <li><strong>Shorter is safer:</strong> less time on screen means less chance of it being photographed or left open.</li>
+        <li><strong>Longer helps slow scans:</strong> a weak camera or dim light may need more time.</li>
+        <li><strong>Recommended:</strong> 30 to 60 seconds at home, 15 seconds or less anywhere public. If a scan keeps timing out, raise it for that one transfer, then set it back.</li>
+      </ul>
+    </section>
+
+    <section id="autofill">
+      <h2>Autofill</h2>
+      <p>Valid Vault never fills anything without your click. Fields it recognizes get a small <strong>V</strong> tag at their edge.</p>
+      <ul>
+        <li><strong>Green V</strong> on a login, email, or password field: click it to pick one of your saved logins for this site. Picking a login fills the username and password together.</li>
+        <li><strong>Inverted V</strong> (black circle, green V) on a new password field: click it to generate a strong password. It fills both the new password and the confirm box, masked.</li>
+        <li><strong>Personal info fields</strong> (name, phone, address, email) get a V that fills from your Personal Info profile.</li>
+        <li><strong>Locked?</strong> Clicking a V while locked opens a small Valid Vault window to unlock with fingerprint, PIN, or password. Your unlock never happens inside the website itself.</li>
+      </ul>
+
+      <div class="box">
+        <div class="box-title">No clipboard, ever</div>
+        <p>Many password managers fill a login by copying the password to your clipboard, where any program on your computer can read it, and where it often lingers long after you paste. Valid Vault never uses the clipboard. It places the password directly into the field you clicked, and unlocking happens in Valid Vault's own window, away from the website. That closes off one of the most common ways malware steals passwords.</p>
+      </div>
+
+      <h3>Saving logins</h3>
+      <p>When you sign up or log in, Valid Vault offers to save the login, or to update it if the password changed. It follows through sign-in redirects and multi-step logins. If you were locked, the prompt offers Unlock and Save.</p>
+
+      <h3>Changing a password on a site</h3>
+      <ol>
+        <li>On the site's change password form, click the green V on the <strong>current password</strong> field to fill your saved password.</li>
+        <li>Click the inverted V on the <strong>new password</strong> field to generate a new one. Both boxes fill.</li>
+        <li>Submit the form, then choose Update on the save prompt.</li>
+      </ol>
+
+      <h3>Previous password safety net</h3>
+      <p>Sometimes a site shows success but never actually saves the new password. To protect you, Valid Vault keeps the old password as a labeled <strong>Previous passwords</strong> choice in the login picker, with the date it was replaced. Picking it restores it.</p>
+      <p>The old password is removed only after the new one has been used <strong>3 times and 14 days</strong> have passed. Both must happen, so a password you use once and then forget about is never dropped too early.</p>
+    </section>
+
+    <section id="generator">
+      <h2>Password Generator</h2>
+      <p>Generated passwords come from your browser's cryptographic random source. Every password includes at least one uppercase letter, lowercase letter, digit, and symbol, shuffled randomly.</p>
+
+      <h3>What the length settings do</h3>
+      <p>Settings, Password Generator. Each time you generate, the length is picked at random inside the range you choose, so your passwords are not all the same size.</p>
+      <div class="table-wrap"><table>
+        <tr><th>Maximum</th><th>Length range</th><th>Best for</th></tr>
+        <tr><td>24 (default)</td><td>Your minimum to 24</td><td>Nearly every site. The safe default.</td></tr>
+        <tr><td>32</td><td>25 to 32</td><td>Important accounts on modern sites.</td></tr>
+        <tr><td>48</td><td>33 to 48</td><td>Sites you know accept long passwords.</td></tr>
+        <tr><td>64</td><td>49 to 64</td><td>Sites you have confirmed accept very long passwords.</td></tr>
+      </table></div>
+      <p><strong>Minimum</strong> (16 or 20) sets the low end of the 24 range. It only matters when the maximum is 24.</p>
+
+      <h3>Why longer is not always better</h3>
+      <ul>
+        <li><strong>16 random characters are already out of reach.</strong> That is about 100 bits of randomness, far beyond what any computer can guess.</li>
+        <li><strong>Some sites have hidden limits.</strong> A site may silently cut a long password short or quietly reject it. Your vault would then hold a password that does not match what the site stored. If a site declares its limits, Valid Vault always follows them. Hidden limits are the risk, and they are more common the longer you go.</li>
+        <li><strong>If a site rejects a generated password,</strong> click Generate a different one, or lower your maximum to 24 for that change.</li>
+      </ul>
+    </section>
+
+    <section id="habits">
+      <h2>Password Habits That Work</h2>
+      <p>A password manager protects you because it makes one habit effortless: <strong>a different random password for every site</strong>. When a site is breached, the attacker gets that one password, and it opens nothing else.</p>
+      <ul>
+        <li><strong>Let the generator make every password.</strong> Do not invent them. People are predictable; the generator is not.</li>
+        <li><strong>Never reuse a password,</strong> especially your email password. Your email can reset everything else.</li>
+        <li><strong>Change a password when the site reports a breach,</strong> using the steps in Autofill.</li>
+        <li><strong>Keep your master password and key passphrase out of the vault.</strong> They unlock the vault, so storing them inside it helps no one. Keep them in your head and on paper in cold storage.</li>
+        <li><strong>Turn on two-factor authentication</strong> on important accounts. It is your second line of defense if a password ever leaks.</li>
+        <li><strong>Lock before you walk away,</strong> even with a short timer.</li>
+      </ul>
+    </section>
+
+    <section id="storage">
+      <h2>What You Can Store</h2>
+      <p>Every section lives inside the same encrypted vault. Each section in Manage asks for its own unlock before showing anything.</p>
+      <ul>
+        <li><strong>Website Credentials:</strong> your logins, grouped by site, with more than one account per site. Saved as you browse.</li>
+        <li><strong>Misc Credentials:</strong> Wi-Fi passwords, license keys, recovery codes, and other secrets, by category.</li>
+        <li><strong>Personal Info:</strong> name, phone, address, and a ranked list of emails, used to fill signup and address forms.</li>
+        <li><strong>Crypto Wallets:</strong> seed phrases by wallet and account, checked word by word against the standard 2048-word list, completely offline. Words only appear while you choose to show them and disappear when you switch tabs or the window loses focus. They are never filled into web pages.</li>
+        <li><strong>Bookmarks:</strong> saved from the bookmark icon in the popup and listed in a searchable side panel from the menu. Unlike browser bookmarks, nothing about them is readable on disk.</li>
+      </ul>
+      <div class="box warn">
+        <div class="box-title">Crypto holders</div>
+        <p>Valid Vault is a secure place to keep a seed phrase, and it should never be your only copy. Keep your wallet's own recovery backup as well, stored offline. If you lose every copy of your master key, the seed phrases in the vault are gone with it.</p>
+      </div>
+    </section>
+
+    <section id="keys">
+      <h2>Your Master Key</h2>
+      <p>Your master key is what makes your vault readable. It only ever leaves a device inside a <strong>key package</strong>, locked under a passphrase plus three security questions you choose, and stretched through <strong>1,000,000 rounds of PBKDF2</strong>. The Share Master Key QR code and the Export Key file both carry that same package.</p>
+
+      <h3>Why a captured QR or stolen file is useless</h3>
+      <ul>
+        <li><strong>A captured vault QR</strong> is ciphertext. It cannot be read without your master key.</li>
+        <li><strong>A captured key QR or key file</strong> is locked. Opening it requires the passphrase and all three answers, and every guess costs a million rounds of stretching.</li>
+        <li><strong>Shoulder surfing the screen gets nothing usable.</strong> A photo of the QR code alone opens nothing.</li>
+        <li><strong>The one real gap:</strong> someone who captures the key QR <em>and</em> watches you type your passphrase and answers. So type them where nobody can see your keyboard or screen.</li>
+      </ul>
+
+      <h3>Choosing your passphrase and questions</h3>
+      <p>You set these the first time you share or export your key. After that, sharing is one click. Change Key Passphrase in Sync replaces them.</p>
+      <ul>
+        <li><strong>Passphrase:</strong> four or more random words plus a number and a symbol, like <em>copper-lantern-mosaic-drift7!</em>. Common passwords and simple variations are refused.</li>
+        <li><strong>Questions:</strong> pick three from the list of ten. Choose ones whose answers are not on your social media or public records.</li>
+        <li><strong>Answers:</strong> one word each, and capitalization matters. You can use a false answer you will remember, which is stronger than the true one.</li>
+        <li><strong>Write them down</strong> on paper and keep that paper somewhere separate from your key file. Nobody can recover them for you.</li>
+      </ul>
+
+      <h3>Naming your key</h3>
+      <p>Settings, Master Key Name. The name appears in exported file names so you can tell backups apart. It is a label only and is never needed to import.</p>
+    </section>
+
+    <section id="univault">
+      <h2>Uni-Vault on One Computer</h2>
+      <p>Uni-Vault links every browser on this computer to <strong>one encrypted vault file</strong>. Save a login in Chrome and it shows up in Edge. Delete one in Edge and it disappears from Chrome. No exporting, no importing, no server.</p>
+
+      <h3>How it works</h3>
+      <ul>
+        <li><strong>One file, many browsers.</strong> The vault file lives wherever you choose, such as your Documents folder. Every linked browser reads from it and writes to it.</li>
+        <li><strong>Each browser keeps a working copy.</strong> Autofill stays instant, and nothing is lost if the file is briefly unreachable.</li>
+        <li><strong>Changes travel on their own.</strong> A save reaches the file within about a second. Other browsers pick it up within a few seconds while Manage is open, within about 30 seconds otherwise, and every time they unlock.</li>
+        <li><strong>Same merge rules as always.</strong> The newest edit wins, and deleted items stay deleted everywhere.</li>
+        <li><strong>The file is encrypted.</strong> It is the same encrypted vault file Export Vault has always made, useless without your master key.</li>
+      </ul>
+
+      <h3>Setting it up</h3>
+      <ol>
+        <li><strong>In your first browser:</strong> Settings Menu, Sync, <strong>Export Vault</strong>. Pick where the vault file should live, then choose <strong>Link this file</strong>.</li>
+        <li><strong>In each other browser:</strong> install Valid Vault, complete first setup, and use <strong>Import Key</strong> with your key file so every browser holds the same master key.</li>
+        <li>Then <strong>Import Vault</strong>, pick that same vault file, and choose <strong>Link this file</strong>.</li>
+        <li>When the browser asks to let Valid Vault edit the file, allow it. If it offers <strong>Allow on every visit</strong>, choose that, and it will not ask again.</li>
+      </ol>
+      <p>The Uni-Vault panel in Sync shows which file each browser is linked to and when it last synced.</p>
+
+      <h3>Staying safe</h3>
+      <ul>
+        <li><strong>A bad file is refused, never trusted.</strong> If the file is damaged, replaced with something else, or made with a different master key, Valid Vault refuses it, leaves it untouched, and keeps working with its own copy. Sync shows exactly why.</li>
+        <li><strong>Moved or unreachable file:</strong> nothing is lost. Put it back, or use Unlink and then Import Vault to link the file in its new place.</li>
+        <li><strong>Permission asked again:</strong> if the browser ever forgets your permission, a <strong>Reconnect</strong> button appears in the popup and in Sync. One click and you are back in sync.</li>
+        <li><strong>Keep the file on this computer's own drive.</strong> A USB drive is for backups, since Uni-Vault stops syncing whenever the drive is unplugged.</li>
+        <li><strong>Keep your backups.</strong> Uni-Vault keeps one file on one disk, so keep exporting backups to cold storage as described in <a href="#backups" style="color:var(--green);">Backups and Cold Storage</a>. When a browser is linked, Export Vault saves a separate backup copy and the link stays put.</li>
+        <li><strong>Unlink</strong> in Sync stops a browser from syncing. It keeps its own copy, and the file is not deleted.</li>
+      </ul>
+
+      <div class="box warn">
+        <div class="box-title">Brave users: Uni-Vault will not work until you flip one switch</div>
+        <p>Chrome and Edge let an extension read and write a file you pick yourself. <strong>Brave ships with that standard browser feature switched off</strong>, and buries the switch on its experimental settings page behind a warning written to make a one-line setting sound like open-heart surgery. Valid Vault cannot work around Brave's choice, and it will not try to. Nothing is broken in Valid Vault and nothing is wrong with your vault. Brave simply refuses to let any extension touch the file you chose, until you tell it to stop.</p>
+        <p><strong>The fix, once:</strong></p>
+        <ol>
+          <li>Type <em>brave://flags/#file-system-access-api</em> into Brave's address bar and press Enter.</li>
+          <li>Set <strong>File System Access API</strong> to <strong>Enabled</strong>.</li>
+          <li>Click <strong>Relaunch</strong>. Export Vault and Import Vault now offer Link this file.</li>
+        </ol>
+        <p><strong>About Brave's warning:</strong> that page shows the same warning for every experimental setting at once. This one only lets a website or extension ask you to pick a file, and nothing can reach any file you do not choose yourself. Chrome and Edge ship it switched on for everyone.</p>
+        <p><strong>Would rather leave it off?</strong> Everything else in Valid Vault works in Brave exactly as usual. Use Export Vault and Import Vault to catch Brave up with your other browsers by hand.</p>
+      </div>
+    </section>
+
+    <section id="transport">
+      <h2>Moving Between Browsers and Devices</h2>
+      <p>Every browser and device that should share a vault needs the <strong>same master key</strong>. Always move the key first, then the vault. Merging only works between browsers that hold the same key.</p>
+
+      <h3>Adding another browser on the same computer</h3>
+      <p>A computer cannot scan its own screen, so use files. Linking the vault file sets up Uni-Vault, as described in <a href="#univault" style="color:var(--green);">Uni-Vault on One Computer</a>.</p>
+      <ol>
+        <li>In your current browser: Sync, <strong>Export Key</strong> and <strong>Export Vault</strong>.</li>
+        <li>Install Valid Vault in the new browser and complete first setup.</li>
+        <li>In the new browser: Sync, <strong>Import Key</strong>. Choose the key file and enter your passphrase and three answers.</li>
+        <li>Choose how the new browser unlocks the key. <strong>Fingerprint or device PIN is recommended</strong>; a master password is the fallback.</li>
+        <li>Sync, <strong>Import Vault</strong>, and choose the vault file. Choose <strong>Link this file</strong> to stay in sync automatically, or <strong>Merge once</strong> to copy it in one time.</li>
+      </ol>
+
+      <h3>Moving to another device with a camera (QR)</h3>
+      <ol>
+        <li>Somewhere private, on the old device: Sync, <strong>Share Master Key</strong>.</li>
+        <li>On the new device: Sync, tap the scan box, and point the camera at the QR code.</li>
+        <li>Enter the passphrase and three answers, then choose how the new device unlocks.</li>
+        <li>On the old device: <strong>Share Vault</strong>, and scan it on the new device.</li>
+      </ol>
+
+      <h3>Moving without QR</h3>
+      <p>The file method works between any two devices: Export Key and Export Vault, carry the files on a USB drive, then Import Key and Import Vault on the other side. Crypto Wallets and bookmarks travel only inside the vault file, so use files whenever you need to move those.</p>
+
+      <h3>Keeping browsers in step</h3>
+      <ul>
+        <li><strong>On one computer,</strong> Uni-Vault keeps every linked browser caught up on its own.</li>
+        <li><strong>Across devices,</strong> or in a browser without Uni-Vault, repeat Export Vault and Import Vault (Merge once) whenever you want it caught up. Your key only moves once.</li>
+        <li><strong>Merging is safe to repeat.</strong> For each item, the newest edit wins, and deleted items stay deleted on every browser. Importing the same file twice changes nothing.</li>
+        <li><strong>Importing a key on a browser that already has a different vault</strong> warns you first: that browser's old vault becomes unreadable and is cleared. This is how you prepare a browser to receive your real vault.</li>
+      </ul>
+    </section>
+
+    <section id="backups">
+      <h2>Backups and Cold Storage</h2>
+      <p>Your vault exists only on your devices. Backups are how you survive a dead drive, a stolen laptop, or a reinstalled Windows.</p>
+
+      <h3>The two files</h3>
+      <div class="table-wrap"><table>
+        <tr><th>File</th><th>What it is</th><th>How often</th></tr>
+        <tr><td>Key file</td><td>Your master key, locked under your passphrase and three answers.</td><td>Once. Again only after Change Key Passphrase.</td></tr>
+        <tr><td>Vault file</td><td>Everything you have saved, encrypted under your master key. Useless without the key.</td><td>Weekly if you save often, monthly otherwise, and before any big change.</td></tr>
+      </table></div>
+
+      <h3>Cold storage for your key</h3>
+      <ul>
+        <li><strong>Put the key file on a USB drive,</strong> ideally an encrypted one, and keep it unplugged and offline.</li>
+        <li><strong>Make two copies in two places,</strong> such as one at home and one with a trusted person or in a safe deposit box.</li>
+        <li><strong>Store the written passphrase and answers apart from the drive.</strong> Whoever finds one should not find the other.</li>
+        <li><strong>Never send the key file and the passphrase together,</strong> and avoid emailing or cloud-syncing the key file at all.</li>
+        <li><strong>Test your backup once:</strong> import the key file in a spare browser to confirm your passphrase and answers work.</li>
+      </ul>
+
+      <div class="box warn">
+        <div class="box-title">What can never be recovered</div>
+        <p>If every device loses its unlock and you no longer have the key file, or you no longer know its passphrase and answers, your vault cannot be opened by anyone. There is no reset link and no support desk that can help, by design. Your backups are your only recovery.</p>
+      </div>
+    </section>
+
+    <section id="profiles">
+      <h2>Setups for Different Users</h2>
+      <p>Starting points to tune from. Change any of them to fit how you work.</p>
+      <div class="profiles">
+        <div class="profile">
+          <div class="profile-name">Everyday home computer</div>
+          <dl><dt>Auto-lock</dt><dd>5 to 15 minutes</dd><dt>Unlock</dt><dd>Fingerprint or device PIN</dd><dt>Generator</dt><dd>16 to 24</dd><dt>Backups</dt><dd>Key file once, vault monthly</dd></dl>
+          <p>Private space, one user. Lock Windows when you leave the room.</p>
+        </div>
+        <div class="profile">
+          <div class="profile-name">Shared or family computer</div>
+          <dl><dt>Auto-lock</dt><dd>30 to 60 seconds</dd><dt>Unlock</dt><dd>Fingerprint only</dd><dt>Generator</dt><dd>16 to 24</dd><dt>Backups</dt><dd>Key file once, vault weekly</dd></dl>
+          <p>Give each person their own Windows account so Windows Hello is truly yours, and lock by hand every time you finish.</p>
+        </div>
+        <div class="profile">
+          <div class="profile-name">Work laptop</div>
+          <dl><dt>Auto-lock</dt><dd>2 to 5 minutes</dd><dt>Unlock</dt><dd>Fingerprint or device PIN</dd><dt>Generator</dt><dd>20 to 24</dd><dt>Backups</dt><dd>Vault weekly</dd></dl>
+          <p>Lock Windows with <span class="key">Win</span> + <span class="key">L</span> whenever you step away, and follow your employer's policy on personal data.</p>
+        </div>
+        <div class="profile">
+          <div class="profile-name">Traveler or public places</div>
+          <dl><dt>Auto-lock</dt><dd>30 to 60 seconds</dd><dt>Unlock</dt><dd>Fingerprint</dd><dt>QR timeout</dt><dd>15 seconds or less</dd><dt>Backups</dt><dd>Export before you leave</dd></dl>
+          <p>Avoid typing a password where cameras or people can see. Never show a key QR in public.</p>
+        </div>
+        <div class="profile">
+          <div class="profile-name">Crypto holder</div>
+          <dl><dt>Auto-lock</dt><dd>1 to 2 minutes</dd><dt>Unlock</dt><dd>Fingerprint / PIN, no password</dd><dt>Generator</dt><dd>24 to 32</dd><dt>Backups</dt><dd>Key file on two USB drives</dd></dl>
+          <p>Keep each wallet's own recovery backup offline too, and only open Crypto Wallets when you need it.</p>
+        </div>
+        <div class="profile">
+          <div class="profile-name">Streamer or screen sharer</div>
+          <dl><dt>Auto-lock</dt><dd>1 to 2 minutes</dd><dt>Unlock</dt><dd>Fingerprint</dd><dt>QR timeout</dt><dd>Short, never on stream</dd><dt>Backups</dt><dd>Vault weekly</dd></dl>
+          <p>Keep Manage closed while live. Crypto Wallets hides its words the moment you switch windows, but it is best never opened on stream.</p>
+        </div>
+        <div class="profile">
+          <div class="profile-name">Several browsers</div>
+          <dl><dt>Auto-lock</dt><dd>5 to 15 minutes</dd><dt>Unlock</dt><dd>Fingerprint / PIN in each</dd><dt>Generator</dt><dd>16 to 24</dd><dt>Sync</dt><dd>Uni-Vault</dd></dl>
+          <p>Import the same key file in every browser once, then link each one to the same vault file. Brave needs one setting first.</p>
+        </div>
+        <div class="profile">
+          <div class="profile-name">Private single-user desk</div>
+          <dl><dt>Auto-lock</dt><dd>30 minutes to 2 hours</dd><dt>Unlock</dt><dd>Fingerprint or device PIN</dd><dt>Generator</dt><dd>16 to 32</dd><dt>Backups</dt><dd>Vault monthly</dd></dl>
+          <p>Most convenient. Viewing the vault still needs your fingerprint or PIN, but autofill stays ready the whole time, so lock Windows when you get up.</p>
+        </div>
+        <div class="profile">
+          <div class="profile-name">Less technical user</div>
+          <dl><dt>Auto-lock</dt><dd>10 to 15 minutes</dd><dt>Unlock</dt><dd>Fingerprint</dd><dt>Generator</dt><dd>Defaults</dd><dt>Backups</dt><dd>Set up by a helper</dd></dl>
+          <p>A trusted helper can set up the key backup and keep the written passphrase in a sealed envelope. Fingerprint means nothing to remember day to day.</p>
+        </div>
+        <div class="profile">
+          <div class="profile-name">Maximum security</div>
+          <dl><dt>Auto-lock</dt><dd>30 seconds</dd><dt>Unlock</dt><dd>Fingerprint only</dd><dt>Generator</dt><dd>24 to 32</dd><dt>QR timeout</dt><dd>5 to 15 seconds</dd></dl>
+          <p>No password on disk, key file only in cold storage, and files instead of QR for every transfer.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="trouble">
+      <h2>Troubleshooting</h2>
+      <dl class="faq">
+        <dt>A field has no V tag.</dt>
+        <dd>Reload the page. Some sites build their forms in unusual ways, such as custom drop-downs or editable text areas that are not real input boxes, and those are not supported.</dd>
+        <dt>The vault locked while I was working.</dt>
+        <dd>Only real mouse, scroll, click, and key input counts as activity. Reading or watching without touching anything counts as idle. Raise the auto-lock timeout if it happens often.</dd>
+        <dt>Fingerprint / PIN is not offered.</dt>
+        <dd>Your device may not have Windows Hello set up, or it cannot tie keys to it. Set up Windows Hello in Windows Settings, then enroll again, or use a password.</dd>
+        <dt>Fingerprint stopped working after a Windows change.</dt>
+        <dd>Unlock with your password if you have one, then re-enroll fingerprint in Manage. Without a password, import your key file.</dd>
+        <dt>Sync says Uni-Vault is switched off in Brave.</dt>
+        <dd>Brave blocks the feature Uni-Vault needs. Follow the Brave steps in Uni-Vault on One Computer.</dd>
+        <dt>Uni-Vault says the vault file cannot be reached.</dt>
+        <dd>The file was moved, renamed, or is on a drive that is not plugged in. Put it back, or Unlink and link it again with Import Vault. Nothing in the browser is lost.</dd>
+        <dt>Import Vault says the vault was made with a different key.</dt>
+        <dd>Import the matching key first, then import the vault.</dd>
+        <dt>The QR scan stalls.</dt>
+        <dd>Brighten the screen, hold the camera steady and close enough that the code fills most of the view, and raise the QR stream timeout for that transfer. Files always work as an alternative.</dd>
+        <dt>A site rejected a generated password.</dt>
+        <dd>The site likely has a hidden rule. Click Generate a different one, or lower your maximum length to 24 for that change.</dd>
+        <dt>A site said my password changed, but the new one does not work.</dt>
+        <dd>Open the login picker and choose your password under Previous passwords.</dd>
+        <dt>Crypto Wallets closed by itself.</dt>
+        <dd>That is intended. It closes when you switch Manage tabs or browser tabs and when the auto-lock timer runs out, and its words hide whenever the window loses focus.</dd>
+      </dl>
+    </section>
+
+    <section id="limits">
+      <h2>Honest Limits</h2>
+      <ul>
+        <li><strong>Malware:</strong> Valid Vault shuts out the common tricks. Passwords never touch the clipboard, unlocking happens in Valid Vault's own window, and web pages only ever receive the one value you clicked to fill. Malware that has taken full control of your computer can still watch what you do on screen, which no password manager can fully prevent. Keeping your system updated and locking when you finish keep that risk small.</li>
+        <li><strong>Someone at your unlocked computer</strong> can use autofill to sign in to your sites on that computer until the vault locks. They cannot view your logins, seed phrases, or personal info, change your unlock methods, or take a usable copy of your key without your fingerprint, PIN, or password. A short timer closes even that window.</li>
+        <li><strong>The phone app is catching up.</strong> The Android app is receiving the extension's newer features, including the protected key format, Personal Info, bookmarks, Crypto Wallets, and the password generator, in upcoming releases. Until then, this guide describes the browser extension.</li>
+        <li><strong>Unusual form fields</strong>, such as custom drop-downs and editable text areas, are not filled.</li>
+      </ul>
+    </section>
+
+    <p class="dim" style="margin-top:40px;">Valid Vault is open source. Questions, bug reports, and suggestions are welcome on the <a class="inline" href="https://discord.gg/2SP383cJs9">Valid Vault Discord</a> and <a class="inline" href="https://github.com/HiImRook/valid-vault-password-manager">GitHub</a>.</p>
+  </div>
+</div>
+<footer>
+  <div class="wrap foot-bottom">
+    <span>&copy; 2026 by Rook</span>
+    <span><a href="index.html">Valid Vault</a></span>
+  </div>
+</footer>
+</body>
+</html>
