@@ -17,6 +17,78 @@
     }, { capture: true, passive: true })
   }
 
+  const OWN_SHADOW_HOSTS = new WeakSet()
+  const FORM_OBSERVER_OPTIONS = { childList: true, subtree: true, attributes: true, attributeFilter: ['name', 'id', 'autocomplete', 'aria-label', 'placeholder', 'type'] }
+  const observedShadowRoots = new WeakSet()
+  let shadowRootCache = null
+
+  function shadowRootOf(el) {
+    if (OWN_SHADOW_HOSTS.has(el)) return null
+    if (el.shadowRoot) return el.shadowRoot
+    try {
+      if (chrome.dom && chrome.dom.openOrClosedShadowRoot) return chrome.dom.openOrClosedShadowRoot(el) || null
+    } catch (e) {}
+    return null
+  }
+
+  function collectShadowRoots(root, out) {
+    for (const el of root.querySelectorAll('*')) {
+      const sr = shadowRootOf(el)
+      if (!sr || out.indexOf(sr) !== -1) continue
+      out.push(sr)
+      if (!observedShadowRoots.has(sr)) {
+        observedShadowRoots.add(sr)
+        try { formObserver.observe(sr, FORM_OBSERVER_OPTIONS) } catch (e) {}
+      }
+      collectShadowRoots(sr, out)
+    }
+    return out
+  }
+
+  function searchRoots() {
+    if (!shadowRootCache) shadowRootCache = collectShadowRoots(document, [])
+    return [document].concat(shadowRootCache)
+  }
+
+  function resetSearchRoots() {
+    shadowRootCache = null
+  }
+
+  function composedParent(node) {
+    if (node.parentNode) return node.parentNode
+    return node.host || null
+  }
+
+  function composedContains(ancestor, node) {
+    for (let n = node; n; n = composedParent(n)) if (n === ancestor) return true
+    return false
+  }
+
+  function deepQueryAll(selector, scope) {
+    const found = []
+    for (const root of searchRoots()) {
+      for (const el of root.querySelectorAll(selector)) {
+        if (!scope || scope === document || composedContains(scope, el)) found.push(el)
+      }
+    }
+    return found
+  }
+
+  function composedForm(el) {
+    for (let node = el; node; ) {
+      const form = node.closest ? node.closest('form') : null
+      if (form) return form
+      const root = node.getRootNode ? node.getRootNode() : null
+      node = root && root.host ? root.host : null
+    }
+    return null
+  }
+
+  function eventOrigin(e) {
+    const path = e.composedPath ? e.composedPath() : null
+    return path && path.length ? path[0] : e.target
+  }
+
   function setNativeValue(el, value) {
     const proto = el.tagName === 'TEXTAREA'
       ? window.HTMLTextAreaElement.prototype
@@ -116,7 +188,7 @@
     upper: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ',
     lower: 'abcdefghijklmnopqrstuvwxyz',
     digit: '0123456789',
-    special: '!@#$%^&*()-_=+[]{};:,.?/~'
+    special: '!@#$%^&*'
   }
   const CONFIRM_SIGNAL = /confirm|repeat|re-?type|re-?enter|again|verif/
   const CURRENT_SIGNAL = /current|existing|(^|[^a-z])old/
@@ -167,7 +239,7 @@
     return rules
   }
 
-  function generationPlan(fields) {
+  function generationPlan(fields, style) {
     let minLen = 0
     let maxLen = Infinity
     let classes = null
@@ -194,6 +266,10 @@
     if (maxLen < lo) { lo = maxLen; hi = maxLen }
     else if (maxLen < hi) hi = maxLen
     if (!classes) classes = ['upper', 'lower', 'digit', 'special'].map((k) => ({ required: true, chars: GEN_CLASSES[k] }))
+    if (style === 'plain') {
+      classes = classes.map((c) => ({ required: c.required, chars: c.chars.replace(/[^A-Za-z0-9]/g, '') })).filter((c) => c.chars.length)
+      if (!classes.length) classes = ['upper', 'lower', 'digit'].map((k) => ({ required: true, chars: GEN_CLASSES[k] }))
+    }
     return { lo, hi, classes, pattern }
   }
 
@@ -208,8 +284,8 @@
     return shuffleChars(chars).join('')
   }
 
-  function generatePassword(fields) {
-    const plan = generationPlan(fields)
+  function generatePassword(fields, style) {
+    const plan = generationPlan(fields, style)
     let candidate = generateOnce(plan)
     if (!plan.pattern) return candidate
     for (let i = 0; i < GEN_MAX_PATTERN_TRIES && !plan.pattern.test(candidate); i++) candidate = generateOnce(plan)
@@ -260,13 +336,13 @@
   }
 
   function detectLoginForm(skipPasswordFields) {
-    const pwFields = document.querySelectorAll('input[type="password"]')
+    const pwFields = deepQueryAll('input[type="password"]')
     if (pwFields.length === 0) return null
 
     for (const pwField of pwFields) {
       if (skipPasswordFields && skipPasswordFields.has(pwField)) continue
-      const form = pwField.closest('form') || document
-      const candidates = Array.from(form.querySelectorAll('input[type="text"], input[type="email"], input[type="tel"]'))
+      const form = composedForm(pwField) || document
+      const candidates = deepQueryAll('input[type="text"], input[type="email"], input[type="tel"]', form)
         .filter((input) => input.offsetParent !== null)
       if (candidates.length === 0) continue
 
@@ -282,18 +358,18 @@
     const password = formFields && formFields.password
     if (username) {
       setNativeValue(username, cred.username)
-      username.dispatchEvent(new Event('input', { bubbles: true }))
-      username.dispatchEvent(new Event('change', { bubbles: true }))
+      username.dispatchEvent(new Event('input', { bubbles: true, composed: true }))
+      username.dispatchEvent(new Event('change', { bubbles: true, composed: true }))
     }
     if (password) {
       setNativeValue(password, cred.password)
-      password.dispatchEvent(new Event('input', { bubbles: true }))
-      password.dispatchEvent(new Event('change', { bubbles: true }))
+      password.dispatchEvent(new Event('input', { bubbles: true, composed: true }))
+      password.dispatchEvent(new Event('change', { bubbles: true, composed: true }))
       if (!cred.isPrevious) noteCredentialUse(cred.username)
     }
     if (cred.extraFields && cred.extraFields.length) {
-      const form = (password && password.closest('form')) || document
-      const candidates = form.querySelectorAll('input, textarea, select')
+      const form = (password && composedForm(password)) || document
+      const candidates = deepQueryAll('input, textarea, select', form)
       for (const el of candidates) {
         if (isTrackedField(el)) continue
         if (el.tagName === 'INPUT' && (el.type === 'password' || el.type === 'hidden')) continue
@@ -302,8 +378,8 @@
         if (match) {
           const filled = el.tagName === 'SELECT' ? setSelectValue(el, match.value) : (setNativeValue(el, match.value), true)
           if (filled) {
-            el.dispatchEvent(new Event('input', { bubbles: true }))
-            el.dispatchEvent(new Event('change', { bubbles: true }))
+            el.dispatchEvent(new Event('input', { bubbles: true, composed: true }))
+            el.dispatchEvent(new Event('change', { bubbles: true, composed: true }))
           }
         }
       }
@@ -374,6 +450,7 @@
     const host = document.createElement('div')
     host.id = 'local-vault-save-host'
     host.style.cssText = 'position:fixed;inset:0;z-index:2147483647;display:none;'
+    OWN_SHADOW_HOSTS.add(host)
     document.body.appendChild(host)
     const shadow = host.attachShadow({ mode: 'closed' })
     shadow.innerHTML = `
@@ -543,11 +620,11 @@
   }
 
   function findFormlessContainer(field) {
-    let el = field.parentElement
+    let el = composedParent(field)
     let depth = 0
-    while (el && el !== document.body && depth < 8) {
-      if (el.querySelector('button, input[type="submit"], input[type="button"]')) return el
-      el = el.parentElement
+    while (el && el !== document.body && el !== document && depth < 8) {
+      if (el.querySelector && el.querySelector('button, input[type="submit"], input[type="button"]')) return el
+      el = composedParent(el)
       depth++
     }
     return null
@@ -555,7 +632,7 @@
 
   function wireSubmitCapture(formFields) {
     const password = formFields.password
-    const form = password.closest('form')
+    const form = composedForm(password)
     const container = form || findFormlessContainer(password)
 
     const submitHandler = function () { captureAndPrompt(formFields) }
@@ -567,11 +644,11 @@
     password.addEventListener('keydown', keydownHandler)
 
     const clickHandler = function (e) {
-      const t = e.target
+      const path = e.composedPath ? e.composedPath() : [e.target]
+      const t = path.find((n) => n && (n.tagName === 'BUTTON' || (n.tagName === 'INPUT' && (n.type === 'submit' || n.type === 'button'))))
       if (!t) return
-      const isBtn = (t.tagName === 'BUTTON') || (t.tagName === 'INPUT' && (t.type === 'submit' || t.type === 'button'))
-      const belongsToThisForm = container ? container.contains(t) : true
-      if (isBtn && belongsToThisForm && password.value) {
+      const belongsToThisForm = container ? composedContains(container, t) : true
+      if (belongsToThisForm && password.value) {
         setTimeout(() => captureAndPrompt(formFields), 50)
       }
     }
@@ -617,7 +694,7 @@
   const credentialFormByEl = new WeakMap()
 
   function passwordScope(el) {
-    return el.closest('form') || document.body
+    return composedForm(el) || document.body
   }
 
   async function refreshCachedCreds(record) {
@@ -628,7 +705,7 @@
   }
 
   function findScopeUsername(scope, exclude) {
-    const candidates = Array.from(scope.querySelectorAll('input[type="text"], input[type="email"], input[type="tel"], input:not([type])'))
+    const candidates = deepQueryAll('input[type="text"], input[type="email"], input[type="tel"], input:not([type])', scope)
       .filter((input) => input.offsetParent !== null && !exclude.has(input))
     return candidates.find((input) => fieldMatchesSelectors(input, USERNAME_SELECTORS)) || null
   }
@@ -674,26 +751,35 @@
     }
   }
 
+  const loneConfirmFields = new WeakSet()
+  const loginSkipFields = { has: (el) => wiredPasswordFields.has(el) || loneConfirmFields.has(el) }
+
   function wireCredentialForms() {
     const groups = new Map()
-    for (const el of document.querySelectorAll('input[type="password"]')) {
+    for (const el of deepQueryAll('input[type="password"]')) {
       if (el.offsetParent === null) continue
       const scope = passwordScope(el)
       if (!groups.has(scope)) groups.set(scope, [])
       groups.get(scope).push(el)
     }
     for (const [scope, fields] of groups) {
+      if (fields.length === 1 && passwordRole(fields[0]) === 'confirm') {
+        loneConfirmFields.add(fields[0])
+        continue
+      }
+      for (const el of fields) loneConfirmFields.delete(el)
       const plan = planPasswordGroup(fields)
       if (plan) wireCredentialForm(scope, plan)
     }
   }
 
   function init() {
+    resetSearchRoots()
     wireCredentialForms()
-    let fields = detectLoginForm(wiredPasswordFields)
+    let fields = detectLoginForm(loginSkipFields)
     while (fields) {
       wireLoginForm(fields)
-      fields = detectLoginForm(wiredPasswordFields)
+      fields = detectLoginForm(loginSkipFields)
     }
   }
 
@@ -729,8 +815,6 @@
     }
   }
 
-  const WATCHED_DYNAMIC_ATTRS = ['name', 'id', 'autocomplete', 'aria-label', 'placeholder', 'type']
-
   const DISCOVERABLE_FIELDS_SELECTOR = 'input, textarea, select'
 
   const formObserver = new MutationObserver((mutations) => {
@@ -752,12 +836,7 @@
       }
     }
   })
-  formObserver.observe(document.documentElement, {
-    childList: true,
-    subtree: true,
-    attributes: true,
-    attributeFilter: WATCHED_DYNAMIC_ATTRS
-  })
+  formObserver.observe(document.documentElement, FORM_OBSERVER_OPTIONS)
 
   let routeChangeScheduled = false
   function scheduleRouteChange() {
@@ -885,8 +964,8 @@
     el.setAttribute('autocomplete', 'off')
     const filled = el.tagName === 'SELECT' ? setSelectValue(el, value) : (setNativeValue(el, value), true)
     if (!filled) return false
-    el.dispatchEvent(new Event('input', { bubbles: true }))
-    el.dispatchEvent(new Event('change', { bubbles: true }))
+    el.dispatchEvent(new Event('input', { bubbles: true, composed: true }))
+    el.dispatchEvent(new Event('change', { bubbles: true, composed: true }))
     return true
   }
 
@@ -927,9 +1006,33 @@
     return tag
   }
 
+  function deepElementAt(x, y, tag) {
+    let hit = document.elementsFromPoint(x, y).filter((n) => n !== tag && !tag.contains(n))[0] || null
+    for (let depth = 0; hit && depth < 8; depth++) {
+      const sr = shadowRootOf(hit)
+      if (!sr || !sr.elementsFromPoint) break
+      const inner = sr.elementsFromPoint(x, y).filter((n) => n !== hit && n.getRootNode() === sr)[0]
+      if (!inner) break
+      hit = inner
+    }
+    return hit
+  }
+
+  function fieldIsShowing(el, rect) {
+    if (el.checkVisibility && !el.checkVisibility({ opacityProperty: true, visibilityProperty: true, checkOpacity: true, checkVisibilityCSS: true })) return false
+    for (let n = composedParent(el); n && n !== document; n = composedParent(n)) {
+      if (n.nodeType !== 1 || n === document.documentElement || n === document.body) continue
+      const style = getComputedStyle(n)
+      if (style.overflowX === 'visible' && style.overflowY === 'visible') continue
+      const clip = n.getBoundingClientRect()
+      if (rect.right <= clip.left + 1 || rect.left >= clip.right - 1 || rect.bottom <= clip.top + 1 || rect.top >= clip.bottom - 1) return false
+    }
+    return true
+  }
+
   function positionVaultTag(tag, el) {
     const rect = el.getBoundingClientRect()
-    const hidden = el.offsetParent === null || rect.width === 0 || rect.height === 0 || tagTypeByEl.get(el) === 'confirm'
+    const hidden = el.offsetParent === null || rect.width === 0 || rect.height === 0 || tagTypeByEl.get(el) === 'confirm' || !fieldIsShowing(el, rect)
     tag.style.setProperty('display', hidden ? 'none' : 'flex', 'important')
     if (hidden) return
     const size = 22
@@ -941,8 +1044,8 @@
       if (x0 < rect.left) break
       let blocker = null
       for (const probeX of [x0 + 1, x0 + size / 2, x0 + size - 1]) {
-        const hit = document.elementsFromPoint(probeX, probeY).filter((n) => n !== tag && !tag.contains(n))[0]
-        if (hit && hit !== el && !hit.contains(el)) { blocker = hit; break }
+        const hit = deepElementAt(probeX, probeY, tag)
+        if (hit && hit !== el && !composedContains(hit, el)) { blocker = hit; break }
       }
       if (!blocker) break
       left = Math.min(left - size - 8, blocker.getBoundingClientRect().left + window.scrollX - size - 4)
@@ -952,13 +1055,30 @@
   }
 
   document.addEventListener('input', (e) => {
-    const t = e.target
+    const t = eventOrigin(e)
     if (t && fieldTags.has(t)) positionVaultTag(fieldTags.get(t), t)
   }, true)
 
   function repositionAllTags() {
     for (const rec of taggedFieldRecords) positionVaultTag(rec.tag, rec.el)
   }
+
+  let repositionQueued = false
+  function queueReposition() {
+    if (repositionQueued) return
+    repositionQueued = true
+    requestAnimationFrame(() => {
+      repositionQueued = false
+      repositionAllTags()
+    })
+  }
+
+  document.addEventListener('transitionend', queueReposition, true)
+  document.addEventListener('animationend', queueReposition, true)
+  document.addEventListener('click', () => {
+    setTimeout(queueReposition, 300)
+    setTimeout(queueReposition, 900)
+  }, true)
 
   const fieldTags = new WeakMap()
   const loginFieldsByEl = new WeakMap()
@@ -1014,6 +1134,7 @@
   function createFieldPicker() {
     const host = document.createElement('div')
     host.style.cssText = 'position:absolute;z-index:2147483647;display:none;'
+    OWN_SHADOW_HOSTS.add(host)
     document.body.appendChild(host)
     const shadow = host.attachShadow({ mode: 'closed' })
     shadow.innerHTML = `
@@ -1211,14 +1332,26 @@
     }
   }
 
+  const GEN_STYLE_CHOICES = { full: 'With special characters (Aa1!)', plain: 'Letters and numbers only (Aa1)' }
+  const GEN_STYLE_SWITCH = { full: 'Use special characters instead', plain: 'Use letters and numbers only instead' }
+
   function showGeneratePicker(field, record) {
+    const itemsContainer = openPicker(field, 'Valid Vault: New password')
+    addPickerEmpty(itemsContainer, 'Pick a style. Some sites do not accept special characters.')
+    addPickerItem(itemsContainer, GEN_STYLE_CHOICES.full, () => setTimeout(() => fillGeneratedPassword(field, record, 'full'), 0))
+    addPickerItem(itemsContainer, GEN_STYLE_CHOICES.plain, () => setTimeout(() => fillGeneratedPassword(field, record, 'plain'), 0))
+  }
+
+  function fillGeneratedPassword(field, record, style) {
     const confirm = record.plan.confirm
-    const password = generatePassword([field, confirm])
+    const password = generatePassword([field, confirm], style)
     fillFieldValue(field, password)
     if (confirm) fillFieldValue(confirm, password)
     const itemsContainer = openPicker(field, 'Valid Vault: New password')
-    addPickerEmpty(itemsContainer, 'A strong ' + password.length + '-character password is filled in' + (confirm ? ' both boxes.' : '.') + ' Valid Vault offers to save it when you submit.')
-    addPickerItem(itemsContainer, 'Generate a different one', () => setTimeout(() => showGeneratePicker(field, record), 0))
+    addPickerEmpty(itemsContainer, 'A strong ' + password.length + '-character password' + (style === 'plain' ? ' with letters and numbers only' : '') + ' is filled in' + (confirm ? ' both boxes.' : '.') + ' Valid Vault offers to save it when you submit.')
+    addPickerItem(itemsContainer, 'Generate a different one', () => setTimeout(() => fillGeneratedPassword(field, record, style), 0))
+    const other = style === 'plain' ? 'full' : 'plain'
+    addPickerItem(itemsContainer, GEN_STYLE_SWITCH[other], () => setTimeout(() => fillGeneratedPassword(field, record, other), 0))
     pickerAutoHideTimer = setTimeout(hideFieldPicker, GENERATE_NOTE_MS)
   }
 
@@ -1236,12 +1369,12 @@
   }
 
   document.addEventListener('focus', (e) => {
-    const t = e.target
+    const t = eventOrigin(e)
     if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT')) trySignupTag(t)
   }, true)
 
   function scanPersonalInfoFields() {
-    const fields = document.querySelectorAll('input, textarea, select')
+    const fields = deepQueryAll('input, textarea, select')
     for (let i = 0; i < fields.length; i++) {
       const el = fields[i]
       if (el.tagName === 'INPUT' && (el.type === 'password' || el.type === 'hidden')) continue
