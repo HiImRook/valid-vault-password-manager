@@ -857,6 +857,14 @@ async function requireFreshAuth() {
   return authResult.masterKey
 }
 
+async function requireTransferAuth() {
+  const status = await auth.initAuth()
+  if (status.isNew) return true
+  if (await requireFreshAuth()) return true
+  syncMsg('Authentication required', 'error')
+  return false
+}
+
 btnEditFp.onclick = async () => {
   const mk = await requireFreshAuth()
   if (!mk) { showMsg(msgManage, 'Authentication required', 'error'); return }
@@ -1100,8 +1108,8 @@ function stopShare() {
 }
 
 const _btnShareVault = document.getElementById('btn-share-vault'); if (_btnShareVault) _btnShareVault.onclick = async function () {
-  const mk = session.getMasterKey()
-  if (!mk) { syncMsg('Unlock your vault first', 'error'); return }
+  if (!session.getMasterKey()) { syncMsg('Unlock your vault first', 'error'); return }
+  if (!(await requireTransferAuth())) return
   const vaultData = await getPasswordVault()
   const webCredsData = await store.getWebCredsVault()
   const personalInfoData = await store.getPersonalInfo()
@@ -1109,8 +1117,9 @@ const _btnShareVault = document.getElementById('btn-share-vault'); if (_btnShare
   streamShare(JSON.stringify({ kind: 'vault', vault: vaultData, webcreds: webCredsData, personalInfo: personalInfoData }), 'Scan this with your other device to receive your logins')
 }
 const _btnShareKey = document.getElementById('btn-share-key'); if (_btnShareKey) _btnShareKey.onclick = async function () {
+  if (!session.getMasterKey()) { syncMsg('Unlock your vault first', 'error'); return }
+  if (!(await requireTransferAuth())) return
   const mk = session.getMasterKey()
-  if (!mk) { syncMsg('Unlock your vault first', 'error'); return }
   let pkg = null
   try { pkg = await ensureKeyPackage(mk) } catch (e) { syncMsg('Could not prepare the key: ' + (e && e.message ? e.message : e), 'error'); return }
   if (!pkg) return
@@ -1159,6 +1168,7 @@ const _btnExportVault = document.getElementById('btn-export-vault'); if (_btnExp
   try { const a = await store.getAuth() || {}; nickname = (a.keyNickname || '').trim() } catch (e) {}
   const fname = backupFileName(nickname)
   if (!uniVault.uniVaultSupported()) {
+    if (!(await requireTransferAuth())) return
     if (downloadFile(fname, JSON.stringify(bundle))) syncMsg('Vault exported. It stays encrypted, useless without your master key.', 'success')
     else syncMsg('Could not save the file', 'error')
     return
@@ -1168,6 +1178,7 @@ const _btnExportVault = document.getElementById('btn-export-vault'); if (_btnExp
     syncMsg('Export cancelled. Nothing was saved.', 'error')
     return
   }
+  if (!(await requireTransferAuth())) return
   const linked = await uniVault.getLink()
   if (linked) {
     try {
@@ -1213,7 +1224,14 @@ async function importVaultText(text) {
 }
 
 const _btnImportVault = document.getElementById('btn-import-vault'); if (_btnImportVault) _btnImportVault.onclick = async function () {
-  if (!uniVault.uniVaultSupported()) { readFileText(importVaultText); return }
+  if (!uniVault.uniVaultSupported()) {
+    readFileText(async function (text) {
+      if (!text) { syncMsg('No file selected', 'error'); return }
+      if (!(await requireTransferAuth())) return
+      importVaultText(text)
+    })
+    return
+  }
   const mk = session.getMasterKey()
   if (!mk) { syncMsg('Unlock first', 'error'); return }
   let handle
@@ -1221,6 +1239,7 @@ const _btnImportVault = document.getElementById('btn-import-vault'); if (_btnImp
     syncMsg('No file selected', 'error')
     return
   }
+  if (!(await requireTransferAuth())) return
   const linked = await uniVault.getLink()
   const choice = await formDialog({
     title: 'Link this vault file?',
@@ -1389,8 +1408,9 @@ async function acceptKeyPackage(pkg, sourceLabel) {
 }
 
 const _btnExportKey = document.getElementById('btn-export-key'); if (_btnExportKey) _btnExportKey.onclick = async function () {
+  if (!session.getMasterKey()) { syncMsg('Unlock first', 'error'); return }
+  if (!(await requireTransferAuth())) return
   const mk = session.getMasterKey()
-  if (!mk) { syncMsg('Unlock first', 'error'); return }
   try {
     const pkg = await ensureKeyPackage(mk)
     if (!pkg) return
@@ -1405,6 +1425,7 @@ const _btnImportKey = document.getElementById('btn-import-key'); if (_btnImportK
     let fileObj = null
     try { fileObj = JSON.parse(text) } catch (e) { syncMsg('Could not read the file', 'error'); return }
     if (!keypackage.isKeyPackage(fileObj)) { syncMsg('Not a key file', 'error'); return }
+    if (!(await requireTransferAuth())) return
     try { await acceptKeyPackage(fileObj, 'Key file') }
     catch (e) { syncMsg('Key import failed: ' + (e && e.message ? e.message : e), 'error') }
   })
@@ -1641,6 +1662,7 @@ async function handleImported(payloadText) {
     const data = JSON.parse(payloadText)
     if (data.kind === 'keyfile') {
       if (!keypackage.isKeyPackage(data.key)) { syncMsg('That key code is damaged or incomplete. Scan it again.', 'error'); return }
+      if (!(await requireTransferAuth())) return
       await acceptKeyPackage(data.key, 'Scanned key')
       return
     }
@@ -1651,7 +1673,8 @@ async function handleImported(payloadText) {
     if (data.kind === 'vault') {
       const mk = session.getMasterKey()
       if (!mk) { syncMsg('QR sync not enabled. Import master key first', 'error'); return }
-      await uniVault.mergeBundle(data, mk)
+      if (!(await requireTransferAuth())) return
+      await uniVault.mergeBundle(data, session.getMasterKey())
       syncMsg('Sync complete.', 'success')
       if (loginCredsUnlocked) loadAllCredentials()
       return

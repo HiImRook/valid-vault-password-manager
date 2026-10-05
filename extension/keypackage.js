@@ -10,8 +10,8 @@ const QUESTION_COUNT = 3
 const DEFAULT_NICKNAME = 'My Master Key'
 
 const SECURITY_QUESTIONS = [
-  'Name of your first pet', 'City where you were born', 'Name of your first street',
-  'Your mothers maiden name', 'Name of your first school', 'Your childhood best friend first name',
+  'Name of your first pet', 'Name of your favorite childhood toy', 'Your favorite childhood book',
+  'Your mothers middle name', 'Name of your first school', 'Your childhood best friend first name',
   'Make of your first car', 'Name of your first employer', 'Your favorite childhood teacher last name',
   'The street you grew up on'
 ]
