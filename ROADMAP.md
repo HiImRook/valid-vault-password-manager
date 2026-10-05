@@ -1,10 +1,19 @@
 # Valid Vault - Development Roadmap
 
-**Current Version:** v0.7.3 - **Status: Active Testing**
+**Current Version:** v0.7.4 - **Status: Active Testing**
 
 ---
 
 ## Version History (Completed)
+
+### v0.7.4 - Transfer Authentication and Autofill Fixes (Oct 2026)
+
+- ✅ Export and import now require fingerprint authentication: Export Key, Import Key, Export Vault, Import Vault, Share Master Key, Share Vault, and QR receive ask for fingerprint, device PIN, or password first
+- ✅ Autofill finds password fields inside open and closed shadow roots, skips a lone confirm field, and fires fill events web components register
+- ✅ V tags hide when their field is slid, clipped, or made invisible, and reposition after animations and clicks
+- ✅ Password generator style choice: with special characters, or letters and numbers only; symbols narrowed to `!@#$%^&*`
+- ✅ Three security questions replaced with less public ones, in the same positions, on the extension and the phone
+- ✅ Published on the Chrome Web Store
 
 ### v0.7.3 - Uni-Vault and User Guide (Sep 2026)
 
@@ -126,7 +135,7 @@
 
 ---
 
-## Upcoming After v0.7.3
+## Upcoming After v0.7.4
 
 ### v0.8.x - Phone De-Drift (Next)
 
@@ -134,6 +143,7 @@
 - The protected key format on the phone, so phone and extension key transfer over QR works again with the passphrase and questions
 - Whole-vault carry on the phone: Web Credentials, Personal Info, bookmarks, and Crypto Wallets
 - Personal Info tab on the phone
+- Fingerprint, device PIN, or password required for export and import on the phone
 
 This is feature work. The vault stays encrypted throughout, and nothing about it changes how data is protected.
 
@@ -203,4 +213,4 @@ MIT License - See LICENSE file for details
 
 ---
 
-**Last Updated:** Sep 30, 2026
+**Last Updated:** Oct 05, 2026

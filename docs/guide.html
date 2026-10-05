@@ -225,6 +225,7 @@
       <ul>
         <li><strong>Viewing anything in Manage</strong> (logins, Misc Credentials, Personal Info, Crypto Wallets) asks for your fingerprint, PIN, or password again, section by section.</li>
         <li><strong>Changing your unlock methods or clearing the vault</strong> asks for your fingerprint, PIN, or password again.</li>
+        <li><strong>Exporting, importing, or sharing your key or vault</strong>, by file or QR, asks for your fingerprint, PIN, or password first. A brand-new browser with no vault yet skips this, so first setup still works.</li>
         <li><strong>Passwords are never shown in the popup and never copied to the clipboard.</strong> Autofill places a password straight into the field you clicked.</li>
         <li><strong>Anything that leaves the device stays locked.</strong> A shared or exported vault is encrypted under your master key, and your key only travels under your passphrase and three answers.</li>
       </ul>
@@ -267,7 +268,7 @@
       <p>Valid Vault never fills anything without your click. Fields it recognizes get a small <strong>V</strong> tag at their edge.</p>
       <ul>
         <li><strong>Green V</strong> on a login, email, or password field: click it to pick one of your saved logins for this site. Picking a login fills the username and password together.</li>
-        <li><strong>Inverted V</strong> (black circle, green V) on a new password field: click it to generate a strong password. It fills both the new password and the confirm box, masked.</li>
+        <li><strong>Inverted V</strong> (black circle, green V) on a new password field: click it, choose a style, and it generates a strong password. It fills both the new password and the confirm box, masked.</li>
         <li><strong>Personal info fields</strong> (name, phone, address, email) get a V that fills from your Personal Info profile.</li>
         <li><strong>Locked?</strong> Clicking a V while locked opens a small Valid Vault window to unlock with fingerprint, PIN, or password. Your unlock never happens inside the website itself.</li>
       </ul>
@@ -294,7 +295,7 @@
 
     <section id="generator">
       <h2>Password Generator</h2>
-      <p>Generated passwords come from your browser's cryptographic random source. Every password includes at least one uppercase letter, lowercase letter, digit, and symbol, shuffled randomly.</p>
+      <p>Generated passwords come from your browser's cryptographic random source. When you click the inverted V, choose <strong>With special characters</strong> to include at least one uppercase letter, lowercase letter, digit, and symbol (! @ # $ % ^ &amp; *), or <strong>Letters and numbers only</strong> for sites that reject symbols. Either way the characters are shuffled randomly, and <strong>Generate a different one</strong> keeps the style you picked.</p>
 
       <h3>What the length settings do</h3>
       <p>Settings, Password Generator. Each time you generate, the length is picked at random inside the range you choose, so your passwords are not all the same size.</p>

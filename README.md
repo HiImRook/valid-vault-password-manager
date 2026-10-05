@@ -7,9 +7,15 @@ A local, encrypted, QR code portable password manager. No cloud, no accounts, no
 
 **Status: Active testing.** Core functionality works end to end, and the project is being hardened through real device use before a wider release. See [ROADMAP.md](ROADMAP.md) for what's tested and what's still in progress.
 
+**Chrome Web Store:** install the extension from [Valid Vault on the Chrome Web Store](https://chromewebstore.google.com/detail/valid-vault-password-mana/fkpfaemmphmakebhejhaegjgcnieeoab).
+
 **Community:** updates, support, and bug reports on the [Valid Vault Discord](https://discord.gg/2SP383cJs9).
 
 ---
+
+> ✅ **Transfer Authentication and Autofill Fixes - v0.7.4**
+>
+> Export and import now require fingerprint authentication. Export Key, Import Key, Export Vault, Import Vault, Share Master Key, Share Vault, and receiving a key or vault by QR all ask for fingerprint, device PIN, or password first. A brand-new browser skips the check, so first setup still works. Autofill now finds password fields inside web components, which some sites use to build their forms, and V tags clear away when a multi-step form slides a step out of view. The password generator lets you choose a password with special characters or letters and numbers only, for sites that reject symbols. Three security questions were replaced with less public ones. Valid Vault is now on the [Chrome Web Store](https://chromewebstore.google.com/detail/valid-vault-password-mana/fkpfaemmphmakebhejhaegjgcnieeoab). See [CHANGELOG.md](CHANGELOG.md) for full details.
 
 > ✅ **Uni-Vault and User Guide - v0.7.3**
 >
@@ -146,7 +152,7 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 - Android via Capacitor, with native plugins for biometric auth and file saving
 - Vendored, self-contained code only, no Google SDKs in the scan path
 
-## Current Status: v0.7.3 - Active Testing
+## Current Status: v0.7.4 - Active Testing
 
 **Completed:**
 * ✅ Master key wrap architecture, verify-by-unwrap, no stored hashes
@@ -172,9 +178,13 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 * ✅ Uni-Vault: every browser on one computer shares one encrypted vault file, synced automatically
 * ✅ Searchable User Guide in the extension, with setups for different users
 * ✅ Fingerprint-first key import, and re-authentication for unlock method changes and Clear Vault
+* ✅ Export and import require fingerprint, device PIN, or password, for keys and vaults, by file or QR
+* ✅ Autofill inside web components, and V tags that clear when a form step slides out of view
+* ✅ Password generator style choice: with special characters, or letters and numbers only
+* ✅ Published on the Chrome Web Store
 
 **In Development:**
-* 📋 Phone de-drift (v0.8.x): key import, whole-vault carry including bookmarks and wallets, and Personal Info on the phone
+* 📋 Phone de-drift (v0.8.x): key import, whole-vault carry including bookmarks and wallets, Personal Info, and fingerprint authentication for export and import on the phone
 * 📋 QR scanner reliability on real devices and a bookmarks QR share (v0.8.2)
 * 📋 Continued field testing of sync, backup, and native file saving across Android versions
 * 📋 Per-method auth edit and delete on the phone Manage tab
@@ -194,6 +204,7 @@ Merging requires both devices to hold the same master key. If the keys don't mat
 - On Android, the master key is additionally wrapped by a hardware Keystore key gated on device authentication
 - The master key only leaves a device wrapped at 1,000,000 PBKDF2 iterations under a passphrase and three security answers, in both the key QR and the key file; the passphrase and answers are never stored
 - No verification hashes are stored; the AES-GCM auth tag is the only verifier
+- Exporting, importing, or sharing a key or vault in the extension requires fingerprint, device PIN, or password first, even while the vault is unlocked
 - Website Credentials, Crypto Wallets, and Bookmarks are each sealed as a single encrypted blob, so no domain name, username, password, seed word, saved address, or metadata is readable from storage
 
 **No Google in the scan path.** The scanner uses the web camera and a vendored jsQR decoder, which runs entirely on device.

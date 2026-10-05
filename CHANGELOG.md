@@ -1,9 +1,33 @@
+
 # Changelog
 
 All notable changes to Local Vault will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [0.7.4] - 2026-10-04
+
+This release requires fingerprint authentication to export or import a key or vault, fixes autofill on sites that build their forms from web components, and lets the password generator make passwords without symbols for sites that reject them. It also replaces three security questions with less public ones. Extension only, except the security questions, which change on the phone too.
+
+### Added
+- **Password style choice.** Clicking the inverted V on a new password field now offers With special characters (Aa1!) or Letters and numbers only (Aa1). After it fills, Generate a different one keeps the chosen style, and a second item switches to the other style.
+
+### Changed
+- **Export and import now require fingerprint authentication.** Export Key, Import Key, Export Vault, Import Vault, Share Master Key, Share Vault, and receiving a key or vault by QR now ask for fingerprint, device PIN, or password first, even while the vault is unlocked. Cancelling stops the action with nothing written, shared, or imported. A brand-new browser with no vault yet skips the check, so first setup with Import Key still works. Export Vault and Import Vault ask right after the file is chosen, because the browser only opens a file picker directly from a click.
+- **Symbols in generated passwords.** Passwords with special characters now draw symbols from `!@#$%^&*`, the set most sites accept. Some sites rejected the wider set used before, which included `-` and `/`.
+- **Security questions.** Three questions were replaced in the same positions: City where you were born became Name of your favorite childhood toy, Name of your first street (a near duplicate of The street you grew up on) became Your favorite childhood book, and Your mothers maiden name became Your mothers middle name. The other seven are unchanged. A key file saved earlier with one of these three now shows the new wording, and still needs the original answer.
+
+### Fixed
+- **Password fields inside web components were missed.** On sites that place the password field inside a web component's shadow root, the field got no V, and the confirm field got a login V instead. Autofill now looks inside open and closed shadow roots, skips a confirm field whose password field is elsewhere on the page, and sends fill events that cross the component boundary, so the site registers the value.
+- **V tags stayed behind on multi-step forms.** When a form slid a finished step out of view instead of removing it, that step's V tags stayed on screen. Tags now hide when their field is slid or clipped out of view or made invisible, and re-check their position after animations and clicks.
+
+### Known Gaps
+- The phone app does not yet require fingerprint authentication for export and import. It is planned for the v0.8.x phone de-drift.
+
+### Notes
+- Valid Vault is published on the [Chrome Web Store](https://chromewebstore.google.com/detail/valid-vault-password-mana/fkpfaemmphmakebhejhaegjgcnieeoab).
+- Verified with Playwright-in-Chromium tests: every transfer action asks for authentication first, cancelling stops each one with nothing written or shared, the correct password continues normally, and a fresh browser's key import skips the check; 18 checks on a web component registration page, 7 style menu checks, a two-step slide form, 43 generator checks, and 12 older test pages unchanged.
 
 ## [0.7.3] - 2026-09-30
 

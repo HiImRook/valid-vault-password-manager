@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Valid Vault Password Manager",
-  "version": "0.7.3",
+  "version": "0.7.4",
   "description": "Local, decentralized password manager with fingerprint authentication",
   "permissions": [
     "storage",
