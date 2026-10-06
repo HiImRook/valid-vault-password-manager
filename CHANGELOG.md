@@ -6,9 +6,9 @@ All notable changes to Local Vault will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.7.4] - 2026-10-04
+## [0.7.4] - 2026-10-06
 
-This release requires fingerprint authentication to export or import a key or vault, fixes autofill on sites that build their forms from web components, and lets the password generator make passwords without symbols for sites that reject them. It also replaces three security questions with less public ones. Extension only, except the security questions, which change on the phone too.
+This release requires fingerprint authentication to export or import a key or vault, fixes autofill on sites that build their forms from web components, and lets the password generator make passwords without symbols for sites that reject them. It also replaces three security questions with less public ones, gives computers without Windows Hello a clear password-only setup path, and makes the User Guide accurate about recovery. Extension only, except the security questions, which change on the phone too.
 
 ### Added
 - **Password style choice.** Clicking the inverted V on a new password field now offers With special characters (Aa1!) or Letters and numbers only (Aa1). After it fills, Generate a different one keeps the chosen style, and a second item switches to the other style.
@@ -17,6 +17,8 @@ This release requires fingerprint authentication to export or import a key or va
 - **Export and import now require fingerprint authentication.** Export Key, Import Key, Export Vault, Import Vault, Share Master Key, Share Vault, and receiving a key or vault by QR now ask for fingerprint, device PIN, or password first, even while the vault is unlocked. Cancelling stops the action with nothing written, shared, or imported. A brand-new browser with no vault yet skips the check, so first setup with Import Key still works. Export Vault and Import Vault ask right after the file is chosen, because the browser only opens a file picker directly from a click.
 - **Symbols in generated passwords.** Passwords with special characters now draw symbols from `!@#$%^&*`, the set most sites accept. Some sites rejected the wider set used before, which included `-` and `/`.
 - **Security questions.** Three questions were replaced in the same positions: City where you were born became Name of your favorite childhood toy, Name of your first street (a near duplicate of The street you grew up on) became Your favorite childhood book, and Your mothers maiden name became Your mothers middle name. The other seven are unchanged. A key file saved earlier with one of these three now shows the new wording, and still needs the original answer.
+- **Setup without fingerprint or device PIN.** On a computer without Windows Hello, choosing Fingerprint / PIN at setup now shows a bold green **Fingerprint / PIN not available on this device** with a note to use a master password instead, which works fully, and moves the cursor to the password box. Before, the browser's own error appeared and read as though the computer could not run Valid Vault. If Windows Hello is present but the prompt is cancelled, setup says it did not complete and offers a retry or a password.
+- **User Guide: recovery.** The recovery box, now titled What can and cannot be recovered, states that nothing is lost while any device still unlocks the vault: Change Key Passphrase and a fresh Export Key replace a lost key file or forgotten passphrase. A vault is unrecoverable only when no device unlocks it and no key file can be opened, usually after uninstalling or clearing browser data without exporting the key first. The passphrase advice in Your Master Key says the same. Updated in the extension's guide and on the website.
 
 ### Fixed
 - **Password fields inside web components were missed.** On sites that place the password field inside a web component's shadow root, the field got no V, and the confirm field got a login V instead. Autofill now looks inside open and closed shadow roots, skips a confirm field whose password field is elsewhere on the page, and sends fill events that cross the component boundary, so the site registers the value.
@@ -27,7 +29,7 @@ This release requires fingerprint authentication to export or import a key or va
 
 ### Notes
 - Valid Vault is published on the [Chrome Web Store](https://chromewebstore.google.com/detail/valid-vault-password-mana/fkpfaemmphmakebhejhaegjgcnieeoab).
-- Verified with Playwright-in-Chromium tests: every transfer action asks for authentication first, cancelling stops each one with nothing written or shared, the correct password continues normally, and a fresh browser's key import skips the check; 18 checks on a web component registration page, 7 style menu checks, a two-step slide form, 43 generator checks, and 12 older test pages unchanged.
+- Verified with Playwright-in-Chromium tests: every transfer action asks for authentication first, cancelling stops each one with nothing written or shared, the correct password continues normally, and a fresh browser's key import skips the check; 18 checks on a web component registration page, 7 style menu checks, a two-step slide form, 43 generator checks, 12 older test pages unchanged, and setup checks with and without a platform authenticator: the notice appears, focuses the password box, and password setup completes, while fingerprint enrollment still succeeds where available.
 
 ## [0.7.3] - 2026-09-30
 

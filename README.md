@@ -15,7 +15,7 @@ A local, encrypted, QR code portable password manager. No cloud, no accounts, no
 
 > ✅ **Transfer Authentication and Autofill Fixes - v0.7.4**
 >
-> Export and import now require fingerprint authentication. Export Key, Import Key, Export Vault, Import Vault, Share Master Key, Share Vault, and receiving a key or vault by QR all ask for fingerprint, device PIN, or password first. A brand-new browser skips the check, so first setup still works. Autofill now finds password fields inside web components, which some sites use to build their forms, and V tags clear away when a multi-step form slides a step out of view. The password generator lets you choose a password with special characters or letters and numbers only, for sites that reject symbols. Three security questions were replaced with less public ones. Valid Vault is now on the [Chrome Web Store](https://chromewebstore.google.com/detail/valid-vault-password-mana/fkpfaemmphmakebhejhaegjgcnieeoab). See [CHANGELOG.md](CHANGELOG.md) for full details.
+> Export and import now require fingerprint authentication. Export Key, Import Key, Export Vault, Import Vault, Share Master Key, Share Vault, and receiving a key or vault by QR all ask for fingerprint, device PIN, or password first. A brand-new browser skips the check, so first setup still works. Autofill now finds password fields inside web components, which some sites use to build their forms, and V tags clear away when a multi-step form slides a step out of view. The password generator lets you choose a password with special characters or letters and numbers only, for sites that reject symbols. Three security questions were replaced with less public ones. Computers without Windows Hello now get a clear setup path: choosing Fingerprint / PIN shows **Fingerprint / PIN not available on this device** and points straight to a master password, which works fully. The User Guide now spells out recovery accurately: as long as any device still unlocks your vault, a lost key file or forgotten passphrase is fixed with Change Key Passphrase and a fresh Export Key. Valid Vault is now on the [Chrome Web Store](https://chromewebstore.google.com/detail/valid-vault-password-mana/fkpfaemmphmakebhejhaegjgcnieeoab). See [CHANGELOG.md](CHANGELOG.md) for full details.
 
 > ✅ **Uni-Vault and User Guide - v0.7.3**
 >
@@ -182,6 +182,7 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 * ✅ Autofill inside web components, and V tags that clear when a form step slides out of view
 * ✅ Password generator style choice: with special characters, or letters and numbers only
 * ✅ Published on the Chrome Web Store
+* ✅ Clear password-only setup path on computers without Windows Hello
 
 **In Development:**
 * 📋 Phone de-drift (v0.8.x): key import, whole-vault carry including bookmarks and wallets, Personal Info, and fingerprint authentication for export and import on the phone
@@ -196,6 +197,8 @@ Master key transport is deliberate. The primary path is a live QR stream: one de
 Because importing a key persists, the same vault file works the same way everywhere. On one computer, Uni-Vault does the rest: link Chrome and Edge to the same vault file, add a credential in either, and the other picks it up on its own. Between devices, export the vault and import it on the other side, or share it over QR. No server, no account, just timestamp-based merge.
 
 Merging requires both devices to hold the same master key. If the keys don't match, sync stops with a clear error and nothing is merged.
+
+Recovery follows from the same model. As long as any device still unlocks the vault, a lost key file or a forgotten passphrase is fixed in place: unlock, use Change Key Passphrase, and export a fresh key file. A vault becomes unrecoverable only when no device can unlock it and no key file can be opened, which in practice means uninstalling the extension or clearing browser data without exporting the key first.
 
 ## Security Model
 
