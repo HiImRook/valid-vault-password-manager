@@ -334,7 +334,7 @@
             <li><strong>Passphrase:</strong> four or more random words plus a number and a symbol, like <em>copper-lantern-mosaic-drift7!</em>. Common passwords and simple variations are refused.</li>
             <li><strong>Questions:</strong> pick three from the list of ten. Choose ones whose answers are not on your social media or public records.</li>
             <li><strong>Answers:</strong> one word each, and capitalization matters. You can use a false answer you will remember, which is stronger than the true one.</li>
-            <li><strong>Write them down</strong> on paper and keep that paper somewhere separate from your key file. Nobody can recover them for you.</li>
+            <li><strong>Write them down</strong> on paper and keep that paper somewhere separate from your key file. Nobody can recover them for you, but if you forget them while a device still unlocks your vault, Change Key Passphrase lets you set new ones and export a fresh key file.</li>
           </ul>
 
           <h3>Naming your key</h3>
@@ -442,8 +442,9 @@
           </ul>
 
           <div class="box warn">
-            <div class="box-title">What can never be recovered</div>
-            <p>If every device loses its unlock and you no longer have the key file, or you no longer know its passphrase and answers, your vault cannot be opened by anyone. There is no reset link and no support desk that can help, by design. Your backups are your only recovery.</p>
+            <div class="box-title">What can and cannot be recovered</div>
+            <p>As long as one of your devices can still unlock the vault, nothing is lost. Unlock it, use <strong>Change Key Passphrase</strong>, and <strong>Export Key</strong> again to make a fresh key file with a new passphrase and answers.</p>
+            <p>Your vault is gone only when no device can unlock it anymore and you have no key file you can open. The usual way that happens is uninstalling Valid Vault, or clearing the browser's site data, without exporting the key first. There is no reset link and no support desk, by design, so export your key before you uninstall, reset, or replace anything.</p>
           </div>
         </section>
 

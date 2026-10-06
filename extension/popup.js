@@ -223,7 +223,32 @@ async function completeUnlock(key) {
   await enterUnlocked()
 }
 
+async function platformAuthAvailable() {
+  try {
+    return !!(window.PublicKeyCredential && await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable())
+  } catch (e) {
+    return false
+  }
+}
+
+function showFpFallback() {
+  msgSetup.textContent = ''
+  msgSetup.className = 'msg'
+  const title = document.createElement('div')
+  title.textContent = 'Fingerprint / PIN not available on this device.'
+  title.style.color = 'var(--green)'
+  title.style.fontWeight = 'bold'
+  title.style.fontSize = '12px'
+  title.style.marginBottom = '4px'
+  const body = document.createElement('div')
+  body.textContent = 'Use a master password instead: type one above and click Enroll. Valid Vault works fully with a password.'
+  msgSetup.appendChild(title)
+  msgSetup.appendChild(body)
+  setupPassword.focus()
+}
+
 btnSetupFp.onclick = async () => {
+  if (!(await platformAuthAvailable())) { showFpFallback(); return }
   auth.startFingerprintEnrollment()
   const result = await auth.enrollFingerprint(masterKey)
   if (result.success) {
@@ -233,8 +258,10 @@ btnSetupFp.onclick = async () => {
     setupState.hasFp = true
     updateSetupStatus()
     showMsg(msgSetup, 'Fingerprint enrolled', 'success')
+  } else if (result.error && /cannot bind keys/.test(result.error)) {
+    showFpFallback()
   } else {
-    showMsg(msgSetup, result.error, 'error')
+    showMsg(msgSetup, 'Fingerprint / PIN did not complete. Try again, or enroll a master password instead.', 'error')
   }
 }
 
