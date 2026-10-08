@@ -6,6 +6,19 @@ All notable changes to Local Vault will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+[0.7.4.1] - 2026-10-08
+
+Extension-only hotfix. Fingerprint unlock no longer breaks when Valid Vault is used in more than one browser on the same computer.
+
+Fixed
+Fingerprint in more than one browser. Every install registered its fingerprint passkey under the same fixed user ID, and browsers that install from the Chrome Web Store, such as Chrome and Brave, share one extension ID. Windows Hello therefore replaced one browser's passkey when another browser enrolled, and the first browser then showed only phone and security key options on unlock. Each install now registers under its own random ID, kept with that browser's unlock settings and reused when it re-enrolls, so browsers no longer overwrite each other.
+Unlock asks for the built-in fingerprint reader. Fingerprint unlock now requests this computer's own authenticator instead of offering a phone or security key.
+Clear message when fingerprint is unavailable. A cancelled or missing fingerprint now says to unlock with the password and re-enroll fingerprint in Manage, instead of showing a browser error.
+Notes
+If fingerprint stopped working in one of your browsers, unlock it with your password after updating, then re-enroll fingerprint in Manage. Each browser keeps its own fingerprint from then on.
+package.json stays at 0.7.4, since npm only accepts three-part versions. The fourth number appears in the extension manifest only.
+Verified in Chromium with a simulated fingerprint authenticator: with the old code, a second install's enrollment removed the first install's passkey; with the fix, both installs keep their passkeys and both unlock.
+
 ## [0.7.4] - 2026-10-06
 
 This release requires fingerprint authentication to export or import a key or vault, fixes autofill on sites that build their forms from web components, and lets the password generator make passwords without symbols for sites that reject them. It also replaces three security questions with less public ones, gives computers without Windows Hello a clear password-only setup path, and makes the User Guide accurate about recovery. Extension only, except the security questions, which change on the phone too.
