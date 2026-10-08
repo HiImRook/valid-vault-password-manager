@@ -1329,6 +1329,10 @@ const RP_NAME = 'Valid Vault'
 const RP_ID = location.hostname
 const PRF_INFO = 'valid-vault-prf-wrap-v2'
 const LEGACY_FINGERPRINT_SECRET = 'valid-vault-fingerprint-auth-v1'
+const FINGERPRINT_USER_ID_BYTES = 16
+const PLATFORM_TRANSPORTS = ['internal']
+const PLATFORM_HINTS = ['client-device']
+const FINGERPRINT_UNAVAILABLE = 'Fingerprint was cancelled or is no longer registered with this browser. Unlock with your password. If this keeps happening, re-enroll fingerprint in Manage.'
 
 const attempts = new Map()
 const LOCKOUT_MS = 60000
@@ -1462,8 +1466,9 @@ async function evaluatePrf(credentialId, prfSalt) {
     publicKey: {
       challenge: crypto.getRandomValues(new Uint8Array(32)),
       rpId: RP_ID,
-      allowCredentials: [{ id: credentialId, type: 'public-key' }],
+      allowCredentials: [{ id: credentialId, type: 'public-key', transports: PLATFORM_TRANSPORTS }],
       userVerification: 'required',
+      hints: PLATFORM_HINTS,
       extensions: { prf: { eval: { first: prfSalt } } },
       timeout: 60000
     }
@@ -1492,13 +1497,16 @@ async function enrollFingerprint(existingMasterKey) {
     }
 
     const prfSalt = crypto.getRandomValues(new Uint8Array(32))
+    const userId = auth.fingerprintUserId
+      ? new Uint8Array(auth.fingerprintUserId)
+      : crypto.getRandomValues(new Uint8Array(FINGERPRINT_USER_ID_BYTES))
 
     const credential = await navigator.credentials.create({
       publicKey: {
         challenge: crypto.getRandomValues(new Uint8Array(32)),
         rp: { name: RP_NAME, id: RP_ID },
         user: {
-          id: new TextEncoder().encode('valid-vault-user'),
+          id: userId,
           name: 'vault-user',
           displayName: 'Vault User'
         },
@@ -1506,6 +1514,7 @@ async function enrollFingerprint(existingMasterKey) {
           { alg: -7, type: 'public-key' },
           { alg: -257, type: 'public-key' }
         ],
+        hints: PLATFORM_HINTS,
         authenticatorSelection: {
           authenticatorAttachment: 'platform',
           userVerification: 'required',
@@ -1543,6 +1552,7 @@ async function enrollFingerprint(existingMasterKey) {
 
     auth.fingerprintWrappedKey = await wrapMasterKey(resolved.bytes, wrappingKey)
     auth.fingerprintCredentialId = Array.from(credentialId)
+    auth.fingerprintUserId = Array.from(userId)
     auth.fingerprintPrfSalt = Array.from(prfSalt)
     auth.fingerprintEnabled = true
     delete auth.fingerprintSalt
@@ -1621,6 +1631,9 @@ async function authenticateFingerprint() {
     return { success: true, masterKey }
   } catch (error) {
     recordFailedAttempt('fingerprint')
+    if (error && error.name === 'NotAllowedError') {
+      return { success: false, error: FINGERPRINT_UNAVAILABLE }
+    }
     return { success: false, error: error.message }
   }
 }
