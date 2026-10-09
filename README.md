@@ -9,6 +9,8 @@ A local, encrypted, QR code portable password manager. No cloud, no accounts, no
 
 **Chrome Web Store:** install the extension from [Valid Vault on the Chrome Web Store](https://chromewebstore.google.com/detail/valid-vault-password-mana/fkpfaemmphmakebhejhaegjgcnieeoab).
 
+**Microsoft Edge:** fully compatible, installed from the Chrome Web Store. Valid Vault is deliberately not on Microsoft's Edge Add-ons store. See [Using Valid Vault on Microsoft Edge](#using-valid-vault-on-microsoft-edge) for the two-minute install and the reason why.
+
 **Community:** updates, support, and bug reports on the [Valid Vault Discord](https://discord.gg/2SP383cJs9).
 
 ---
@@ -323,6 +325,25 @@ Scanning uses the web camera through getUserMedia, drawing frames to a canvas th
 **Single-File Bundle:**
 build.js assembles the source modules into one self-contained HTML file. No module loader, no CDN, no external requests at runtime.
 
+## Using Valid Vault on Microsoft Edge
+
+Edge is built on the same engine as Chrome and installs extensions straight from the Chrome Web Store. Valid Vault runs in Edge exactly as it does in Chrome: fingerprint and device PIN through Windows Hello, autofill, the bookmarks side panel, and Uni-Vault.
+
+**Install in Edge:**
+
+1. In Edge, open [Valid Vault on the Chrome Web Store](https://chromewebstore.google.com/detail/valid-vault-password-mana/fkpfaemmphmakebhejhaegjgcnieeoab).
+2. Edge shows a banner offering to allow extensions from other stores. Click **Allow extensions from other stores**, then confirm. If the banner doesn't appear, open `edge://extensions` and switch on **Allow extensions from other stores** at the bottom left.
+3. Click the install button on the listing, then **Add extension**.
+4. Click the puzzle piece icon in the toolbar and pin Valid Vault so its icon stays visible.
+
+Edge keeps Chrome Web Store extensions updated automatically, the same as Chrome does. Since v0.7.4.1, each browser keeps its own fingerprint, so Edge, Chrome, and Brave can all unlock with fingerprint on the same computer.
+
+**Why Valid Vault is not on the Edge Add-ons store:**
+
+Publishing on Edge Add-ons requires registering through Microsoft Partner Center, and its registration form demands a street address, phone number, and contact details, presenting the address as one "customers view in your developer profile." It asks this of a single person publishing a free extension, using a form written for companies, and offers no address-free path for individuals.
+
+Valid Vault exists to keep personal data off other people's servers. Requiring a developer to file a home address in a corporate database, tied to a public publisher name, as the price of listing a free privacy tool runs directly against that. So the answer is no. Edge users lose nothing: the Chrome Web Store version is the same extension, reviewed and updated through Google's store, and it installs in Edge via Chrome Store rather than the Edge add-ons extension storefront.
+
 ## Community
 
 Join the [Valid Vault Discord](https://discord.gg/2SP383cJs9) for release announcements, support, and bug reports.
@@ -330,7 +351,7 @@ Join the [Valid Vault Discord](https://discord.gg/2SP383cJs9) for release announ
 ## Related Projects
 
 - **Valid Blockchain:** https://github.com/HiImRook/accessible-tpi-chain
-- **Anonymous Memer Bot:** https://github.com/HiImRook/Anonymous-Memer-Bot
+- **Valid Symphony:** https://github.com/HiImRook/valid-symphony
 
 ## Contributing
 
