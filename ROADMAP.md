@@ -1,10 +1,17 @@
 # Valid Vault - Development Roadmap
 
-**Current Version:** v0.7.4 - **Status: Active Testing**
+**Current Version:** v0.7.4.1 - **Status: Active Testing**
 
 ---
 
 ## Version History (Completed)
+
+### v0.7.4.1 - Fingerprint Across Browsers Hotfix (Oct 2026)
+
+- ✅ Each browser registers its own fingerprint passkey, so Chrome, Brave, and Edge can all unlock with fingerprint on one computer; before, enrolling in one browser replaced another's passkey
+- ✅ Fingerprint unlock asks for this computer's built-in reader only, and a missing or cancelled fingerprint shows a clear message to unlock with the password and re-enroll
+- ✅ Microsoft Edge supported through the Chrome Web Store, with install steps in the README
+- ✅ Verified in use: the encrypted vault and key carried device to device on a USB drive, imported and unlocked with no network involved
 
 ### v0.7.4 - Transfer Authentication and Autofill Fixes (Oct 2026)
 
@@ -153,6 +160,8 @@ This is feature work. The vault stays encrypted throughout, and nothing about it
 - Bookmarks QR share
 - Unlock behavior quirks reported by community testing
 
+Until this lands, encrypted files on a USB drive are the dependable device-to-device path, already verified in use.
+
 ### Autofill Hardening
 
 - Custom div-based combobox and `contenteditable` field support - no standard attribute signal exists for either, so this needs its own approach rather than an extension of the current classifier
@@ -185,13 +194,13 @@ This is feature work. The vault stays encrypted throughout, and nothing about it
 
 ⚠️ **SSN and card storage deliberately deferred**, pending security work
 
-⚠️ **Phone and extension key transfer over QR waits for the phone de-drift** - the extension now refuses unprotected key QRs, and the phone learns the protected format in v0.8.x; the key file path works between them in the meantime
+⚠️ **Phone and extension key transfer over QR waits for the phone de-drift** - the extension now refuses unprotected key QRs, and the phone learns the protected format in v0.8.x; the key file path works between them in the meantime, including on a USB drive
 
 ⚠️ **The password generator and the 2 hour auto-lock limit are extension-only for now** - the phone keeps its 1 hour limit until the v0.8.x de-drift
 
 ⚠️ **Uni-Vault needs a browser setting in Brave** - Brave ships the File System Access API switched off; Chrome and Edge work out of the box, and Brave users can switch it on or keep using Export and Import
 
-⚠️ **Uni-Vault syncs browsers on one computer** - moving the vault between devices is still Export and Import or QR
+⚠️ **Uni-Vault syncs browsers on one computer** - moving the vault between devices is still Export and Import, by USB drive or any file transfer, or QR
 
 ⚠️ **Crypto Wallets and bookmarks are extension-only for now** - the phone app receives them in the v0.8.x de-drift; both stay encrypted in the vault file in the meantime
 
@@ -213,4 +222,4 @@ MIT License - See LICENSE file for details
 
 ---
 
-**Last Updated:** Oct 05, 2026
+**Last Updated:** Oct 09, 2026

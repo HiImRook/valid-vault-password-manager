@@ -15,6 +15,10 @@ A local, encrypted, QR code portable password manager. No cloud, no accounts, no
 
 ---
 
+> ✅ **Fingerprint Across Browsers - v0.7.4.1**
+>
+> Each browser now keeps its own fingerprint, so Chrome, Brave, and Edge can all unlock with fingerprint on the same computer. Before, enrolling fingerprint in one browser could stop it working in another. If that happened to you, unlock with your password and re-enroll fingerprint in Manage once. See [CHANGELOG.md](CHANGELOG.md) for full details.
+
 > ✅ **Transfer Authentication and Autofill Fixes - v0.7.4**
 >
 > Export and import now require fingerprint authentication. Export Key, Import Key, Export Vault, Import Vault, Share Master Key, Share Vault, and receiving a key or vault by QR all ask for fingerprint, device PIN, or password first. A brand-new browser skips the check, so first setup still works. Autofill now finds password fields inside web components, which some sites use to build their forms, and V tags clear away when a multi-step form slides a step out of view. The password generator lets you choose a password with special characters or letters and numbers only, for sites that reject symbols. Three security questions were replaced with less public ones. Computers without Windows Hello now get a clear setup path: choosing Fingerprint / PIN shows **Fingerprint / PIN not available on this device** and points straight to a master password, which works fully. The User Guide now spells out recovery accurately: as long as any device still unlocks your vault, a lost key file or forgotten passphrase is fixed with Change Key Passphrase and a fresh Export Key. Valid Vault is now on the [Chrome Web Store](https://chromewebstore.google.com/detail/valid-vault-password-mana/fkpfaemmphmakebhejhaegjgcnieeoab). See [CHANGELOG.md](CHANGELOG.md) for full details.
@@ -37,7 +41,7 @@ A local, encrypted, QR code portable password manager. No cloud, no accounts, no
 
 > 🔧 **Phone app and QR transport: in active development**
 >
-> The phone app is being brought up to the extension's feature set (v0.8.x), and live QR scanning is getting its next round of refinement (v0.8.2). Your data stays encrypted through all of it; this is feature work, and nothing about it changes how the vault is protected. Until it lands, Export Vault and Import Vault move the complete vault between browsers.
+> The phone app is being brought up to the extension's feature set (v0.8.x), and live QR scanning is getting its next round of refinement (v0.8.2). Your data stays encrypted through all of it; this is feature work, and nothing about it changes how the vault is protected. Until it lands, Export Vault and Import Vault move the complete vault between browsers and between devices. Carried on a USB drive, the vault file and the key file stay encrypted the whole way, and that path is verified device to device.
 
 > ✅ **Extension Hotfix for v0.6.3 - v0.6.4**
 >
@@ -129,6 +133,7 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 - Live QR sync - stream your vault or your protected key as a one-way fountain QR, scan it on the other device
 - Sovereign scanner - the standard web camera plus a vendored jsQR decoder, no Google dependency
 - Encrypted vault backup - save directly to Downloads or share the file, inert without the matching master key
+- USB cold storage - Export Vault and Export Key to a USB drive for an offline backup you hold yourself; both files are encrypted, Valid Vault has no plaintext export, and the drive restores through the same import path as a QR share
 - Protected key transfer - the master key only leaves a device wrapped under a passphrase and three security questions you pick, stretched with 1,000,000 PBKDF2 rounds; the same package goes into the key QR and the key file, and the receiving device must enter all of them to accept it
 - Set once, reused after - the protection is set on the first key share or export, then Share Master Key and Export Key are one click; Change Key Passphrase replaces it
 - Common passwords are refused as a key passphrase, and the form recommends four or more random words
@@ -154,7 +159,7 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 - Android via Capacitor, with native plugins for biometric auth and file saving
 - Vendored, self-contained code only, no Google SDKs in the scan path
 
-## Current Status: v0.7.4 - Active Testing
+## Current Status: v0.7.4.1 - Active Testing
 
 **Completed:**
 * ✅ Master key wrap architecture, verify-by-unwrap, no stored hashes
@@ -185,6 +190,8 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 * ✅ Password generator style choice: with special characters, or letters and numbers only
 * ✅ Published on the Chrome Web Store
 * ✅ Clear password-only setup path on computers without Windows Hello
+* ✅ Fingerprint in every browser on one computer, each with its own passkey (Chrome, Brave, and Edge)
+* ✅ Encrypted vault and key carried device to device on a USB drive, no network involved
 
 **In Development:**
 * 📋 Phone de-drift (v0.8.x): key import, whole-vault carry including bookmarks and wallets, Personal Info, and fingerprint authentication for export and import on the phone
@@ -194,7 +201,7 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 
 ## Sync and Backup Model
 
-Master key transport is deliberate. The primary path is a live QR stream: one device shows its vault or its protected key as a fountain QR, the other scans it. The key is always wrapped under a passphrase plus three security questions the owner picks, stretched with 1,000,000 PBKDF2 rounds, and the receiving device has to enter all of them before the key can be used, so a captured QR is as useless as a stolen file. For disaster recovery there is an offline path: Export Vault saves the encrypted vault directly to Downloads or through the native share sheet, and Export Key saves the same protected key package as a file.
+Master key transport is deliberate. The primary path is a live QR stream: one device shows its vault or its protected key as a fountain QR, the other scans it. The key is always wrapped under a passphrase plus three security questions the owner picks, stretched with 1,000,000 PBKDF2 rounds, and the receiving device has to enter all of them before the key can be used, so a captured QR is as useless as a stolen file. For disaster recovery there is an offline path: Export Vault saves the encrypted vault directly to Downloads or through the native share sheet, and Export Key saves the same protected key package as a file. Both files can live on a USB drive as encrypted cold storage, and carrying that drive to another device is a complete transfer that never touches a network. Keeping the key file on a different drive from the vault file adds one more layer.
 
 Because importing a key persists, the same vault file works the same way everywhere. On one computer, Uni-Vault does the rest: link Chrome and Edge to the same vault file, add a credential in either, and the other picks it up on its own. Between devices, export the vault and import it on the other side, or share it over QR. No server, no account, just timestamp-based merge.
 
@@ -229,7 +236,7 @@ Recovery follows from the same model. As long as any device still unlocks the va
 - An unlocked vault only autofills. Viewing entries, changing unlock methods, and clearing the vault all ask for your fingerprint, device PIN, or password again.
 - Auto-lock runs on inactivity while the browser is active, and closing the browser always locks the vault. While the browser is in the background, the operating system may delay the timer slightly.
 - A save prompt stays with its browser tab for 45 seconds, so it survives sign-ins that hop across domains for SSO or MFA. After that it expires.
-- QR transfers pair two devices in one scan. A vault stream is encrypted under your master key, and a key stream is locked with your passphrase and three security answers, so a captured QR can't be used on its own. Type those answers privately, as you would any password.
+- QR transfers pair two devices in one scan. A vault stream is encrypted under your master key, and a key stream is locked with your passphrase and three security answers, so a captured QR can't be used on its own. Type those answers privately, as you would any password. For a transfer with no screen to watch at all, carry the encrypted files on a USB drive instead.
 
 ## Crypto Wallet and Bookmark Security
 
