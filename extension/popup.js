@@ -32,6 +32,7 @@ const msgLocked = document.getElementById('msg-locked')
 const inputSoftpin = document.getElementById('input-softpin')
 const btnSoftpin = document.getElementById('btn-softpin')
 const btnSoftFingerprint = document.getElementById('btn-soft-fingerprint')
+const setupFpNote = document.getElementById('setup-fp-note')
 const inputSoftpassword = document.getElementById('input-softpassword')
 const btnSoftPassword = document.getElementById('btn-soft-password')
 const msgSoftlock = document.getElementById('msg-softlock')
@@ -141,8 +142,21 @@ async function updateStatus() {
   const status = await auth.initAuth()
   if (statusFp) statusFp.className = 'status' + (status.hasFingerprint ? ' active' : '')
   if (statusPw) statusPw.className = 'status' + (status.hasPassword ? ' active' : '')
+  btnFingerprint.classList.toggle('hidden', !status.hasFingerprint)
+  btnSoftFingerprint.classList.toggle('hidden', !status.hasFingerprint)
   return status
 }
+
+async function applySetupFpAvailability() {
+  if (setupState.hasFp || await platformAuthAvailable()) {
+    btnSetupFp.classList.remove('hidden')
+    setupFpNote.classList.add('hidden')
+    return
+  }
+  btnSetupFp.classList.add('hidden')
+  setupFpNote.classList.remove('hidden')
+}
+
 
 async function loadActiveTab() {
   try {
@@ -213,6 +227,7 @@ async function init() {
   } else {
     showView(viewSetup)
     updateSetupStatus()
+    await applySetupFpAvailability()
   }
 }
 

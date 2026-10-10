@@ -36,7 +36,7 @@ async function finish(masterKey) {
 async function unlockFingerprint() {
   if (busy) return
   busy = true
-  showMsg('Waiting for Windows Hello...')
+  showMsg('Waiting for fingerprint or device PIN...')
   try {
     const result = await auth.authenticateFingerprint()
     if (result.success) { await finish(result.masterKey); return }

@@ -1,10 +1,24 @@
 
 # Changelog
 
-All notable changes to Local Vault will be documented in this file.
+All notable changes to Valid Vault will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [0.7.4.2] - 2026-10-10
+
+Extension-only update. Setup and unlock now show only the unlock methods a browser can actually use, so Linux and other computers without a built-in fingerprint reader get a clean password setup.
+
+### Changed
+- **Setup checks for fingerprint support first.** Where the browser has no built-in fingerprint or device PIN, as in Chrome on Linux or Windows without Windows Hello, setup hides the fingerprint Enroll button and shows "Fingerprint / PIN isn't available in this browser. Enroll a master password below."
+- **Unlock shows only enrolled methods.** The popup, the idle unlock, and the Manage lock screen show Unlock with Fingerprint only when fingerprint is enrolled in that browser. An enrolled fingerprint keeps its button even when the browser reports no reader, as can happen over Remote Desktop, and the password always remains.
+- **Manage shows fingerprint as unavailable.** The Fingerprint card reads "Not available in this browser" instead of "Not enrolled" where the browser has no built-in reader.
+- **Fixing fingerprint asks for the password first.** Re-enroll and Delete on the Fingerprint card ask for the master password directly instead of trying fingerprint first, so a browser whose fingerprint passkey is missing can be fixed without failing a fingerprint prompt. If no master password is set, they use fingerprint as before.
+- **Wording.** The unlock window and the key import dialog no longer name Windows Hello, so they read correctly on every system.
+
+### Notes
+- Verified in Chromium with the real extension, with and without a simulated built-in authenticator: setup buttons, password setup and unlock, fingerprint enrollment and unlock, password-first Re-enroll and Delete (a wrong password is refused, and re-enrolling replaces the browser's own passkey), the enrolled-fingerprint button with no reader present, and every Manage tab with no page errors.
 
 [0.7.4.1] - 2026-10-08
 

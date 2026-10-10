@@ -45,6 +45,7 @@ function hideLockOverlay() { if (lockOverlay) lockOverlay.classList.add('hidden'
 async function unlockManagePage() {
   const mk = session.getMasterKey()
   if (mk) { hideLockOverlay(); return true }
+  if (btnManageUnlockFp) btnManageUnlockFp.classList.toggle('hidden', !(await auth.initAuth()).hasFingerprint)
   showLockOverlay()
   return false
 }
@@ -179,8 +180,10 @@ async function loadAuthStatus() {
   if (status.hasFingerprint) {
     cardFp.classList.add('active'); statusFp.textContent = 'Enrolled'
   } else {
-    cardFp.classList.remove('active'); statusFp.textContent = 'Not enrolled'
+    cardFp.classList.remove('active')
+    statusFp.textContent = (await platformUnlockAvailable()) ? 'Not enrolled' : 'Not available in this browser'
   }
+  if (btnManageUnlockFp) btnManageUnlockFp.classList.toggle('hidden', !status.hasFingerprint)
   applyEnrollBtn(btnEditFp, status.hasFingerprint)
 
   if (status.hasPIN) {
@@ -857,6 +860,17 @@ async function requireFreshAuth() {
   return authResult.masterKey
 }
 
+async function requirePasswordFirstAuth() {
+  const status = await auth.initAuth()
+  if (!status.hasPassword) return requireFreshAuth()
+  const pw = await askSecret('Unlock', 'Master password', 'Enter your master password to change fingerprint unlock.')
+  if (!pw) return null
+  const result = await auth.authenticatePassword(pw)
+  if (!result.success) return null
+  session.setMasterKey(result.masterKey)
+  return result.masterKey
+}
+
 async function requireTransferAuth() {
   const status = await auth.initAuth()
   if (status.isNew) return true
@@ -866,7 +880,7 @@ async function requireTransferAuth() {
 }
 
 btnEditFp.onclick = async () => {
-  const mk = await requireFreshAuth()
+  const mk = await requirePasswordFirstAuth()
   if (!mk) { showMsg(msgManage, 'Authentication required', 'error'); return }
   auth.startFingerprintEnrollment()
   const result = await auth.enrollFingerprint(mk)
@@ -897,7 +911,7 @@ btnEditPw.onclick = async () => {
 }
 
 btnDelFp.onclick = async () => {
-  if (!(await requireFreshAuth())) { showMsg(msgManage, 'Authentication required', 'error'); return }
+  if (!(await requirePasswordFirstAuth())) { showMsg(msgManage, 'Authentication required', 'error'); return }
   if (confirm('Delete fingerprint authentication?')) {
     const result = await auth.removeFingerprint()
     if (result.success) {
@@ -1485,7 +1499,7 @@ async function chooseImportLock() {
   if (!(await platformUnlockAvailable())) return 'password'
   const values = await formDialog({
     title: 'Lock the imported key',
-    text: 'Choose how this browser unlocks the imported key. Fingerprint or device PIN is recommended: the unlock secret stays inside Windows Hello, so nothing saved in the browser can be guessed at. A password works on any device, but anyone who copies your browser data can try guessing it offline.',
+    text: 'Choose how this browser unlocks the imported key. Fingerprint or device PIN is recommended: the unlock secret stays in secure hardware on this device, so nothing saved in the browser can be guessed at. A password works on any device, but anyone who copies your browser data can try guessing it offline.',
     fields: [{
       label: 'Unlock with',
       options: [
