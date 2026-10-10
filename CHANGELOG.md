@@ -20,18 +20,19 @@ Extension-only update. Setup and unlock now show only the unlock methods a brows
 ### Notes
 - Verified in Chromium with the real extension, with and without a simulated built-in authenticator: setup buttons, password setup and unlock, fingerprint enrollment and unlock, password-first Re-enroll and Delete (a wrong password is refused, and re-enrolling replaces the browser's own passkey), the enrolled-fingerprint button with no reader present, and every Manage tab with no page errors.
 
-[0.7.4.1] - 2026-10-08
+## [0.7.4.1] - 2026-10-08
 
 Extension-only hotfix. Fingerprint unlock no longer breaks when Valid Vault is used in more than one browser on the same computer.
 
-Fixed
-Fingerprint in more than one browser. Every install registered its fingerprint passkey under the same fixed user ID, and browsers that install from the Chrome Web Store, such as Chrome and Brave, share one extension ID. Windows Hello therefore replaced one browser's passkey when another browser enrolled, and the first browser then showed only phone and security key options on unlock. Each install now registers under its own random ID, kept with that browser's unlock settings and reused when it re-enrolls, so browsers no longer overwrite each other.
-Unlock asks for the built-in fingerprint reader. Fingerprint unlock now requests this computer's own authenticator instead of offering a phone or security key.
-Clear message when fingerprint is unavailable. A cancelled or missing fingerprint now says to unlock with the password and re-enroll fingerprint in Manage, instead of showing a browser error.
-Notes
-If fingerprint stopped working in one of your browsers, unlock it with your password after updating, then re-enroll fingerprint in Manage. Each browser keeps its own fingerprint from then on.
-package.json stays at 0.7.4, since npm only accepts three-part versions. The fourth number appears in the extension manifest only.
-Verified in Chromium with a simulated fingerprint authenticator: with the old code, a second install's enrollment removed the first install's passkey; with the fix, both installs keep their passkeys and both unlock.
+### Fixed
+- **Fingerprint in more than one browser.** Every install registered its fingerprint passkey under the same fixed user ID, and browsers that install from the Chrome Web Store, such as Chrome and Brave, share one extension ID. Windows Hello therefore replaced one browser's passkey when another browser enrolled, and the first browser then showed only phone and security key options on unlock. Each install now registers under its own random ID, kept with that browser's unlock settings and reused when it re-enrolls, so browsers no longer overwrite each other.
+- **Unlock asks for the built-in fingerprint reader.** Fingerprint unlock now requests this computer's own authenticator instead of offering a phone or security key.
+- **Clear message when fingerprint is unavailable.** A cancelled or missing fingerprint now says to unlock with the password and re-enroll fingerprint in Manage, instead of showing a browser error.
+
+### Notes
+- If fingerprint stopped working in one of your browsers, unlock it with your password after updating, then re-enroll fingerprint in Manage. Each browser keeps its own fingerprint from then on.
+- `package.json` stays at 0.7.4, since npm only accepts three-part versions. The fourth number appears in the extension manifest only.
+- Verified in Chromium with a simulated fingerprint authenticator: with the old code, a second install's enrollment removed the first install's passkey; with the fix, both installs keep their passkeys and both unlock.
 
 ## [0.7.4] - 2026-10-06
 
