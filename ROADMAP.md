@@ -1,10 +1,17 @@
 # Valid Vault - Development Roadmap
 
-**Current Version:** v0.7.4.1 - **Status: Active Testing**
+**Current Version:** v0.7.4.2 - **Status: Active Testing**
 
 ---
 
 ## Version History (Completed)
+
+### v0.7.4.2 - Capability-Aware Unlock (Oct 2026)
+
+- ✅ Setup checks whether the browser has a built-in fingerprint or device PIN, and shows a clean password setup where it doesn't, as in Chrome on Linux
+- ✅ Unlock screens show the fingerprint button only when fingerprint is enrolled in that browser
+- ✅ Re-enroll and Delete on the Fingerprint card ask for the master password first, so a browser with a missing passkey can be fixed
+- ✅ Unlock and key import wording no longer names Windows Hello, so it reads correctly on every system
 
 ### v0.7.4.1 - Fingerprint Across Browsers Hotfix (Oct 2026)
 
@@ -144,23 +151,56 @@
 
 ## Upcoming After v0.7.4
 
-### v0.8.x - Phone De-Drift (Next)
+### v0.8.x - The Phone App
+
+Built in this order, each step shipping as its own v0.8 release:
+
+**1. Phone de-drift (next)**
 
 - Key import that survives lock and unlock with the same warning flow, working key file import, and visible scan results
 - The protected key format on the phone, so phone and extension key transfer over QR works again with the passphrase and questions
 - Whole-vault carry on the phone: Web Credentials, Personal Info, bookmarks, and Crypto Wallets
 - Personal Info tab on the phone
 - Fingerprint, device PIN, or password required for export and import on the phone
+- The password generator and the 2 hour auto-lock limit on the phone
 
 This is feature work. The vault stays encrypted throughout, and nothing about it changes how data is protected.
 
-### v0.8.2 - Scanner Reliability
+**2. Android Autofill**
+
+- Valid Vault registers as an Android Autofill service, so saved logins fill in other apps and in Chrome and other browsers on the phone
+- Saves new logins from those apps and sites when Android offers them
+- Share a link from any app to Valid Vault to add it to your encrypted bookmarks
+
+**3. Modified Chromium browser**
+
+Chromium, through the Android System WebView the phone app already runs on, modified for privacy and Valid Vault:
+
+- Private by default: no history kept, and cookies and site data cleared when you leave
+- Tracker blocking, with a per-site switch to turn it off when a site doesn't work right
+- Tracking tags stripped from links
+- Third-party cookies blocked
+- The app's identity header hidden from sites
+- Valid Vault autofill built in, with the same V tags and pickers as the extension
+- Your encrypted bookmarks, opened directly in the browser
+
+**4. QR transport**
 
 - QR scanner reliability on real devices and cameras, including scans that stall before completing
 - Bookmarks QR share
 - Unlock behavior quirks reported by community testing
 
 Until this lands, encrypted files on a USB drive are the dependable device-to-device path, already verified in use.
+
+**5. App injection**
+
+- Filling apps that Android Autofill can't reach
+
+### v0.9.x - Hardening and Polish
+
+- Security hardening across the extension and the phone app
+- Final features and fixes before 1.0
+- Polish throughout
 
 ### Autofill Hardening
 
@@ -222,4 +262,4 @@ MIT License - See LICENSE file for details
 
 ---
 
-**Last Updated:** Oct 09, 2026
+**Last Updated:** Oct 10, 2026
