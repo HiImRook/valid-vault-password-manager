@@ -1,10 +1,14 @@
 # Valid Vault - Development Roadmap
 
-**Current Version:** v0.8.1 - **Status: Active Testing**
+**Current Version:** v0.8.1.1 - **Status: Active Testing**
 
 ---
 
 ## Version History (Completed)
+
+### v0.8.1.1 - Key File Validation Hotfix (Oct 2026)
+
+* ✅ Key files and key QRs checked against the exact format Valid Vault writes before any key derivation, so a crafted file can't stall an import with an enormous round count
 
 ### v0.8.1 - Vault QR Rebuilt (Oct 2026)
 
@@ -205,12 +209,12 @@ Chromium, through the Android System WebView the phone app already runs on, modi
 
 **3. QR transport**
 
-* Confirm the v0.8.1 vault QR on real phone cameras and computer screens, and tune frame size and speed from what testing shows
-* QR scanner reliability on real devices and cameras, including scans that stall before completing
+* Confirm the v0.8.1 vault QR on phone cameras and computer screens, and tune frame size and speed from what testing shows
+* QR scanner reliability across devices and cameras, including scans that stall before completing
 * Bookmarks QR share
 * Unlock behavior quirks reported by community testing
 
-Until the vault QR is confirmed on real devices, encrypted files on a USB drive are the dependable device-to-device path, already verified in use.
+Until the vault QR is confirmed on devices, encrypted files on a USB drive are the dependable device-to-device path, already verified in use.
 
 **4. App injection**
 
@@ -251,7 +255,7 @@ Until the vault QR is confirmed on real devices, encrypted files on a USB drive 
 
 ⚠️ **SSN and card storage deliberately deferred**, pending security work
 
-⚠️ **The v0.8.1 vault QR is not yet confirmed with a real phone camera** - it is rebuilt larger, lighter, and compressed, and verified in Chromium; vault files carry everything in the meantime, including on a USB drive
+⚠️ **The v0.8.1 vault QR is not yet confirmed with a phone camera** - it is rebuilt larger, lighter, and compressed, and verified in Chromium; vault files carry everything in the meantime, including on a USB drive
 
 ⚠️ **QR needs v0.8.1 on both sides** - a 0.8.0 scanner can't read the new QR, while the 0.8.1 scanner still reads 0.8.0 codes
 

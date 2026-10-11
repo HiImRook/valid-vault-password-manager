@@ -116,7 +116,7 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 * Android via Capacitor, with native plugins for biometric auth and file saving
 * Vendored, self-contained code only, no Google SDKs in the scan path
 
-## Current Status: v0.8.1 - Active Testing
+## Current Status: v0.8.1.1 - Active Testing
 
 **Completed:**
 
@@ -156,12 +156,13 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 * ✅ Phone setup from an existing key by key QR or key file, and key-file recovery on the lock screen
 * ✅ Vault imports checked in full before writing, with no duplicates, deletes that stay deleted, and no changes on a repeat import
 * ✅ Vault QR rebuilt: larger, compressed, and able to fill in missed frames, matched in size to the key QR
+* ✅ Key files and key QRs checked against the exact format Valid Vault writes before any key derivation starts
 
 **In Development:**
 
 * 📋 Android Autofill service and Share-to-bookmark (v0.8.x)
 * 📋 Modified Chromium browser in the phone app (v0.8.x)
-* 📋 QR transport (v0.8.x): confirming the vault QR on real phone cameras, scanner reliability on real devices, and a bookmarks QR share
+* 📋 QR transport (v0.8.x): confirming the vault QR on phone cameras, scanner reliability across devices, and a bookmarks QR share
 * 📋 Continued field testing of sync, backup, and native file saving across Android versions
 
 ## Sync and Backup Model

@@ -5,6 +5,18 @@ All notable changes to Valid Vault will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.1.1] - 2026-10-11
+
+Hotfix for the extension and the phone app.
+
+### Fixed
+
+* **Key files are checked before any key derivation starts.** A key file or key QR now has to match exactly what Valid Vault writes: a supported version, the standard 1,000,000 PBKDF2 rounds, a 16-byte salt, and a wrapped key of the right size. Before, a crafted file could ask for an enormous number of rounds and leave the import spinning on Checking... while it tied up the processor. It could not reach your vault or your key, since the only key involved was the file's own. Anything that fails the check is refused at once with "That key file is damaged or incomplete. Nothing was changed.", on the extension, the phone, and the lock screen's key file recovery. Every key file Valid Vault has written still imports.
+
+### Notes
+
+* Verified in Chromium on the phone build and the extension: genuine key files, including ones without a version or round count, import and open; files with huge, low, or non-numeric round counts, a newer version, a short or out-of-range salt, or a wrong-size wrapped key are refused in under 200 milliseconds before any prompt; plus regression runs of the full phone, QR, and extension suites.
+
 ## [0.8.1] - 2026-10-11
  
 The vault QR is rebuilt so a phone camera can read it from a computer screen, along with fixes for fingerprint unlock after an upgrade, key file names, and key import on the extension. Update the phone and the extension together: both send the new QR, and a 0.8.0 scanner can't read it.
@@ -863,4 +875,3 @@ This release is a hardening and feature-completion pass driven by internal Play 
 * Earlier iterations were not formally tagged
 
 ---
-
