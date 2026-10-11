@@ -4,9 +4,9 @@
 
 # Valid Vault Password Manager
 
-A local, encrypted, QR code portable password manager. No cloud, accounts, or sync servers. Your credentials live on your device, encrypted under keys only you can produce, and move between devices over a fully local QR stream or an encrypted backup file.
+A local, encrypted, QR code portable password manager. No cloud, accounts, or sync servers used. Your credentials live on your device, encrypted under keys only you can produce, and move between devices over a fully local QR stream or an encrypted backup file.
 
-**Status: Active testing.** Core functionality works end to end, and the project is being hardened through real device use before a wider release. See [ROADMAP.md](ROADMAP.md) for what's tested and what's still in progress.
+**Status: Active testing.** Core functionality works end to end, and the project is being hardened through physical device testing use before a wider release. See [ROADMAP.md](ROADMAP.md) for what's tested and what's still in progress.
 
 **Chrome Web Store:** install the extension from [Valid Vault on the Chrome Web Store](https://chromewebstore.google.com/detail/valid-vault-password-mana/fkpfaemmphmakebhejhaegjgcnieeoab).
 
@@ -20,9 +20,9 @@ A local, encrypted, QR code portable password manager. No cloud, accounts, or sy
 >
 > The Android app now runs on the same code as the extension, so the two stay in step from here on. The phone gets every extension tab: Website Credentials, Personal Info, Misc Credentials, Crypto Wallets, Bookmarks, Sync, Settings, a phone User Guide, and About, along with the protected key transfer, the key import flow, and fingerprint, device PIN, or password before every transfer. A new phone can be set up straight from your existing key, by key QR or key file, and the lock screen can restore access from a key file if fingerprint unlock is ever reset. Importing a vault is now checked in full before anything is written, never creates duplicates, keeps deletes deleted, and changes nothing when the same file is imported twice. The extension shares these merge fixes, and its Misc Credentials and extra field values are now entered in masked boxes. See [CHANGELOG.md](CHANGELOG.md) for full details.
 
-> 🔧 **QR transport: in active development**
+> ✅ **Vault QR Rebuilt - v0.8.1**
 >
-> The key QR moves between the phone and the extension. The vault QR is still too dense for a phone camera to read from a computer screen, so live vault scanning is a coming v0.8.x step. Until it lands, Export Vault and Import Vault move the complete vault between browsers and devices, including bookmarks and crypto wallets. Carried on a USB drive, the vault file and the key file stay encrypted the whole way, and that path is verified device to device.
+> The vault QR is drawn larger, carries less data per frame, and is compressed first, so a typical vault needs about half as many frames. Frames the camera misses are filled in by later ones, so a scan finishes a few frames after enough are read. The vault QR and key QR now match in size, and the scanner reads a sharper camera feed. Update the phone and the extension together, since a 0.8.0 scanner can't read the new QR. This is verified in Chromium, but still being tested and hardened on the phone camera, so Export Vault and Import Vault, carried on a USB drive if you like, remain the dependable path until QR share is finalized. See [CHANGELOG.md](CHANGELOG.md) for full details.
 
 ---
 
@@ -116,7 +116,7 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 * Android via Capacitor, with native plugins for biometric auth and file saving
 * Vendored, self-contained code only, no Google SDKs in the scan path
 
-## Current Status: v0.8.0 - Active Testing
+## Current Status: v0.8.1 - Active Testing
 
 **Completed:**
 
@@ -155,12 +155,13 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 * ✅ Phone app rebuilt on the extension's own modules, with every extension tab, the protected key transfer, and re-authentication before transfers
 * ✅ Phone setup from an existing key by key QR or key file, and key-file recovery on the lock screen
 * ✅ Vault imports checked in full before writing, with no duplicates, deletes that stay deleted, and no changes on a repeat import
+* ✅ Vault QR rebuilt: larger, compressed, and able to fill in missed frames, matched in size to the key QR
 
 **In Development:**
 
 * 📋 Android Autofill service and Share-to-bookmark (v0.8.x)
 * 📋 Modified Chromium browser in the phone app (v0.8.x)
-* 📋 QR transport (v0.8.x): a vault QR a phone camera reads reliably, scanner reliability on real devices, and a bookmarks QR share
+* 📋 QR transport (v0.8.x): confirming the vault QR on real phone cameras, scanner reliability on real devices, and a bookmarks QR share
 * 📋 Continued field testing of sync, backup, and native file saving across Android versions
 
 ## Sync and Backup Model
@@ -301,7 +302,7 @@ A custom Capacitor plugin bridges JavaScript to Android's BiometricPrompt. It cr
 A custom Capacitor plugin writes exported files directly to the Downloads folder through Android's MediaStore API, and Capacitor's Filesystem and Share plugins back the native share option.
 
 **Sovereign QR Scanner:**
-Scanning uses the web camera through getUserMedia, drawing frames to a canvas that a vendored jsQR decoder reads. No native scanning plugin, no Google SDK.
+Scanning uses the web camera through getUserMedia, drawing the square shown in the scan box to a canvas that a vendored jsQR decoder reads. No native scanning plugin, no Google SDK. The stream itself is a fountain code: the payload is compressed, split into small pieces shown once in order, then followed by mixes of pieces, and the receiver solves for any pieces it missed.
 
 **Single-File Bundle:**
 build.js bundles the phone app from the extension's own modules and the phone screens in phone/ into one self-contained HTML file. No module loader, no CDN, no external requests at runtime. The extension and the phone run the same vault, crypto, unlock, key, and merge code.
@@ -369,4 +370,3 @@ Copyright (c) 2025-2026 by Rook
 ## Acknowledgements
 
 Built and maintained by Rook.
-

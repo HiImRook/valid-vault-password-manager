@@ -1,10 +1,20 @@
 # Valid Vault - Development Roadmap
 
-**Current Version:** v0.8.0 - **Status: Active Testing**
+**Current Version:** v0.8.1 - **Status: Active Testing**
 
 ---
 
 ## Version History (Completed)
+
+### v0.8.1 - Vault QR Rebuilt (Oct 2026)
+
+* ✅ Vault and key QR drawn larger and at the same size, with less data per frame and the stream compressed first
+* ✅ Missed frames filled in by later ones, so a scan finishes a few frames after enough are read, wherever it joins the stream
+* ✅ Scanner asks for a sharper camera feed, reads only the visible square, and skips damaged frames; 0.8.0 codes still read
+* ✅ Dead fingerprint setting removed after a password unlock when Android has reset the fingerprint key
+* ✅ Imported keys take on their exported nickname, and shared or exported keys carry the current one
+* ✅ Extension key import asks every question before writing, and clears the old vault only after the new unlock methods are saved
+* ✅ Phone globe animates only while on screen
 
 ### v0.8.0 - Phone App Rebuilt (Oct 2026)
 
@@ -169,11 +179,11 @@
 
 ---
 
-## Upcoming After v0.8.0
+## Upcoming After v0.8.1
 
 ### v0.8.x - The Phone App
 
-Built in this order, each step shipping as its own v0.8 release. The phone de-drift shipped in v0.8.0.
+Built in this order, each step shipping as its own v0.8 release. The phone de-drift shipped in v0.8.0, and the vault QR rebuild in v0.8.1.
 
 **1. Android Autofill (next)**
 
@@ -195,12 +205,12 @@ Chromium, through the Android System WebView the phone app already runs on, modi
 
 **3. QR transport**
 
-* A vault QR that a phone camera reads reliably from a computer screen: fewer bytes per frame, a larger code, a slower frame rate, and a sharper camera feed
+* Confirm the v0.8.1 vault QR on real phone cameras and computer screens, and tune frame size and speed from what testing shows
 * QR scanner reliability on real devices and cameras, including scans that stall before completing
 * Bookmarks QR share
 * Unlock behavior quirks reported by community testing
 
-Until this lands, encrypted files on a USB drive are the dependable device-to-device path, already verified in use.
+Until the vault QR is confirmed on real devices, encrypted files on a USB drive are the dependable device-to-device path, already verified in use.
 
 **4. App injection**
 
@@ -241,15 +251,17 @@ Until this lands, encrypted files on a USB drive are the dependable device-to-de
 
 ⚠️ **SSN and card storage deliberately deferred**, pending security work
 
-⚠️ **Live vault QR doesn't read reliably on a phone yet** - the key QR works between the phone and the extension; vault QR scanning is the QR transport step, and vault files carry everything in the meantime, including on a USB drive
+⚠️ **The v0.8.1 vault QR is not yet confirmed with a real phone camera** - it is rebuilt larger, lighter, and compressed, and verified in Chromium; vault files carry everything in the meantime, including on a USB drive
 
-⚠️ **Phones upgraded from an older version may need fingerprint re-enrolled once** - unlock with your password and re-enroll in Manage, or use Can't unlock? on the lock screen with your key file
+⚠️ **QR needs v0.8.1 on both sides** - a 0.8.0 scanner can't read the new QR, while the 0.8.1 scanner still reads 0.8.0 codes
+
+⚠️ **Phones upgraded from an older version may need fingerprint re-enrolled once** - unlock with your password, which removes the old fingerprint setting, and re-enroll in Manage, or use Can't unlock? on the lock screen with your key file
 
 ⚠️ **Uni-Vault needs a browser setting in Brave** - Brave ships the File System Access API switched off; Chrome and Edge work out of the box, and Brave users can switch it on or keep using Export and Import
 
 ⚠️ **Uni-Vault syncs browsers on one computer** - moving the vault between devices is still Export and Import, by USB drive or any file transfer, or QR
 
-⚠️ **A lost key-file passphrase and answers cannot be recovered. Writing these down and storing them safely is highly recommended.**
+⚠️ **A lost key-file passphrase and answers cannot be recovered, although access is still possible if you can unlock your vault/vaults. Writing these credentials down and storing them safely is highly recommended.**
 
 **These are intentional staging decisions or known open bugs, not oversights or knowledge gaps.**
 
@@ -268,4 +280,3 @@ MIT License - See LICENSE file for details
 ---
 
 **Last Updated:** Oct 11, 2026
-

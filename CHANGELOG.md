@@ -5,6 +5,27 @@ All notable changes to Valid Vault will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.1] - 2026-10-11
+ 
+The vault QR is rebuilt so a phone camera can read it from a computer screen, along with fixes for fingerprint unlock after an upgrade, key file names, and key import on the extension. Update the phone and the extension together: both send the new QR, and a 0.8.0 scanner can't read it.
+
+### Changed
+
+* **Vault and key QR are larger and lighter.** Each frame now carries less data, so the code has bigger squares, and the stream is compressed first, so a typical vault needs about half as many frames. The vault QR and the key QR are drawn at the same size, filling the phone screen and up to 460 pixels on the extension, and each frame is far lighter to draw, so the phone stays responsive while it shows.
+* **Missed frames no longer stall a scan.** The stream first shows every piece once in order, then shows mixes that can fill in any piece the camera missed, and the scanner solves for whatever is still missing. A scan finishes a few frames after enough have been read, wherever the camera joins the stream. Frames change every 400 milliseconds instead of 300.
+* **Sharper scanning.** The scanner asks for a 720p camera feed with continuous focus where the camera offers it, and reads only the square shown in the scan box. A damaged frame is skipped instead of stopping the scanner. The new scanner still reads codes from 0.8.0.
+* **Key nickname travels with the key.** Importing a key file or key QR takes on the nickname it was exported with, on the phone and the extension, so vault and key file names stay recognizable. Sharing or exporting a key always uses the current nickname, including after a rename.
+* **The phone globe only animates while on screen.** It starts just before it scrolls into view, keeps its place in the rotation, and stops completely inside the app.
+
+### Fixed
+
+* **Fingerprint unlock after an Android reset.** When Android reports that the phone's fingerprint key is gone or was reset, the next password unlock removes the dead fingerprint setting and opens Manage with a note to enroll it again. A cancelled fingerprint never removes anything.
+* **Extension key import asks everything first.** Importing a different key on the extension now asks every question before it writes anything, so cancelling at any prompt changes nothing. Fingerprint, password, and removals are then saved back to back, and the old vault is cleared only after the new unlock methods are saved.
+
+### Notes
+
+* Verified in Chromium with the extension and the phone build: vault and key QR streams drawn, read back with the same jsQR decoder the scanner uses, and decoded to the original vault; random missed frames; codes from 0.8.0 still read; the dead fingerprint cleanup; the globe pausing off screen; nickname adoption; and extension key import cancelled at the password prompt with nothing changed.
+
 ## [0.8.0] - 2026-10-11
 
 The phone app is rebuilt on the extension's own code, and vault import, export, and merge are hardened on both. The phone and the extension now share one copy of the vault, crypto, unlock, key, and merge modules, so they stay in step from here on.
