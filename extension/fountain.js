@@ -1,7 +1,22 @@
-const FOUNTAIN_PREFIX = 'LVLT'
-const CHUNK_BYTES = 700
+const FOUNTAIN_PREFIX = 'LVLT2'
+const LEGACY_PREFIX = 'LVLT'
+const CHUNK_BYTES = 300
+const LEGACY_CHUNK_BYTES = 700
+const MAX_CHUNK_BYTES = 4096
+const MAX_PAYLOAD_BYTES = 8 * 1024 * 1024
 const SEED_MODULUS = 2147483647
 const SEED_MULTIPLIER = 48271
+const MAX_INFLATED_BYTES = 32 * 1024 * 1024
+const ENCODING_PLAIN = 'j'
+const ENCODING_DEFLATE = 'z'
+const COMPRESSION_FORMAT = 'deflate-raw'
+const QR_FRAME_MS = 400
+const DIGITS = /^[0-9]+$/
+const MIX_STEP = 0x9e3779b9
+const MIX_MULTIPLIER_A = 0x85ebca6b
+const MIX_MULTIPLIER_B = 0xc2b2ae35
+const UINT32_RANGE = 4294967296
+const DENSE_PICK_CHANCE = 0.5
 
 function makeRng(seed) {
   let state = seed % SEED_MODULUS
@@ -32,6 +47,37 @@ function pickChunks(rng, chunkCount, degree) {
   return Array.from(picked)
 }
 
+function makeMixedRng(seed) {
+  let state = seed >>> 0
+  return function next() {
+    state = (state + MIX_STEP) >>> 0
+    let z = state
+    z = Math.imul(z ^ (z >>> 16), MIX_MULTIPLIER_A) >>> 0
+    z = Math.imul(z ^ (z >>> 13), MIX_MULTIPLIER_B) >>> 0
+    z = (z ^ (z >>> 16)) >>> 0
+    return z / UINT32_RANGE
+  }
+}
+
+function denseChunks(rng, chunkCount) {
+  const picked = []
+  for (let i = 0; i < chunkCount; i++) {
+    if (rng() < DENSE_PICK_CHANCE) picked.push(i)
+  }
+  if (picked.length === 0) picked.push(Math.floor(rng() * chunkCount))
+  return picked
+}
+
+function frameIndices(systematic, seed, chunkCount) {
+  if (systematic) {
+    if (seed <= chunkCount) return [seed - 1]
+    return denseChunks(makeMixedRng(seed), chunkCount)
+  }
+  const rng = makeRng(seed)
+  const degree = solitonDegree(rng, chunkCount)
+  return pickChunks(rng, chunkCount, degree)
+}
+
 function stringToBytes(text) {
   return new TextEncoder().encode(text)
 }
@@ -40,18 +86,18 @@ function bytesToString(bytes) {
   return new TextDecoder().decode(bytes)
 }
 
-function splitChunks(bytes) {
+function splitChunks(bytes, chunkBytes) {
   const chunks = []
-  for (let i = 0; i < bytes.length; i += CHUNK_BYTES) {
-    const chunk = new Uint8Array(CHUNK_BYTES)
-    chunk.set(bytes.slice(i, i + CHUNK_BYTES))
+  for (let i = 0; i < bytes.length; i += chunkBytes) {
+    const chunk = new Uint8Array(chunkBytes)
+    chunk.set(bytes.slice(i, i + chunkBytes))
     chunks.push(chunk)
   }
   return chunks
 }
 
 function xorInto(target, source) {
-  for (let i = 0; i < CHUNK_BYTES; i++) {
+  for (let i = 0; i < target.length; i++) {
     target[i] = target[i] ^ source[i]
   }
 }
@@ -73,9 +119,48 @@ function base64ToBytes(text) {
   return bytes
 }
 
-function createEncoder(payload) {
-  const bytes = stringToBytes(payload)
-  const chunks = splitChunks(bytes)
+async function deflate(bytes) {
+  if (typeof CompressionStream !== 'function') return null
+  try {
+    const stream = new Blob([bytes]).stream().pipeThrough(new CompressionStream(COMPRESSION_FORMAT))
+    return new Uint8Array(await new Response(stream).arrayBuffer())
+  } catch (e) {
+    return null
+  }
+}
+
+async function inflate(bytes) {
+  if (typeof DecompressionStream !== 'function') throw new Error('This device cannot read compressed codes')
+  const reader = new Blob([bytes]).stream().pipeThrough(new DecompressionStream(COMPRESSION_FORMAT)).getReader()
+  const parts = []
+  let total = 0
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    total += value.length
+    if (total > MAX_INFLATED_BYTES) {
+      try { await reader.cancel() } catch (e) {}
+      throw new Error('Code is too large')
+    }
+    parts.push(value)
+  }
+  const out = new Uint8Array(total)
+  let offset = 0
+  for (const part of parts) {
+    out.set(part, offset)
+    offset += part.length
+  }
+  return out
+}
+
+async function createEncoder(payload) {
+  const plain = stringToBytes(payload)
+  if (plain.length === 0) throw new Error('Nothing to send')
+  const packed = await deflate(plain)
+  const useDeflate = !!packed && packed.length < plain.length
+  const bytes = useDeflate ? packed : plain
+  const encoding = useDeflate ? ENCODING_DEFLATE : ENCODING_PLAIN
+  const chunks = splitChunks(bytes, CHUNK_BYTES)
   const chunkCount = chunks.length
   const payloadLength = bytes.length
   let blockSeed = 1
@@ -83,119 +168,143 @@ function createEncoder(payload) {
   function nextFrame() {
     const seed = blockSeed
     blockSeed++
-    const rng = makeRng(seed)
-    const degree = solitonDegree(rng, chunkCount)
-    const indices = pickChunks(rng, chunkCount, degree)
-
     const combined = new Uint8Array(CHUNK_BYTES)
-    for (const index of indices) {
+    for (const index of frameIndices(true, seed, chunkCount)) {
       xorInto(combined, chunks[index])
     }
-
-    const header = FOUNTAIN_PREFIX + ':' + chunkCount + ':' + payloadLength + ':' + seed + ':'
+    const header = FOUNTAIN_PREFIX + ':' + CHUNK_BYTES + ':' + encoding + ':' + chunkCount + ':' + payloadLength + ':' + seed + ':'
     return header + bytesToBase64(combined)
   }
 
   return { nextFrame, chunkCount }
 }
 
+function readInt(text) {
+  if (!DIGITS.test(text)) return null
+  const value = parseInt(text, 10)
+  return Number.isSafeInteger(value) ? value : null
+}
+
 function parseFrame(frameText) {
-  if (!frameText.startsWith(FOUNTAIN_PREFIX + ':')) {
+  if (typeof frameText !== 'string') return { success: false, error: 'Not a fountain frame' }
+  let systematic
+  let encoding
+  let parts
+  if (frameText.startsWith(FOUNTAIN_PREFIX + ':')) {
+    systematic = true
+    parts = frameText.slice(FOUNTAIN_PREFIX.length + 1).split(':')
+    if (parts.length !== 6) return { success: false, error: 'Damaged frame' }
+    encoding = parts.splice(1, 1)[0]
+    if (encoding !== ENCODING_PLAIN && encoding !== ENCODING_DEFLATE) return { success: false, error: 'Damaged frame' }
+  } else if (frameText.startsWith(LEGACY_PREFIX + ':')) {
+    systematic = false
+    encoding = ENCODING_PLAIN
+    parts = frameText.slice(LEGACY_PREFIX.length + 1).split(':')
+    if (parts.length !== 4) return { success: false, error: 'Damaged frame' }
+    parts.unshift(String(LEGACY_CHUNK_BYTES))
+  } else {
     return { success: false, error: 'Not a fountain frame' }
   }
-  const body = frameText.slice(FOUNTAIN_PREFIX.length + 1)
-  const firstColon = body.indexOf(':')
-  const secondColon = body.indexOf(':', firstColon + 1)
-  const thirdColon = body.indexOf(':', secondColon + 1)
-
-  const chunkCount = parseInt(body.slice(0, firstColon), 10)
-  const payloadLength = parseInt(body.slice(firstColon + 1, secondColon), 10)
-  const seed = parseInt(body.slice(secondColon + 1, thirdColon), 10)
-  const data = base64ToBytes(body.slice(thirdColon + 1))
-
-  return { success: true, chunkCount, payloadLength, seed, data }
+  const chunkBytes = readInt(parts[0])
+  const chunkCount = readInt(parts[1])
+  const payloadLength = readInt(parts[2])
+  const seed = readInt(parts[3])
+  if (!chunkBytes || !chunkCount || !payloadLength || !seed) return { success: false, error: 'Damaged frame' }
+  if (chunkBytes > MAX_CHUNK_BYTES || payloadLength > MAX_PAYLOAD_BYTES) return { success: false, error: 'Damaged frame' }
+  if (chunkCount !== Math.ceil(payloadLength / chunkBytes)) return { success: false, error: 'Damaged frame' }
+  let data
+  try { data = base64ToBytes(parts[4]) } catch (e) { return { success: false, error: 'Damaged frame' } }
+  if (data.length !== chunkBytes) return { success: false, error: 'Damaged frame' }
+  return { success: true, systematic, encoding, chunkBytes, chunkCount, payloadLength, seed, data }
 }
 
 function createDecoder() {
-  const solved = new Map()
-  const pending = []
-  let chunkCount = null
-  let payloadLength = null
+  const rows = new Map()
+  const seenSeeds = new Set()
+  let stream = null
+  let words = 0
 
-  function reduce(indices, data) {
-    let workingIndices = indices.slice()
-    let workingData = new Uint8Array(data)
-
-    let changed = true
-    while (changed) {
-      changed = false
-      const remaining = []
-      for (const index of workingIndices) {
-        if (solved.has(index)) {
-          xorInto(workingData, solved.get(index))
-          changed = true
-        } else {
-          remaining.push(index)
-        }
-      }
-      workingIndices = remaining
-    }
-    return { indices: workingIndices, data: workingData }
+  function maskFor(indices) {
+    const mask = new Uint32Array(words)
+    for (const index of indices) mask[index >>> 5] ^= (1 << (index & 31)) >>> 0
+    return mask
   }
 
-  function propagate() {
-    let progress = true
-    while (progress) {
-      progress = false
-      for (let i = pending.length - 1; i >= 0; i--) {
-        const reduced = reduce(pending[i].indices, pending[i].data)
-        pending[i].indices = reduced.indices
-        pending[i].data = reduced.data
-        if (reduced.indices.length === 1) {
-          const index = reduced.indices[0]
-          if (!solved.has(index)) {
-            solved.set(index, reduced.data)
-            progress = true
-          }
-          pending.splice(i, 1)
-        } else if (reduced.indices.length === 0) {
-          pending.splice(i, 1)
-        }
+  function hasBit(mask, index) {
+    return ((mask[index >>> 5] >>> (index & 31)) & 1) === 1
+  }
+
+  function xorMask(target, source) {
+    for (let i = 0; i < target.length; i++) target[i] = (target[i] ^ source[i]) >>> 0
+  }
+
+  function addRow(mask, data) {
+    for (let index = 0; index < stream.chunkCount; index++) {
+      if (!hasBit(mask, index)) continue
+      const row = rows.get(index)
+      if (!row) {
+        rows.set(index, { mask, data })
+        return
       }
+      xorMask(mask, row.mask)
+      xorInto(data, row.data)
     }
+  }
+
+  function solve() {
+    const solved = new Array(stream.chunkCount)
+    for (let index = stream.chunkCount - 1; index >= 0; index--) {
+      const row = rows.get(index)
+      const data = new Uint8Array(row.data)
+      for (let other = index + 1; other < stream.chunkCount; other++) {
+        if (hasBit(row.mask, other)) xorInto(data, solved[other])
+      }
+      solved[index] = data
+    }
+    return solved
+  }
+
+  function status() {
+    return { success: true, complete: rows.size === stream.chunkCount, solved: rows.size, total: stream.chunkCount }
   }
 
   function addFrame(frameText) {
     const parsed = parseFrame(frameText)
     if (!parsed.success) return { success: false, error: parsed.error }
 
-    if (chunkCount === null) {
-      chunkCount = parsed.chunkCount
-      payloadLength = parsed.payloadLength
+    if (stream === null) {
+      stream = { systematic: parsed.systematic, encoding: parsed.encoding, chunkBytes: parsed.chunkBytes, chunkCount: parsed.chunkCount, payloadLength: parsed.payloadLength }
+      words = Math.ceil(stream.chunkCount / 32)
+    } else if (stream.systematic !== parsed.systematic || stream.encoding !== parsed.encoding || stream.chunkBytes !== parsed.chunkBytes || stream.chunkCount !== parsed.chunkCount || stream.payloadLength !== parsed.payloadLength) {
+      return { success: false, error: 'Frame from a different code' }
     }
 
-    const rng = makeRng(parsed.seed)
-    const degree = solitonDegree(rng, chunkCount)
-    const indices = pickChunks(rng, chunkCount, degree)
+    if (seenSeeds.has(parsed.seed) || rows.size === stream.chunkCount) return status()
+    seenSeeds.add(parsed.seed)
 
-    pending.push({ indices, data: parsed.data })
-    propagate()
-
-    return { success: true, complete: solved.size === chunkCount, solved: solved.size, total: chunkCount }
+    addRow(maskFor(frameIndices(stream.systematic, parsed.seed, stream.chunkCount)), new Uint8Array(parsed.data))
+    return status()
   }
 
-  function assemble() {
-    if (chunkCount === null || solved.size !== chunkCount) {
+  async function assemble() {
+    if (stream === null || rows.size !== stream.chunkCount) {
       return { success: false, error: 'Incomplete' }
     }
-    const full = new Uint8Array(chunkCount * CHUNK_BYTES)
-    for (let i = 0; i < chunkCount; i++) {
-      full.set(solved.get(i), i * CHUNK_BYTES)
+    const solved = solve()
+    const full = new Uint8Array(stream.chunkCount * stream.chunkBytes)
+    for (let i = 0; i < stream.chunkCount; i++) {
+      full.set(solved[i], i * stream.chunkBytes)
     }
-    return { success: true, payload: bytesToString(full.slice(0, payloadLength)) }
+    const bytes = full.slice(0, stream.payloadLength)
+    if (stream.encoding === ENCODING_PLAIN) return { success: true, payload: bytesToString(bytes) }
+    try {
+      return { success: true, payload: bytesToString(await inflate(bytes)) }
+    } catch (e) {
+      return { success: false, error: 'That code could not be read. Scan it again.' }
+    }
   }
 
   return { addFrame, assemble }
 }
 
-export { createEncoder, createDecoder, CHUNK_BYTES }
+export { createEncoder, createDecoder, QR_FRAME_MS }

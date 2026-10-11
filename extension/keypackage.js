@@ -8,6 +8,8 @@ const MIN_PASSPHRASE_LENGTH = 12
 const MIN_UNIQUE_CHARS = 6
 const QUESTION_COUNT = 3
 const DEFAULT_NICKNAME = 'My Master Key'
+const MAX_NICKNAME_LENGTH = 60
+const CONTROL_CHARS = /[\u0000-\u001f\u007f]+/g
 
 const SECURITY_QUESTIONS = [
   'Name of your first pet', 'Name of your favorite childhood toy', 'Your favorite childhood book',
@@ -119,13 +121,21 @@ async function getSavedPackage(masterKey) {
   const authRec = await getAuth()
   if (!authRec || !authRec.keyPackage || !authRec.keyPackageId) return null
   if (authRec.keyPackageId !== await keyIdFor(masterKey)) return null
-  return isKeyPackage(authRec.keyPackage) ? authRec.keyPackage : null
+  if (!isKeyPackage(authRec.keyPackage)) return null
+  return Object.assign({}, authRec.keyPackage, { nickname: cleanNickname(authRec.keyNickname) || DEFAULT_NICKNAME })
+}
+
+function cleanNickname(value) {
+  if (typeof value !== 'string') return ''
+  return value.replace(CONTROL_CHARS, ' ').trim().slice(0, MAX_NICKNAME_LENGTH).trim()
 }
 
 async function savePackage(masterKey, pkg) {
   const authRec = await getAuth() || {}
   authRec.keyPackage = pkg
   authRec.keyPackageId = await keyIdFor(masterKey)
+  const nickname = cleanNickname(pkg.nickname)
+  if (nickname) authRec.keyNickname = nickname
   await setAuth(authRec)
 }
 

@@ -99,9 +99,9 @@
     .scan-box video { width: 100%; height: 100%; object-fit: cover; position: absolute; inset: 0; }
     .scan-cancel { position: absolute; top: 8px; left: 8px; z-index: 3; background: var(--danger); color: #fff; min-height: 34px; padding: 6px 14px; }
     .scan-status { position: absolute; bottom: 8px; left: 0; right: 0; text-align: center; color: var(--green); font-size: 12px; z-index: 3; text-shadow: 0 0 4px #000; }
-    .qr-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.92); z-index: 1500; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; }
+    .qr-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.92); z-index: 1500; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 8px; }
     .qr-label { color: var(--text); font-size: 13px; text-align: center; max-width: 360px; margin-bottom: 14px; line-height: 1.5; }
-    .qr-box { background: #fff; padding: 12px; border-radius: 8px; width: min(84vw, 380px); }
+    .qr-box { background: #fff; padding: 10px; border-radius: 8px; width: min(calc(100vw - 16px), calc(100vh - 150px), 560px); }
     .qr-box svg { display: block; width: 100%; height: auto; }
     .qr-timer { color: var(--text-dim); font-size: 12px; margin: 12px 0; }
     .bm-search { width: 100%; margin-bottom: 10px; }
@@ -14235,6 +14235,8 @@ const MIN_PASSPHRASE_LENGTH = 12
 const MIN_UNIQUE_CHARS = 6
 const QUESTION_COUNT = 3
 const DEFAULT_NICKNAME = 'My Master Key'
+const MAX_NICKNAME_LENGTH = 60
+const CONTROL_CHARS = /[\u0000-\u001f\u007f]+/g
 
 const SECURITY_QUESTIONS = [
   'Name of your first pet', 'Name of your favorite childhood toy', 'Your favorite childhood book',
@@ -14346,13 +14348,21 @@ async function getSavedPackage(masterKey) {
   const authRec = await getAuth()
   if (!authRec || !authRec.keyPackage || !authRec.keyPackageId) return null
   if (authRec.keyPackageId !== await keyIdFor(masterKey)) return null
-  return isKeyPackage(authRec.keyPackage) ? authRec.keyPackage : null
+  if (!isKeyPackage(authRec.keyPackage)) return null
+  return Object.assign({}, authRec.keyPackage, { nickname: cleanNickname(authRec.keyNickname) || DEFAULT_NICKNAME })
+}
+
+function cleanNickname(value) {
+  if (typeof value !== 'string') return ''
+  return value.replace(CONTROL_CHARS, ' ').trim().slice(0, MAX_NICKNAME_LENGTH).trim()
 }
 
 async function savePackage(masterKey, pkg) {
   const authRec = await getAuth() || {}
   authRec.keyPackage = pkg
   authRec.keyPackageId = await keyIdFor(masterKey)
+  const nickname = cleanNickname(pkg.nickname)
+  if (nickname) authRec.keyNickname = nickname
   await setAuth(authRec)
 }
 
@@ -14697,6 +14707,318 @@ function generatePassword(prefs, style) {
   return shuffleChars(chars).join('')
 }
 return Object.freeze({ "GEN_MIN_CHOICES": GEN_MIN_CHOICES, "GEN_MAX_CHOICES": GEN_MAX_CHOICES, "GEN_DEFAULT_MIN": GEN_DEFAULT_MIN, "GEN_DEFAULT_MAX": GEN_DEFAULT_MAX, "normalizePrefs": normalizePrefs, "generatePassword": generatePassword })
+})()
+
+__modules["extension/fountain.js"] = (function () {
+const FOUNTAIN_PREFIX = 'LVLT2'
+const LEGACY_PREFIX = 'LVLT'
+const CHUNK_BYTES = 300
+const LEGACY_CHUNK_BYTES = 700
+const MAX_CHUNK_BYTES = 4096
+const MAX_PAYLOAD_BYTES = 8 * 1024 * 1024
+const SEED_MODULUS = 2147483647
+const SEED_MULTIPLIER = 48271
+const MAX_INFLATED_BYTES = 32 * 1024 * 1024
+const ENCODING_PLAIN = 'j'
+const ENCODING_DEFLATE = 'z'
+const COMPRESSION_FORMAT = 'deflate-raw'
+const QR_FRAME_MS = 400
+const DIGITS = /^[0-9]+$/
+const MIX_STEP = 0x9e3779b9
+const MIX_MULTIPLIER_A = 0x85ebca6b
+const MIX_MULTIPLIER_B = 0xc2b2ae35
+const UINT32_RANGE = 4294967296
+const DENSE_PICK_CHANCE = 0.5
+
+function makeRng(seed) {
+  let state = seed % SEED_MODULUS
+  if (state <= 0) state += SEED_MODULUS - 1
+  return function next() {
+    state = (state * SEED_MULTIPLIER) % SEED_MODULUS
+    return state / SEED_MODULUS
+  }
+}
+
+function solitonDegree(rng, chunkCount) {
+  const pivot = 1 / chunkCount
+  const roll = rng()
+  if (roll < pivot) return 1
+  let cumulative = pivot
+  for (let d = 2; d <= chunkCount; d++) {
+    cumulative += 1 / (d * (d - 1))
+    if (roll < cumulative) return d
+  }
+  return chunkCount
+}
+
+function pickChunks(rng, chunkCount, degree) {
+  const picked = new Set()
+  while (picked.size < degree) {
+    picked.add(Math.floor(rng() * chunkCount))
+  }
+  return Array.from(picked)
+}
+
+function makeMixedRng(seed) {
+  let state = seed >>> 0
+  return function next() {
+    state = (state + MIX_STEP) >>> 0
+    let z = state
+    z = Math.imul(z ^ (z >>> 16), MIX_MULTIPLIER_A) >>> 0
+    z = Math.imul(z ^ (z >>> 13), MIX_MULTIPLIER_B) >>> 0
+    z = (z ^ (z >>> 16)) >>> 0
+    return z / UINT32_RANGE
+  }
+}
+
+function denseChunks(rng, chunkCount) {
+  const picked = []
+  for (let i = 0; i < chunkCount; i++) {
+    if (rng() < DENSE_PICK_CHANCE) picked.push(i)
+  }
+  if (picked.length === 0) picked.push(Math.floor(rng() * chunkCount))
+  return picked
+}
+
+function frameIndices(systematic, seed, chunkCount) {
+  if (systematic) {
+    if (seed <= chunkCount) return [seed - 1]
+    return denseChunks(makeMixedRng(seed), chunkCount)
+  }
+  const rng = makeRng(seed)
+  const degree = solitonDegree(rng, chunkCount)
+  return pickChunks(rng, chunkCount, degree)
+}
+
+function stringToBytes(text) {
+  return new TextEncoder().encode(text)
+}
+
+function bytesToString(bytes) {
+  return new TextDecoder().decode(bytes)
+}
+
+function splitChunks(bytes, chunkBytes) {
+  const chunks = []
+  for (let i = 0; i < bytes.length; i += chunkBytes) {
+    const chunk = new Uint8Array(chunkBytes)
+    chunk.set(bytes.slice(i, i + chunkBytes))
+    chunks.push(chunk)
+  }
+  return chunks
+}
+
+function xorInto(target, source) {
+  for (let i = 0; i < target.length; i++) {
+    target[i] = target[i] ^ source[i]
+  }
+}
+
+function bytesToBase64(bytes) {
+  let binary = ''
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i])
+  }
+  return btoa(binary)
+}
+
+function base64ToBytes(text) {
+  const binary = atob(text)
+  const bytes = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i)
+  }
+  return bytes
+}
+
+async function deflate(bytes) {
+  if (typeof CompressionStream !== 'function') return null
+  try {
+    const stream = new Blob([bytes]).stream().pipeThrough(new CompressionStream(COMPRESSION_FORMAT))
+    return new Uint8Array(await new Response(stream).arrayBuffer())
+  } catch (e) {
+    return null
+  }
+}
+
+async function inflate(bytes) {
+  if (typeof DecompressionStream !== 'function') throw new Error('This device cannot read compressed codes')
+  const reader = new Blob([bytes]).stream().pipeThrough(new DecompressionStream(COMPRESSION_FORMAT)).getReader()
+  const parts = []
+  let total = 0
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    total += value.length
+    if (total > MAX_INFLATED_BYTES) {
+      try { await reader.cancel() } catch (e) {}
+      throw new Error('Code is too large')
+    }
+    parts.push(value)
+  }
+  const out = new Uint8Array(total)
+  let offset = 0
+  for (const part of parts) {
+    out.set(part, offset)
+    offset += part.length
+  }
+  return out
+}
+
+async function createEncoder(payload) {
+  const plain = stringToBytes(payload)
+  if (plain.length === 0) throw new Error('Nothing to send')
+  const packed = await deflate(plain)
+  const useDeflate = !!packed && packed.length < plain.length
+  const bytes = useDeflate ? packed : plain
+  const encoding = useDeflate ? ENCODING_DEFLATE : ENCODING_PLAIN
+  const chunks = splitChunks(bytes, CHUNK_BYTES)
+  const chunkCount = chunks.length
+  const payloadLength = bytes.length
+  let blockSeed = 1
+
+  function nextFrame() {
+    const seed = blockSeed
+    blockSeed++
+    const combined = new Uint8Array(CHUNK_BYTES)
+    for (const index of frameIndices(true, seed, chunkCount)) {
+      xorInto(combined, chunks[index])
+    }
+    const header = FOUNTAIN_PREFIX + ':' + CHUNK_BYTES + ':' + encoding + ':' + chunkCount + ':' + payloadLength + ':' + seed + ':'
+    return header + bytesToBase64(combined)
+  }
+
+  return { nextFrame, chunkCount }
+}
+
+function readInt(text) {
+  if (!DIGITS.test(text)) return null
+  const value = parseInt(text, 10)
+  return Number.isSafeInteger(value) ? value : null
+}
+
+function parseFrame(frameText) {
+  if (typeof frameText !== 'string') return { success: false, error: 'Not a fountain frame' }
+  let systematic
+  let encoding
+  let parts
+  if (frameText.startsWith(FOUNTAIN_PREFIX + ':')) {
+    systematic = true
+    parts = frameText.slice(FOUNTAIN_PREFIX.length + 1).split(':')
+    if (parts.length !== 6) return { success: false, error: 'Damaged frame' }
+    encoding = parts.splice(1, 1)[0]
+    if (encoding !== ENCODING_PLAIN && encoding !== ENCODING_DEFLATE) return { success: false, error: 'Damaged frame' }
+  } else if (frameText.startsWith(LEGACY_PREFIX + ':')) {
+    systematic = false
+    encoding = ENCODING_PLAIN
+    parts = frameText.slice(LEGACY_PREFIX.length + 1).split(':')
+    if (parts.length !== 4) return { success: false, error: 'Damaged frame' }
+    parts.unshift(String(LEGACY_CHUNK_BYTES))
+  } else {
+    return { success: false, error: 'Not a fountain frame' }
+  }
+  const chunkBytes = readInt(parts[0])
+  const chunkCount = readInt(parts[1])
+  const payloadLength = readInt(parts[2])
+  const seed = readInt(parts[3])
+  if (!chunkBytes || !chunkCount || !payloadLength || !seed) return { success: false, error: 'Damaged frame' }
+  if (chunkBytes > MAX_CHUNK_BYTES || payloadLength > MAX_PAYLOAD_BYTES) return { success: false, error: 'Damaged frame' }
+  if (chunkCount !== Math.ceil(payloadLength / chunkBytes)) return { success: false, error: 'Damaged frame' }
+  let data
+  try { data = base64ToBytes(parts[4]) } catch (e) { return { success: false, error: 'Damaged frame' } }
+  if (data.length !== chunkBytes) return { success: false, error: 'Damaged frame' }
+  return { success: true, systematic, encoding, chunkBytes, chunkCount, payloadLength, seed, data }
+}
+
+function createDecoder() {
+  const rows = new Map()
+  const seenSeeds = new Set()
+  let stream = null
+  let words = 0
+
+  function maskFor(indices) {
+    const mask = new Uint32Array(words)
+    for (const index of indices) mask[index >>> 5] ^= (1 << (index & 31)) >>> 0
+    return mask
+  }
+
+  function hasBit(mask, index) {
+    return ((mask[index >>> 5] >>> (index & 31)) & 1) === 1
+  }
+
+  function xorMask(target, source) {
+    for (let i = 0; i < target.length; i++) target[i] = (target[i] ^ source[i]) >>> 0
+  }
+
+  function addRow(mask, data) {
+    for (let index = 0; index < stream.chunkCount; index++) {
+      if (!hasBit(mask, index)) continue
+      const row = rows.get(index)
+      if (!row) {
+        rows.set(index, { mask, data })
+        return
+      }
+      xorMask(mask, row.mask)
+      xorInto(data, row.data)
+    }
+  }
+
+  function solve() {
+    const solved = new Array(stream.chunkCount)
+    for (let index = stream.chunkCount - 1; index >= 0; index--) {
+      const row = rows.get(index)
+      const data = new Uint8Array(row.data)
+      for (let other = index + 1; other < stream.chunkCount; other++) {
+        if (hasBit(row.mask, other)) xorInto(data, solved[other])
+      }
+      solved[index] = data
+    }
+    return solved
+  }
+
+  function status() {
+    return { success: true, complete: rows.size === stream.chunkCount, solved: rows.size, total: stream.chunkCount }
+  }
+
+  function addFrame(frameText) {
+    const parsed = parseFrame(frameText)
+    if (!parsed.success) return { success: false, error: parsed.error }
+
+    if (stream === null) {
+      stream = { systematic: parsed.systematic, encoding: parsed.encoding, chunkBytes: parsed.chunkBytes, chunkCount: parsed.chunkCount, payloadLength: parsed.payloadLength }
+      words = Math.ceil(stream.chunkCount / 32)
+    } else if (stream.systematic !== parsed.systematic || stream.encoding !== parsed.encoding || stream.chunkBytes !== parsed.chunkBytes || stream.chunkCount !== parsed.chunkCount || stream.payloadLength !== parsed.payloadLength) {
+      return { success: false, error: 'Frame from a different code' }
+    }
+
+    if (seenSeeds.has(parsed.seed) || rows.size === stream.chunkCount) return status()
+    seenSeeds.add(parsed.seed)
+
+    addRow(maskFor(frameIndices(stream.systematic, parsed.seed, stream.chunkCount)), new Uint8Array(parsed.data))
+    return status()
+  }
+
+  async function assemble() {
+    if (stream === null || rows.size !== stream.chunkCount) {
+      return { success: false, error: 'Incomplete' }
+    }
+    const solved = solve()
+    const full = new Uint8Array(stream.chunkCount * stream.chunkBytes)
+    for (let i = 0; i < stream.chunkCount; i++) {
+      full.set(solved[i], i * stream.chunkBytes)
+    }
+    const bytes = full.slice(0, stream.payloadLength)
+    if (stream.encoding === ENCODING_PLAIN) return { success: true, payload: bytesToString(bytes) }
+    try {
+      return { success: true, payload: bytesToString(await inflate(bytes)) }
+    } catch (e) {
+      return { success: false, error: 'That code could not be read. Scan it again.' }
+    }
+  }
+
+  return { addFrame, assemble }
+}
+return Object.freeze({ "createEncoder": createEncoder, "createDecoder": createDecoder, "QR_FRAME_MS": QR_FRAME_MS })
 })()
 
 __modules["extension/qrcode.js"] = (function () {
@@ -15115,207 +15437,68 @@ QRCode.prototype.save = function(file, callback) {
 return Object.freeze({ "default": QRCode })
 })()
 
-__modules["extension/fountain.js"] = (function () {
-const FOUNTAIN_PREFIX = 'LVLT'
-const CHUNK_BYTES = 700
-const SEED_MODULUS = 2147483647
-const SEED_MULTIPLIER = 48271
+__modules["extension/qrtools.js"] = (function () {
+const QRCode = __modules["extension/qrcode.js"].default
+const CAMERA_IDEAL_WIDTH = 1280
+const CAMERA_IDEAL_HEIGHT = 720
+const MAX_SCAN_SIDE = 960
+const QUIET_MODULES = 4
+const QR_ECL = 'M'
 
-function makeRng(seed) {
-  let state = seed % SEED_MODULUS
-  if (state <= 0) state += SEED_MODULUS - 1
-  return function next() {
-    state = (state * SEED_MULTIPLIER) % SEED_MODULUS
-    return state / SEED_MODULUS
-  }
-}
-
-function solitonDegree(rng, chunkCount) {
-  const pivot = 1 / chunkCount
-  const roll = rng()
-  if (roll < pivot) return 1
-  let cumulative = pivot
-  for (let d = 2; d <= chunkCount; d++) {
-    cumulative += 1 / (d * (d - 1))
-    if (roll < cumulative) return d
-  }
-  return chunkCount
-}
-
-function pickChunks(rng, chunkCount, degree) {
-  const picked = new Set()
-  while (picked.size < degree) {
-    picked.add(Math.floor(rng() * chunkCount))
-  }
-  return Array.from(picked)
-}
-
-function stringToBytes(text) {
-  return new TextEncoder().encode(text)
-}
-
-function bytesToString(bytes) {
-  return new TextDecoder().decode(bytes)
-}
-
-function splitChunks(bytes) {
-  const chunks = []
-  for (let i = 0; i < bytes.length; i += CHUNK_BYTES) {
-    const chunk = new Uint8Array(CHUNK_BYTES)
-    chunk.set(bytes.slice(i, i + CHUNK_BYTES))
-    chunks.push(chunk)
-  }
-  return chunks
-}
-
-function xorInto(target, source) {
-  for (let i = 0; i < CHUNK_BYTES; i++) {
-    target[i] = target[i] ^ source[i]
-  }
-}
-
-function bytesToBase64(bytes) {
-  let binary = ''
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i])
-  }
-  return btoa(binary)
-}
-
-function base64ToBytes(text) {
-  const binary = atob(text)
-  const bytes = new Uint8Array(binary.length)
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i)
-  }
-  return bytes
-}
-
-function createEncoder(payload) {
-  const bytes = stringToBytes(payload)
-  const chunks = splitChunks(bytes)
-  const chunkCount = chunks.length
-  const payloadLength = bytes.length
-  let blockSeed = 1
-
-  function nextFrame() {
-    const seed = blockSeed
-    blockSeed++
-    const rng = makeRng(seed)
-    const degree = solitonDegree(rng, chunkCount)
-    const indices = pickChunks(rng, chunkCount, degree)
-
-    const combined = new Uint8Array(CHUNK_BYTES)
-    for (const index of indices) {
-      xorInto(combined, chunks[index])
-    }
-
-    const header = FOUNTAIN_PREFIX + ':' + chunkCount + ':' + payloadLength + ':' + seed + ':'
-    return header + bytesToBase64(combined)
-  }
-
-  return { nextFrame, chunkCount }
-}
-
-function parseFrame(frameText) {
-  if (!frameText.startsWith(FOUNTAIN_PREFIX + ':')) {
-    return { success: false, error: 'Not a fountain frame' }
-  }
-  const body = frameText.slice(FOUNTAIN_PREFIX.length + 1)
-  const firstColon = body.indexOf(':')
-  const secondColon = body.indexOf(':', firstColon + 1)
-  const thirdColon = body.indexOf(':', secondColon + 1)
-
-  const chunkCount = parseInt(body.slice(0, firstColon), 10)
-  const payloadLength = parseInt(body.slice(firstColon + 1, secondColon), 10)
-  const seed = parseInt(body.slice(secondColon + 1, thirdColon), 10)
-  const data = base64ToBytes(body.slice(thirdColon + 1))
-
-  return { success: true, chunkCount, payloadLength, seed, data }
-}
-
-function createDecoder() {
-  const solved = new Map()
-  const pending = []
-  let chunkCount = null
-  let payloadLength = null
-
-  function reduce(indices, data) {
-    let workingIndices = indices.slice()
-    let workingData = new Uint8Array(data)
-
-    let changed = true
-    while (changed) {
-      changed = false
-      const remaining = []
-      for (const index of workingIndices) {
-        if (solved.has(index)) {
-          xorInto(workingData, solved.get(index))
-          changed = true
-        } else {
-          remaining.push(index)
-        }
-      }
-      workingIndices = remaining
-    }
-    return { indices: workingIndices, data: workingData }
-  }
-
-  function propagate() {
-    let progress = true
-    while (progress) {
-      progress = false
-      for (let i = pending.length - 1; i >= 0; i--) {
-        const reduced = reduce(pending[i].indices, pending[i].data)
-        pending[i].indices = reduced.indices
-        pending[i].data = reduced.data
-        if (reduced.indices.length === 1) {
-          const index = reduced.indices[0]
-          if (!solved.has(index)) {
-            solved.set(index, reduced.data)
-            progress = true
-          }
-          pending.splice(i, 1)
-        } else if (reduced.indices.length === 0) {
-          pending.splice(i, 1)
-        }
-      }
+function qrSvg(text) {
+  const modules = new QRCode({ content: text, padding: 0, ecl: QR_ECL }).qrcode.modules
+  const count = modules.length
+  let path = ''
+  for (let row = 0; row < count; row++) {
+    let col = 0
+    while (col < count) {
+      if (!modules[row][col]) { col++; continue }
+      let end = col
+      while (end < count && modules[row][end]) end++
+      path += 'M' + col + ' ' + row + 'h' + (end - col) + 'v1h-' + (end - col) + 'z'
+      col = end
     }
   }
-
-  function addFrame(frameText) {
-    const parsed = parseFrame(frameText)
-    if (!parsed.success) return { success: false, error: parsed.error }
-
-    if (chunkCount === null) {
-      chunkCount = parsed.chunkCount
-      payloadLength = parsed.payloadLength
-    }
-
-    const rng = makeRng(parsed.seed)
-    const degree = solitonDegree(rng, chunkCount)
-    const indices = pickChunks(rng, chunkCount, degree)
-
-    pending.push({ indices, data: parsed.data })
-    propagate()
-
-    return { success: true, complete: solved.size === chunkCount, solved: solved.size, total: chunkCount }
-  }
-
-  function assemble() {
-    if (chunkCount === null || solved.size !== chunkCount) {
-      return { success: false, error: 'Incomplete' }
-    }
-    const full = new Uint8Array(chunkCount * CHUNK_BYTES)
-    for (let i = 0; i < chunkCount; i++) {
-      full.set(solved.get(i), i * CHUNK_BYTES)
-    }
-    return { success: true, payload: bytesToString(full.slice(0, payloadLength)) }
-  }
-
-  return { addFrame, assemble }
+  const size = count + QUIET_MODULES * 2
+  return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="' + (-QUIET_MODULES) + ' ' + (-QUIET_MODULES) + ' ' + size + ' ' + size + '" shape-rendering="crispEdges">' +
+    '<rect x="' + (-QUIET_MODULES) + '" y="' + (-QUIET_MODULES) + '" width="' + size + '" height="' + size + '" fill="#ffffff"/>' +
+    '<path d="' + path + '" fill="#000000"/></svg>'
 }
-return Object.freeze({ "createEncoder": createEncoder, "createDecoder": createDecoder, "CHUNK_BYTES": CHUNK_BYTES })
+
+async function openCamera() {
+  let stream
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment', width: { ideal: CAMERA_IDEAL_WIDTH }, height: { ideal: CAMERA_IDEAL_HEIGHT } }
+    })
+  } catch (e) {
+    if (!e || (e.name !== 'OverconstrainedError' && e.name !== 'ConstraintNotSatisfiedError')) throw e
+    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+  }
+  try {
+    const track = stream.getVideoTracks()[0]
+    const caps = track && track.getCapabilities ? track.getCapabilities() : null
+    if (caps && Array.isArray(caps.focusMode) && caps.focusMode.includes('continuous')) {
+      await track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] })
+    }
+  } catch (e) {}
+  return stream
+}
+
+function readCode(video, canvas, ctx) {
+  const width = video.videoWidth
+  const height = video.videoHeight
+  if (!width || !height) return null
+  const side = Math.min(width, height)
+  const out = Math.min(side, MAX_SCAN_SIDE)
+  if (canvas.width !== out) canvas.width = out
+  if (canvas.height !== out) canvas.height = out
+  ctx.drawImage(video, (width - side) / 2, (height - side) / 2, side, side, 0, 0, out, out)
+  const img = ctx.getImageData(0, 0, out, out)
+  const code = window.jsQR(img.data, out, out, { inversionAttempts: 'dontInvert' })
+  return code && code.data ? code.data : null
+}
+return Object.freeze({ "qrSvg": qrSvg, "openCamera": openCamera, "readCode": readCode })
 })()
 
 __modules["extension/dialogs.js"] = (function () {
@@ -15659,8 +15842,8 @@ const store = __modules["extension/store.js"]
 const keypackage = __modules["extension/keypackage.js"]
 const vaultFile = __modules["extension/vaultfile.js"]
 const generator = __modules["extension/generator.js"]
-const QRCode = __modules["extension/qrcode.js"].default
-const { createEncoder, createDecoder } = __modules["extension/fountain.js"]
+const { createEncoder, createDecoder, QR_FRAME_MS } = __modules["extension/fountain.js"]
+const { qrSvg, openCamera, readCode } = __modules["extension/qrtools.js"]
 const { generateMasterKey, masterKeyToCryptoKey } = __modules["extension/crypto.js"]
 const { formDialog, confirmDialog, askSecret, closeAllDialogs } = __modules["extension/dialogs.js"]
 const platform = __modules["phone/platform.js"]
@@ -15672,12 +15855,14 @@ const AUTOLOCK_DEFAULT_SEC = 60
 const QR_TIMEOUT_MIN_SEC = 5
 const QR_TIMEOUT_MAX_SEC = 600
 const QR_TIMEOUT_DEFAULT_SEC = 30
-const QR_FRAME_MS = 300
-const QR_SIZE = 320
 const MSG_SHOW_MS = 6000
 const ACTIVITY_EVENTS = ['touchstart', 'click', 'input', 'keydown', 'scroll']
 const MASK = '••••••••'
 const DEFAULT_NICKNAME = 'My Master Key'
+const GLOBE_SPIN_PER_MS = 0.0003
+const GLOBE_EARLY_MARGIN = '240px 0px 240px 0px'
+const DEAD_FINGERPRINT_CODES = ['missing', 'invalidated']
+const FINGERPRINT_RESET_TEXT = 'Android reset fingerprint unlock on this phone, so the old fingerprint setting was removed. Tap Enroll under Fingerprint to set it up again.'
 const PASSWORD_RULE_TEXT = '12+ characters with a letter, a number, and a symbol.'
 const PASSPHRASE_TIP = 'Use four or more random words plus a number and a symbol, like copper-lantern-mosaic-drift7!. Capitalization matters.'
 const ANSWER_TIP = 'One word. Capitalization matters.'
@@ -15695,10 +15880,14 @@ const state = {
   setup: { masterKey: null, hasFp: false, hasPw: false },
   scan: null,
   share: null,
+  shareToken: null,
   tab: 'manage',
+  deadFingerprint: null,
   bookmarkFilter: '',
   msgTimers: new Map()
 }
+
+const GLOBES = { visible: new Set(), raf: null, start: performance.now() }
 
 function $(id) {
   return document.getElementById(id)
@@ -15815,6 +16004,20 @@ async function removeNativeFingerprint() {
   return result
 }
 
+function noteFingerprintResult(record, result) {
+  if (!result.success && record && DEAD_FINGERPRINT_CODES.includes(result.code)) state.deadFingerprint = record.wrapped
+}
+
+async function clearDeadFingerprint() {
+  const dead = state.deadFingerprint
+  state.deadFingerprint = null
+  if (!dead) return false
+  const record = await getNativeRecord()
+  if (!record || record.wrapped !== dead) return false
+  const result = await removeNativeFingerprint()
+  return !!result.success
+}
+
 function fingerprintFailureText(result) {
   if (!result) return 'Fingerprint did not complete.'
   if (result.code === 'cancelled') return 'Fingerprint was cancelled.'
@@ -15828,11 +16031,42 @@ async function newMasterKey() {
   return masterKeyToCryptoKey(await generateMasterKey())
 }
 
-function startGlobes() {
-  for (const cv of document.querySelectorAll('canvas.globe')) drawGlobe(cv)
+function globeAngle(now) {
+  return (now - GLOBES.start) * GLOBE_SPIN_PER_MS
 }
 
-function drawGlobe(cv) {
+function globeTick(now) {
+  const angle = globeAngle(now)
+  for (const draw of GLOBES.visible) draw(angle)
+  GLOBES.raf = GLOBES.visible.size ? requestAnimationFrame(globeTick) : null
+}
+
+function startGlobes() {
+  const canvases = Array.from(document.querySelectorAll('canvas.globe'))
+  const draws = new Map()
+  for (const cv of canvases) draws.set(cv, makeGlobe(cv))
+  if (typeof IntersectionObserver !== 'function') {
+    for (const draw of draws.values()) GLOBES.visible.add(draw)
+    GLOBES.raf = requestAnimationFrame(globeTick)
+    return
+  }
+  const observer = new IntersectionObserver((entries) => {
+    for (const entry of entries) {
+      const draw = draws.get(entry.target)
+      if (!draw) continue
+      if (entry.isIntersecting) {
+        if (!GLOBES.visible.has(draw)) draw(globeAngle(performance.now()))
+        GLOBES.visible.add(draw)
+      } else {
+        GLOBES.visible.delete(draw)
+      }
+    }
+    if (GLOBES.visible.size && GLOBES.raf === null) GLOBES.raf = requestAnimationFrame(globeTick)
+  }, { rootMargin: GLOBE_EARLY_MARGIN })
+  for (const cv of canvases) observer.observe(cv)
+}
+
+function makeGlobe(cv) {
   const ctx = cv.getContext('2d')
   const CX = 90
   const CY = 90
@@ -15843,7 +16077,6 @@ function drawGlobe(cv) {
   const SEG = 48
   const VT = -38
   const VB = 44
-  let ang = 0
   const rotY = (p, a) => { const c = Math.cos(a), s = Math.sin(a); return { x: p.x * c + p.z * s, y: p.y, z: -p.x * s + p.z * c } }
   const rotX = (p, a) => { const c = Math.cos(a), s = Math.sin(a); return { x: p.x, y: p.y * c - p.z * s, z: p.y * s + p.z * c } }
   const lats = []
@@ -15911,24 +16144,19 @@ function drawGlobe(cv) {
     ctx.stroke(path)
     ctx.restore()
   }
-  const frame = () => {
-    if (cv.offsetParent !== null) {
-      ctx.clearRect(0, 0, cv.width, cv.height)
-      for (const ring of lats) drawWire(ring, ang, 'back')
-      for (const mer of lons) drawWire(mer, ang, 'back')
-      drawV()
-      for (const ring of lats) drawWire(ring, ang, 'front')
-      for (const mer of lons) drawWire(mer, ang, 'front')
-      ctx.strokeStyle = '#33ff66'
-      ctx.lineWidth = 1.5
-      ctx.beginPath()
-      ctx.arc(CX, CY, R, 0, 2 * Math.PI)
-      ctx.stroke()
-      ang += 0.005
-    }
-    requestAnimationFrame(frame)
+  return (ang) => {
+    ctx.clearRect(0, 0, cv.width, cv.height)
+    for (const ring of lats) drawWire(ring, ang, 'back')
+    for (const mer of lons) drawWire(mer, ang, 'back')
+    drawV()
+    for (const ring of lats) drawWire(ring, ang, 'front')
+    for (const mer of lons) drawWire(mer, ang, 'front')
+    ctx.strokeStyle = '#33ff66'
+    ctx.lineWidth = 1.5
+    ctx.beginPath()
+    ctx.arc(CX, CY, R, 0, 2 * Math.PI)
+    ctx.stroke()
   }
-  frame()
 }
 
 function showView(name) {
@@ -15959,15 +16187,23 @@ async function promptAuth() {
   const status = await auth.initAuth()
   let note = 'Enter your master password.'
   if (status.hasFingerprint) {
-    const r = await platform.biometricUnlock(await getNativeRecord())
+    const record = await getNativeRecord()
+    const r = await platform.biometricUnlock(record)
     if (r.success) return { success: true, masterKey: r.masterKey }
+    noteFingerprintResult(record, r)
     note = fingerprintFailureText(r) + ' Enter your master password instead.'
   }
   if (!status.hasPassword) return { success: false }
   const pw = await askSecret('Unlock', 'Master password', note)
   if (!pw) return { success: false }
   const result = await auth.authenticatePassword(pw)
-  if (result.success) return { success: true, masterKey: result.masterKey }
+  if (result.success) {
+    if (await clearDeadFingerprint()) {
+      if (key()) loadAuthStatus()
+      showMsg('msg-manage', FINGERPRINT_RESET_TEXT, 'info')
+    }
+    return { success: true, masterKey: result.masterKey }
+  }
   return { success: false, error: result.error }
 }
 
@@ -16288,8 +16524,10 @@ async function openKeyFileInto(msgId, recovering) {
 }
 
 async function unlockWithFingerprint() {
-  const r = await platform.biometricUnlock(await getNativeRecord())
+  const record = await getNativeRecord()
+  const r = await platform.biometricUnlock(record)
   if (!r.success) {
+    noteFingerprintResult(record, r)
     const status = await auth.initAuth()
     if (status.hasPassword) {
       showMsg('msg-locked', fingerprintFailureText(r) + ' Unlock with your password.', 'error')
@@ -16312,7 +16550,10 @@ async function unlockWithPassword() {
   const result = await auth.authenticatePassword(pw)
   if (!result.success) { showMsg('msg-locked', result.error || 'Invalid password', 'error'); return }
   input.value = ''
+  const reset = await clearDeadFingerprint()
+  if (reset) state.tab = 'manage'
   await enterApp(result.masterKey)
+  if (reset) showMsg('msg-manage', FINGERPRINT_RESET_TEXT, 'info')
 }
 
 function showTab(name) {
@@ -16952,6 +17193,7 @@ function refreshAfterSync() {
 function stopShare() {
   const s = state.share
   state.share = null
+  state.shareToken = null
   if (s) {
     clearInterval(s.frameTimer)
     clearInterval(s.countdown)
@@ -16961,16 +17203,18 @@ function stopShare() {
   $('qr-overlay').classList.add('hidden')
 }
 
-function streamShare(payload, label) {
+async function streamShare(payload, label) {
   stopShare()
-  const encoder = createEncoder(payload)
+  const token = {}
+  state.shareToken = token
+  const encoder = await createEncoder(payload)
+  if (state.shareToken !== token || !key()) return
   const container = $('share-qr')
   const timerEl = $('share-qr-timer')
   $('share-qr-label').textContent = label
   $('qr-overlay').classList.remove('hidden')
   const renderNext = () => {
-    const qr = new QRCode({ content: encoder.nextFrame(), width: QR_SIZE, height: QR_SIZE, padding: 2, color: '#000000', background: '#ffffff' })
-    container.innerHTML = qr.svg()
+    container.innerHTML = qrSvg(encoder.nextFrame())
   }
   renderNext()
   let remaining = state.settings.qrTimeout
@@ -17019,7 +17263,7 @@ async function startScanner(box, onPayload, msgId) {
   box.appendChild(cancel)
   box.appendChild(status)
   try {
-    scan.stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+    scan.stream = await openCamera()
     if (scan.settled) { scan.stream.getTracks().forEach((t) => t.stop()); return }
     video.srcObject = scan.stream
     await video.play()
@@ -17027,20 +17271,19 @@ async function startScanner(box, onPayload, msgId) {
       if (scan.settled) return
       session.resetActivity()
       if (video.readyState === video.HAVE_ENOUGH_DATA) {
-        canvas.width = video.videoWidth
-        canvas.height = video.videoHeight
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
-        const img = ctx.getImageData(0, 0, canvas.width, canvas.height)
-        const code = window.jsQR(img.data, img.width, img.height, { inversionAttempts: 'dontInvert' })
-        if (code && code.data) {
-          const outcome = decoder.addFrame(code.data)
+        let text = null
+        try { text = readCode(video, canvas, ctx) } catch (e) {}
+        if (text) {
+          const outcome = decoder.addFrame(text)
           if (outcome.success) {
             status.textContent = 'Receiving: ' + outcome.solved + ' of ' + outcome.total
             if (outcome.complete) {
-              const assembled = decoder.assemble()
               stopScanner()
               showMsg(msgId, 'Received ' + outcome.total + ' of ' + outcome.total + ', importing...', 'info')
-              Promise.resolve(onPayload(assembled.payload)).catch((e) => showMsg(msgId, 'Import failed: ' + errText(e), 'error'))
+              decoder.assemble().then((assembled) => {
+                if (!assembled.success) throw new Error(assembled.error)
+                return onPayload(assembled.payload)
+              }).catch((e) => showMsg(msgId, 'Import failed: ' + errText(e), 'error'))
               return
             }
           }
@@ -17150,6 +17393,7 @@ async function acceptKeyPackage(pkg, sourceLabel) {
   const adopted = await adoptImportedKey(importedKey)
   if (adopted) {
     try { await keypackage.savePackage(importedKey, pkg) } catch (e) {}
+    $('key-nickname-input').value = await keypackage.getNickname()
   }
 }
 

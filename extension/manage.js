@@ -8,9 +8,9 @@ import * as walletsTab from './wallets-tab.js'
 import * as session from './session.js'
 import * as store from './store.js'
 import * as pairing from './pairing.js'
-import QRCode from './qrcode.js'
 import { splitIntoFrames, createFrameCollector } from './frames.js'
-import { createEncoder, createDecoder } from './fountain.js'
+import { createEncoder, createDecoder, QR_FRAME_MS } from './fountain.js'
+import { qrSvg, openCamera, readCode } from './qrtools.js'
 import { masterKeyToCryptoKey, decrypt } from './crypto.js'
 import { formDialog, askSecret } from './dialogs.js'
 import * as keypackage from './keypackage.js'
@@ -1099,8 +1099,9 @@ async function getQrTimeoutSeconds() {
 }
 
 
-let shareFountainTimer = null, shareCountdownTimer = null, shareShutoffTimer = null
+let shareFountainTimer = null, shareCountdownTimer = null, shareShutoffTimer = null, shareToken = null
 function stopShareFountain() {
+  shareToken = null
   if (shareFountainTimer) { clearInterval(shareFountainTimer); shareFountainTimer = null }
   if (shareCountdownTimer) { clearInterval(shareCountdownTimer); shareCountdownTimer = null }
   if (shareShutoffTimer) { clearTimeout(shareShutoffTimer); shareShutoffTimer = null }
@@ -1108,22 +1109,23 @@ function stopShareFountain() {
 }
 async function streamShare(payload, label) {
   stopShareFountain()
+  const token = {}
+  shareToken = token
   const wrap = document.getElementById('share-qr-wrap')
   const container = document.getElementById('share-qr')
   const labelEl = document.getElementById('share-qr-label')
   const timerEl = document.getElementById('share-qr-timer')
   if (!container) return
+  const encoder = await createEncoder(payload)
+  const seconds = await getQrTimeoutSeconds()
+  if (shareToken !== token) return
   if (labelEl) labelEl.textContent = label
   if (wrap) wrap.classList.remove('hidden')
-  const encoder = createEncoder(payload)
   function renderNext() {
-    const frame = encoder.nextFrame()
-    const qr = new QRCode({ content: frame, width: 256, height: 256, padding: 2, color: '#000000', background: '#ffffff' })
-    container.innerHTML = qr.svg()
+    container.innerHTML = qrSvg(encoder.nextFrame())
   }
   renderNext()
-  shareFountainTimer = setInterval(renderNext, 300)
-  const seconds = await getQrTimeoutSeconds()
+  shareFountainTimer = setInterval(renderNext, QR_FRAME_MS)
   let remaining = seconds
   if (timerEl) timerEl.textContent = 'Auto-closes in ' + remaining + 's'
   shareCountdownTimer = setInterval(function () {
@@ -1432,6 +1434,8 @@ async function acceptKeyPackage(pkg, sourceLabel) {
   const adopted = await adoptImportedKey(importedKey)
   if (adopted) {
     try { await keypackage.savePackage(importedKey, pkg) } catch (e) {}
+    const nickInput = document.getElementById('key-nickname-input')
+    if (nickInput) nickInput.value = await keypackage.getNickname()
   }
 }
 
@@ -1533,38 +1537,65 @@ async function lockWithDevice(importedKey, status) {
   }
 }
 
-async function settleBackupPassword(importedKey, status) {
-  if (!status.hasPassword) return ''
+async function planBackupPassword(status) {
+  if (!status.hasPassword) return { password: null, removePassword: false }
   const keep = window.confirm('Keep a master password on this browser as a backup unlock?\n\nOK: set the password for the imported key (you can reuse this browser\'s current password).\nCancel: turn password unlock off. You can add one later in Manage.')
   if (keep) {
     const pw = await askSecret('Backup password', 'Master password', 'Set the backup password for the imported key: 12+ characters with a letter, a number, and a symbol.')
-    if (pw && passwordMeetsRule(pw)) {
-      auth.startPasswordCreation()
-      const result = await auth.setPassword(pw, importedKey)
-      if (result.success) return ''
-    }
+    if (pw && passwordMeetsRule(pw)) return { password: pw, removePassword: false }
   }
-  await auth.removePassword()
-  return ' Password unlock is off on this browser until you set one in Manage.'
+  return { password: null, removePassword: true }
 }
 
-async function relinkFingerprint(importedKey, status) {
-  if (!status.hasFingerprint) return ''
-  let relinked = false
-  if (window.confirm('Relink fingerprint unlock to the imported key? You will be asked for your fingerprint or device PIN. Cancel turns fingerprint unlock off until you re-enroll it in Manage.')) {
-    const rewrapped = await auth.rewrapFingerprint(importedKey)
-    relinked = !!rewrapped.success
-    if (!relinked) {
-      try {
-        auth.startFingerprintEnrollment()
-        const fp = await auth.enrollFingerprint(importedKey)
-        relinked = !!fp.success
-      } catch (e) {}
-    }
+function planRelink(status) {
+  if (!status.hasFingerprint) return false
+  return window.confirm('Relink fingerprint unlock to the imported key? You will be asked for your fingerprint or device PIN. Cancel turns fingerprint unlock off until you re-enroll it in Manage.')
+}
+
+async function relinkFingerprint(importedKey) {
+  const rewrapped = await auth.rewrapFingerprint(importedKey)
+  if (rewrapped.success) return true
+  try {
+    auth.startFingerprintEnrollment()
+    const fp = await auth.enrollFingerprint(importedKey)
+    return !!fp.success
+  } catch (e) {
+    return false
   }
-  if (relinked) return ''
-  await auth.removeFingerprint()
-  return ' Fingerprint unlock is off until you re-enroll it in Manage.'
+}
+
+async function savePasswordWrap(password, importedKey) {
+  auth.startPasswordCreation()
+  return auth.setPassword(password, importedKey)
+}
+
+async function commitDeviceLock(importedKey, status, backup) {
+  if (!(await lockWithDevice(importedKey, status))) return { locked: false }
+  if (backup.password) {
+    const result = await savePasswordWrap(backup.password, importedKey)
+    if (result.success) return { locked: true, note: '' }
+    await auth.removePassword()
+    return { locked: true, note: ' The backup password could not be saved, so password unlock is off until you set one in Manage.' }
+  }
+  if (backup.removePassword) {
+    await auth.removePassword()
+    return { locked: true, note: ' Password unlock is off on this browser until you set one in Manage.' }
+  }
+  return { locked: true, note: '' }
+}
+
+async function commitPasswordLock(importedKey, status, password, relink) {
+  const relinked = relink ? await relinkFingerprint(importedKey) : false
+  const result = await savePasswordWrap(password, importedKey)
+  if (!result.success) {
+    if (relinked) await auth.removeFingerprint()
+    return { success: false, error: result.error }
+  }
+  if (status.hasFingerprint && !relinked) {
+    await auth.removeFingerprint()
+    return { success: true, note: ' Fingerprint unlock is off until you re-enroll it in Manage.' }
+  }
+  return { success: true, note: '' }
 }
 
 async function adoptImportedKey(importedKey) {
@@ -1587,28 +1618,29 @@ async function adoptImportedKey(importedKey) {
 
   let note = ''
   if (method === 'device') {
-    const locked = await lockWithDevice(importedKey, status)
-    if (!locked) {
+    const backup = await planBackupPassword(status)
+    const device = await commitDeviceLock(importedKey, status, backup)
+    if (device.locked) {
+      note = device.note
+    } else {
       if (!window.confirm('Fingerprint or device PIN did not complete. Lock the imported key with a master password instead?')) {
         syncMsg('Key import cancelled. Nothing changed.', 'error')
         return false
       }
       method = 'password'
-    } else {
-      if (!matches) await clearLocalVaultData()
-      note = await settleBackupPassword(importedKey, status)
     }
   }
 
   if (method === 'password') {
     const password = await choosePasswordForImport(status)
     if (!password) return false
-    if (!matches) await clearLocalVaultData()
-    auth.startPasswordCreation()
-    const result = await auth.setPassword(password, importedKey)
-    if (!result.success) { syncMsg('Could not save the imported key: ' + result.error, 'error'); return false }
-    note = await relinkFingerprint(importedKey, status)
+    const relink = planRelink(status)
+    const locked = await commitPasswordLock(importedKey, status, password, relink)
+    if (!locked.success) { syncMsg('Could not save the imported key: ' + locked.error, 'error'); return false }
+    note = locked.note
   }
+
+  if (!matches) await clearLocalVaultData()
 
   session.setMasterKey(importedKey)
   const raw = new Uint8Array(await crypto.subtle.exportKey('raw', importedKey))
@@ -1655,20 +1687,27 @@ const _qrScanBox = document.getElementById('qr-scan-box'); if (_qrScanBox) _qrSc
   }
   cancel.onclick = function (e) { if (e) { e.stopPropagation(); e.preventDefault() } cleanup(); syncMsg('Scan cancelled', 'success') }
   try {
-    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+    stream = await openCamera()
+    if (settled) { stream.getTracks().forEach(function (t) { t.stop() }); stream = null; return }
     video.srcObject = stream; await video.play()
     function tick() {
       if (settled) return
       if (video.readyState === video.HAVE_ENOUGH_DATA) {
-        canvas.width = video.videoWidth; canvas.height = video.videoHeight
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
-        const img = ctx.getImageData(0, 0, canvas.width, canvas.height)
-        const code = window.jsQR(img.data, img.width, img.height, { inversionAttempts: 'dontInvert' })
-        if (code && code.data) {
-          const outcome = decoder.addFrame(code.data)
+        let text = null
+        try { text = readCode(video, canvas, ctx) } catch (e) {}
+        if (text) {
+          const outcome = decoder.addFrame(text)
           if (outcome.success) {
             status.textContent = 'Receiving: ' + outcome.solved + ' of ' + outcome.total
-            if (outcome.complete) { const assembled = decoder.assemble(); cleanup(); syncMsg('Received ' + outcome.total + ' of ' + outcome.total + ', importing...', 'success'); handleImported(assembled.payload); return }
+            if (outcome.complete) {
+              cleanup()
+              syncMsg('Received ' + outcome.total + ' of ' + outcome.total + ', importing...', 'success')
+              decoder.assemble().then(function (assembled) {
+                if (!assembled.success) { syncMsg('Import failed: ' + assembled.error, 'error'); return }
+                handleImported(assembled.payload)
+              })
+              return
+            }
           }
         }
       }

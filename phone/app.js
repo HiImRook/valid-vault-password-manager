@@ -9,8 +9,8 @@ import * as store from '../extension/store.js'
 import * as keypackage from '../extension/keypackage.js'
 import * as vaultFile from '../extension/vaultfile.js'
 import * as generator from '../extension/generator.js'
-import QRCode from '../extension/qrcode.js'
-import { createEncoder, createDecoder } from '../extension/fountain.js'
+import { createEncoder, createDecoder, QR_FRAME_MS } from '../extension/fountain.js'
+import { qrSvg, openCamera, readCode } from '../extension/qrtools.js'
 import { generateMasterKey, masterKeyToCryptoKey } from '../extension/crypto.js'
 import { formDialog, confirmDialog, askSecret, closeAllDialogs } from '../extension/dialogs.js'
 import * as platform from './platform.js'
@@ -23,12 +23,14 @@ const AUTOLOCK_DEFAULT_SEC = 60
 const QR_TIMEOUT_MIN_SEC = 5
 const QR_TIMEOUT_MAX_SEC = 600
 const QR_TIMEOUT_DEFAULT_SEC = 30
-const QR_FRAME_MS = 300
-const QR_SIZE = 320
 const MSG_SHOW_MS = 6000
 const ACTIVITY_EVENTS = ['touchstart', 'click', 'input', 'keydown', 'scroll']
 const MASK = '••••••••'
 const DEFAULT_NICKNAME = 'My Master Key'
+const GLOBE_SPIN_PER_MS = 0.0003
+const GLOBE_EARLY_MARGIN = '240px 0px 240px 0px'
+const DEAD_FINGERPRINT_CODES = ['missing', 'invalidated']
+const FINGERPRINT_RESET_TEXT = 'Android reset fingerprint unlock on this phone, so the old fingerprint setting was removed. Tap Enroll under Fingerprint to set it up again.'
 const PASSWORD_RULE_TEXT = '12+ characters with a letter, a number, and a symbol.'
 const PASSPHRASE_TIP = 'Use four or more random words plus a number and a symbol, like copper-lantern-mosaic-drift7!. Capitalization matters.'
 const ANSWER_TIP = 'One word. Capitalization matters.'
@@ -46,10 +48,14 @@ const state = {
   setup: { masterKey: null, hasFp: false, hasPw: false },
   scan: null,
   share: null,
+  shareToken: null,
   tab: 'manage',
+  deadFingerprint: null,
   bookmarkFilter: '',
   msgTimers: new Map()
 }
+
+const GLOBES = { visible: new Set(), raf: null, start: performance.now() }
 
 function $(id) {
   return document.getElementById(id)
@@ -166,6 +172,20 @@ async function removeNativeFingerprint() {
   return result
 }
 
+function noteFingerprintResult(record, result) {
+  if (!result.success && record && DEAD_FINGERPRINT_CODES.includes(result.code)) state.deadFingerprint = record.wrapped
+}
+
+async function clearDeadFingerprint() {
+  const dead = state.deadFingerprint
+  state.deadFingerprint = null
+  if (!dead) return false
+  const record = await getNativeRecord()
+  if (!record || record.wrapped !== dead) return false
+  const result = await removeNativeFingerprint()
+  return !!result.success
+}
+
 function fingerprintFailureText(result) {
   if (!result) return 'Fingerprint did not complete.'
   if (result.code === 'cancelled') return 'Fingerprint was cancelled.'
@@ -179,11 +199,42 @@ async function newMasterKey() {
   return masterKeyToCryptoKey(await generateMasterKey())
 }
 
-function startGlobes() {
-  for (const cv of document.querySelectorAll('canvas.globe')) drawGlobe(cv)
+function globeAngle(now) {
+  return (now - GLOBES.start) * GLOBE_SPIN_PER_MS
 }
 
-function drawGlobe(cv) {
+function globeTick(now) {
+  const angle = globeAngle(now)
+  for (const draw of GLOBES.visible) draw(angle)
+  GLOBES.raf = GLOBES.visible.size ? requestAnimationFrame(globeTick) : null
+}
+
+function startGlobes() {
+  const canvases = Array.from(document.querySelectorAll('canvas.globe'))
+  const draws = new Map()
+  for (const cv of canvases) draws.set(cv, makeGlobe(cv))
+  if (typeof IntersectionObserver !== 'function') {
+    for (const draw of draws.values()) GLOBES.visible.add(draw)
+    GLOBES.raf = requestAnimationFrame(globeTick)
+    return
+  }
+  const observer = new IntersectionObserver((entries) => {
+    for (const entry of entries) {
+      const draw = draws.get(entry.target)
+      if (!draw) continue
+      if (entry.isIntersecting) {
+        if (!GLOBES.visible.has(draw)) draw(globeAngle(performance.now()))
+        GLOBES.visible.add(draw)
+      } else {
+        GLOBES.visible.delete(draw)
+      }
+    }
+    if (GLOBES.visible.size && GLOBES.raf === null) GLOBES.raf = requestAnimationFrame(globeTick)
+  }, { rootMargin: GLOBE_EARLY_MARGIN })
+  for (const cv of canvases) observer.observe(cv)
+}
+
+function makeGlobe(cv) {
   const ctx = cv.getContext('2d')
   const CX = 90
   const CY = 90
@@ -194,7 +245,6 @@ function drawGlobe(cv) {
   const SEG = 48
   const VT = -38
   const VB = 44
-  let ang = 0
   const rotY = (p, a) => { const c = Math.cos(a), s = Math.sin(a); return { x: p.x * c + p.z * s, y: p.y, z: -p.x * s + p.z * c } }
   const rotX = (p, a) => { const c = Math.cos(a), s = Math.sin(a); return { x: p.x, y: p.y * c - p.z * s, z: p.y * s + p.z * c } }
   const lats = []
@@ -262,24 +312,19 @@ function drawGlobe(cv) {
     ctx.stroke(path)
     ctx.restore()
   }
-  const frame = () => {
-    if (cv.offsetParent !== null) {
-      ctx.clearRect(0, 0, cv.width, cv.height)
-      for (const ring of lats) drawWire(ring, ang, 'back')
-      for (const mer of lons) drawWire(mer, ang, 'back')
-      drawV()
-      for (const ring of lats) drawWire(ring, ang, 'front')
-      for (const mer of lons) drawWire(mer, ang, 'front')
-      ctx.strokeStyle = '#33ff66'
-      ctx.lineWidth = 1.5
-      ctx.beginPath()
-      ctx.arc(CX, CY, R, 0, 2 * Math.PI)
-      ctx.stroke()
-      ang += 0.005
-    }
-    requestAnimationFrame(frame)
+  return (ang) => {
+    ctx.clearRect(0, 0, cv.width, cv.height)
+    for (const ring of lats) drawWire(ring, ang, 'back')
+    for (const mer of lons) drawWire(mer, ang, 'back')
+    drawV()
+    for (const ring of lats) drawWire(ring, ang, 'front')
+    for (const mer of lons) drawWire(mer, ang, 'front')
+    ctx.strokeStyle = '#33ff66'
+    ctx.lineWidth = 1.5
+    ctx.beginPath()
+    ctx.arc(CX, CY, R, 0, 2 * Math.PI)
+    ctx.stroke()
   }
-  frame()
 }
 
 function showView(name) {
@@ -310,15 +355,23 @@ async function promptAuth() {
   const status = await auth.initAuth()
   let note = 'Enter your master password.'
   if (status.hasFingerprint) {
-    const r = await platform.biometricUnlock(await getNativeRecord())
+    const record = await getNativeRecord()
+    const r = await platform.biometricUnlock(record)
     if (r.success) return { success: true, masterKey: r.masterKey }
+    noteFingerprintResult(record, r)
     note = fingerprintFailureText(r) + ' Enter your master password instead.'
   }
   if (!status.hasPassword) return { success: false }
   const pw = await askSecret('Unlock', 'Master password', note)
   if (!pw) return { success: false }
   const result = await auth.authenticatePassword(pw)
-  if (result.success) return { success: true, masterKey: result.masterKey }
+  if (result.success) {
+    if (await clearDeadFingerprint()) {
+      if (key()) loadAuthStatus()
+      showMsg('msg-manage', FINGERPRINT_RESET_TEXT, 'info')
+    }
+    return { success: true, masterKey: result.masterKey }
+  }
   return { success: false, error: result.error }
 }
 
@@ -639,8 +692,10 @@ async function openKeyFileInto(msgId, recovering) {
 }
 
 async function unlockWithFingerprint() {
-  const r = await platform.biometricUnlock(await getNativeRecord())
+  const record = await getNativeRecord()
+  const r = await platform.biometricUnlock(record)
   if (!r.success) {
+    noteFingerprintResult(record, r)
     const status = await auth.initAuth()
     if (status.hasPassword) {
       showMsg('msg-locked', fingerprintFailureText(r) + ' Unlock with your password.', 'error')
@@ -663,7 +718,10 @@ async function unlockWithPassword() {
   const result = await auth.authenticatePassword(pw)
   if (!result.success) { showMsg('msg-locked', result.error || 'Invalid password', 'error'); return }
   input.value = ''
+  const reset = await clearDeadFingerprint()
+  if (reset) state.tab = 'manage'
   await enterApp(result.masterKey)
+  if (reset) showMsg('msg-manage', FINGERPRINT_RESET_TEXT, 'info')
 }
 
 function showTab(name) {
@@ -1303,6 +1361,7 @@ function refreshAfterSync() {
 function stopShare() {
   const s = state.share
   state.share = null
+  state.shareToken = null
   if (s) {
     clearInterval(s.frameTimer)
     clearInterval(s.countdown)
@@ -1312,16 +1371,18 @@ function stopShare() {
   $('qr-overlay').classList.add('hidden')
 }
 
-function streamShare(payload, label) {
+async function streamShare(payload, label) {
   stopShare()
-  const encoder = createEncoder(payload)
+  const token = {}
+  state.shareToken = token
+  const encoder = await createEncoder(payload)
+  if (state.shareToken !== token || !key()) return
   const container = $('share-qr')
   const timerEl = $('share-qr-timer')
   $('share-qr-label').textContent = label
   $('qr-overlay').classList.remove('hidden')
   const renderNext = () => {
-    const qr = new QRCode({ content: encoder.nextFrame(), width: QR_SIZE, height: QR_SIZE, padding: 2, color: '#000000', background: '#ffffff' })
-    container.innerHTML = qr.svg()
+    container.innerHTML = qrSvg(encoder.nextFrame())
   }
   renderNext()
   let remaining = state.settings.qrTimeout
@@ -1370,7 +1431,7 @@ async function startScanner(box, onPayload, msgId) {
   box.appendChild(cancel)
   box.appendChild(status)
   try {
-    scan.stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+    scan.stream = await openCamera()
     if (scan.settled) { scan.stream.getTracks().forEach((t) => t.stop()); return }
     video.srcObject = scan.stream
     await video.play()
@@ -1378,20 +1439,19 @@ async function startScanner(box, onPayload, msgId) {
       if (scan.settled) return
       session.resetActivity()
       if (video.readyState === video.HAVE_ENOUGH_DATA) {
-        canvas.width = video.videoWidth
-        canvas.height = video.videoHeight
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
-        const img = ctx.getImageData(0, 0, canvas.width, canvas.height)
-        const code = window.jsQR(img.data, img.width, img.height, { inversionAttempts: 'dontInvert' })
-        if (code && code.data) {
-          const outcome = decoder.addFrame(code.data)
+        let text = null
+        try { text = readCode(video, canvas, ctx) } catch (e) {}
+        if (text) {
+          const outcome = decoder.addFrame(text)
           if (outcome.success) {
             status.textContent = 'Receiving: ' + outcome.solved + ' of ' + outcome.total
             if (outcome.complete) {
-              const assembled = decoder.assemble()
               stopScanner()
               showMsg(msgId, 'Received ' + outcome.total + ' of ' + outcome.total + ', importing...', 'info')
-              Promise.resolve(onPayload(assembled.payload)).catch((e) => showMsg(msgId, 'Import failed: ' + errText(e), 'error'))
+              decoder.assemble().then((assembled) => {
+                if (!assembled.success) throw new Error(assembled.error)
+                return onPayload(assembled.payload)
+              }).catch((e) => showMsg(msgId, 'Import failed: ' + errText(e), 'error'))
               return
             }
           }
@@ -1501,6 +1561,7 @@ async function acceptKeyPackage(pkg, sourceLabel) {
   const adopted = await adoptImportedKey(importedKey)
   if (adopted) {
     try { await keypackage.savePackage(importedKey, pkg) } catch (e) {}
+    $('key-nickname-input').value = await keypackage.getNickname()
   }
 }
 
