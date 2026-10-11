@@ -671,8 +671,9 @@ function parseKeyPayload(text) {
   }
   if (data && data.kind === 'key') return { error: 'Refused: this code carries an unprotected master key from an older version. Update the other device, or move the key with Export Key and Import Key.' }
   if (data && data.kind === 'vault') return { error: 'That is a vault code. Bring your master key first, then the vault.' }
-  if (keypackage.isKeyPackage(data)) return { pkg: data }
-  return { error: 'That is not a Valid Vault key.' }
+  const keyProblem = keypackage.keyFileProblem(data)
+  if (!keyProblem) return { pkg: data }
+  return { error: keyProblem === 'Not a key file' ? 'That is not a Valid Vault key.' : keyProblem }
 }
 
 function scanKeyInto(boxId, msgId, recovering) {
@@ -1762,7 +1763,8 @@ async function importKey() {
   if (!text) { showMsg('msg-sync', 'No file selected', 'error'); return }
   let fileObj = null
   try { fileObj = JSON.parse(text) } catch (e) { showMsg('msg-sync', 'Could not read the file', 'error'); return }
-  if (!keypackage.isKeyPackage(fileObj)) { showMsg('msg-sync', 'Not a key file', 'error'); return }
+  const keyProblem = keypackage.keyFileProblem(fileObj)
+  if (keyProblem) { showMsg('msg-sync', keyProblem, 'error'); return }
   if (!(await requireTransferAuth('msg-sync'))) return
   try { await acceptKeyPackage(fileObj, 'Key file') } catch (e) { showMsg('msg-sync', 'Key import failed: ' + errText(e), 'error') }
 }

@@ -1457,7 +1457,8 @@ const _btnImportKey = document.getElementById('btn-import-key'); if (_btnImportK
     if (!text) { syncMsg('No file selected', 'error'); return }
     let fileObj = null
     try { fileObj = JSON.parse(text) } catch (e) { syncMsg('Could not read the file', 'error'); return }
-    if (!keypackage.isKeyPackage(fileObj)) { syncMsg('Not a key file', 'error'); return }
+    const keyProblem = keypackage.keyFileProblem(fileObj)
+    if (keyProblem) { syncMsg(keyProblem, 'error'); return }
     if (!(await requireTransferAuth())) return
     try { await acceptKeyPackage(fileObj, 'Key file') }
     catch (e) { syncMsg('Key import failed: ' + (e && e.message ? e.message : e), 'error') }

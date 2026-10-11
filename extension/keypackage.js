@@ -4,10 +4,14 @@ import { getAuth, setAuth } from './store.js'
 const KEY_FILE_FORMAT = 'valid-vault-key'
 const KEY_FILE_VERSION = 1
 const EXPORT_ITERATIONS = 1000000
+const SALT_BYTES = 16
+const WRAP_IV_BYTES = 12
+const WRAPPED_KEY_BYTES = 48
 const MIN_PASSPHRASE_LENGTH = 12
 const MIN_UNIQUE_CHARS = 6
 const QUESTION_COUNT = 3
 const DEFAULT_NICKNAME = 'My Master Key'
+const DAMAGED_KEY_MSG = 'That key file is damaged or incomplete. Nothing was changed.'
 const MAX_NICKNAME_LENGTH = 60
 const CONTROL_CHARS = /[\u0000-\u001f\u007f]+/g
 
@@ -88,10 +92,24 @@ async function keyIdFor(masterKey) {
   return Array.from(digest).map((b) => b.toString(16).padStart(2, '0')).join('')
 }
 
+function isByteArray(value, length) {
+  return Array.isArray(value) && value.length === length && value.every((b) => Number.isInteger(b) && b >= 0 && b <= 255)
+}
+
+function keyFileProblem(obj) {
+  if (!obj || typeof obj !== 'object' || obj.format !== KEY_FILE_FORMAT) return 'Not a key file'
+  return isKeyPackage(obj) ? null : DAMAGED_KEY_MSG
+}
+
 function isKeyPackage(obj) {
-  return !!obj && obj.format === KEY_FILE_FORMAT && Array.isArray(obj.questions) && obj.questions.length === QUESTION_COUNT &&
-    obj.questions.every((q) => Number.isInteger(q) && q >= 0 && q < SECURITY_QUESTIONS.length) &&
-    Array.isArray(obj.salt) && !!obj.wrapped && typeof obj.wrapped === 'object'
+  if (!obj || typeof obj !== 'object' || obj.format !== KEY_FILE_FORMAT) return false
+  if (obj.version !== undefined && !(Number.isInteger(obj.version) && obj.version >= 1 && obj.version <= KEY_FILE_VERSION)) return false
+  if (obj.iterations !== undefined && obj.iterations !== EXPORT_ITERATIONS) return false
+  if (!Array.isArray(obj.questions) || obj.questions.length !== QUESTION_COUNT) return false
+  if (!obj.questions.every((q) => Number.isInteger(q) && q >= 0 && q < SECURITY_QUESTIONS.length)) return false
+  if (!isByteArray(obj.salt, SALT_BYTES)) return false
+  if (!obj.wrapped || typeof obj.wrapped !== 'object') return false
+  return isByteArray(obj.wrapped.iv, WRAP_IV_BYTES) && isByteArray(obj.wrapped.wrapped, WRAPPED_KEY_BYTES)
 }
 
 async function buildPackage(masterKey, passphrase, qIdx, answers, nickname) {
@@ -112,8 +130,9 @@ async function buildPackage(masterKey, passphrase, qIdx, answers, nickname) {
 }
 
 async function openPackage(pkg, passphrase, answers) {
+  if (!isKeyPackage(pkg)) throw new Error(DAMAGED_KEY_MSG)
   const secret = combineSecret(passphrase, pkg.questions, answers)
-  const wrapKey = await deriveKeyFromSecret(secret, new Uint8Array(pkg.salt), pkg.iterations || EXPORT_ITERATIONS)
+  const wrapKey = await deriveKeyFromSecret(secret, new Uint8Array(pkg.salt), EXPORT_ITERATIONS)
   return unwrapMasterKey(pkg.wrapped, wrapKey)
 }
 
@@ -149,6 +168,7 @@ export {
   pickThreeQuestions,
   passphraseProblem,
   isKeyPackage,
+  keyFileProblem,
   buildPackage,
   openPackage,
   getSavedPackage,
