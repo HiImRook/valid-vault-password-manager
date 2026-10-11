@@ -1,7 +1,7 @@
 {
   "name": "local-vault-password-manager",
-  "version": "0.7.4",
-  "description": "Decentralized password manager with fingerprint authentication",
+  "version": "0.8.0",
+  "description": "Local password manager with fingerprint authentication",
   "dependencies": {
     "@capacitor/android": "^7.4.4",
     "@capacitor/cli": "^7.4.4",

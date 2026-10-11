@@ -14,41 +14,17 @@ A local, encrypted, QR code portable password manager. No cloud, accounts, or sy
 
 **Community:** updates, support, and bug reports on the [Valid Vault Discord](https://discord.gg/2SP383cJs9).
 
-\---
+---
 
-> ✅ \*\*Security Hardening - v0.7.4.3\*\*
+> ✅ **Phone App Rebuilt - v0.8.0**
 >
-> The three-try limit on password and fingerprint unlock now holds everywhere. Before, closing and reopening the popup started the count over; now every Valid Vault window shares one count, so a fourth try waits out the full minute. Websites can also no longer load or frame the Manage page, and can no longer use it to detect that Valid Vault is installed. See \[CHANGELOG.md](CHANGELOG.md) for full details.
+> The Android app now runs on the same code as the extension, so the two stay in step from here on. The phone gets every extension tab: Website Credentials, Personal Info, Misc Credentials, Crypto Wallets, Bookmarks, Sync, Settings, a phone User Guide, and About, along with the protected key transfer, the key import flow, and fingerprint, device PIN, or password before every transfer. A new phone can be set up straight from your existing key, by key QR or key file, and the lock screen can restore access from a key file if fingerprint unlock is ever reset. Importing a vault is now checked in full before anything is written, never creates duplicates, keeps deletes deleted, and changes nothing when the same file is imported twice. The extension shares these merge fixes, and its Misc Credentials and extra field values are now entered in masked boxes. See [CHANGELOG.md](CHANGELOG.md) for full details.
 
-> ✅ \*\*Fingerprint Across Browsers - v0.7.4.1\*\*
+> 🔧 **QR transport: in active development**
 >
-> Each browser now keeps its own fingerprint, so Chrome, Brave, and Edge can all unlock with fingerprint on the same computer. Before, enrolling fingerprint in one browser could stop it working in another. If that happened to you, unlock with your password and re-enroll fingerprint in Manage once. See \[CHANGELOG.md](CHANGELOG.md) for full details.
+> The key QR moves between the phone and the extension. The vault QR is still too dense for a phone camera to read from a computer screen, so live vault scanning is a coming v0.8.x step. Until it lands, Export Vault and Import Vault move the complete vault between browsers and devices, including bookmarks and crypto wallets. Carried on a USB drive, the vault file and the key file stay encrypted the whole way, and that path is verified device to device.
 
-> ✅ \*\*Transfer Authentication and Autofill Fixes - v0.7.4\*\*
->
-> Export and import now require fingerprint authentication. Export Key, Import Key, Export Vault, Import Vault, Share Master Key, Share Vault, and receiving a key or vault by QR all ask for fingerprint, device PIN, or password first. A brand-new browser skips the check, so first setup still works. Autofill now finds password fields inside web components, which some sites use to build their forms, and V tags clear away when a multi-step form slides a step out of view. The password generator lets you choose a password with special characters or letters and numbers only, for sites that reject symbols. Three security questions were replaced with less public ones. Computers without Windows Hello now get a clear setup path: choosing Fingerprint / PIN shows \*\*Fingerprint / PIN not available on this device\*\* and points straight to a master password, which works fully. The User Guide now spells out recovery accurately: as long as any device still unlocks your vault, a lost key file or forgotten passphrase is fixed with Change Key Passphrase and a fresh Export Key. Valid Vault is now on the \[Chrome Web Store](https://chromewebstore.google.com/detail/valid-vault-password-mana/fkpfaemmphmakebhejhaegjgcnieeoab). See \[CHANGELOG.md](CHANGELOG.md) for full details.
-
-> ✅ \*\*Uni-Vault and User Guide - v0.7.3\*\*
->
-> Every browser on one computer can now share one vault. Uni-Vault links each browser to a single encrypted vault file and keeps them in sync automatically: save a login in Chrome and it shows up in Edge on its own. A damaged file, a replaced file, or a file made with a different key is refused and never overwritten. Uni-Vault works in Chrome and Edge; Brave ships the browser feature it needs switched off, and the new User Guide shows the one setting that turns it back on. The User Guide itself is new too, searchable and opened from the popup menu, covering setup, every setting, and recommended setups for different users. Key import now offers fingerprint or device PIN first with a password as the fallback, and changing unlock methods or clearing the vault now asks for fingerprint, PIN, or password again. See \[CHANGELOG.md](CHANGELOG.md) for full details.
-
-> ✅ \*\*Password Generator - v0.7.2\*\*
->
-> New password and change password fields now get an inverted V that generates a strong random password and fills both the new and confirm boxes. It uses the browser's cryptographic random source, always mixes upper, lower, digits, and symbols, and follows any length or character rules the site declares. Length is set in Settings, from 16 up to 64 characters in four ranges. Changing a password keeps the old one as a labeled previous password with one-click restore, in case the site never accepted the change. Settings also shows timeouts as readable time, and the auto-lock limit is now 2 hours. See \[CHANGELOG.md](CHANGELOG.md) for full details.
-
-> ✅ \*\*Protected Master Key Transfer - v0.7.1\*\*
->
-> Share Master Key and Export Key carry the master key wrapped under a passphrase and three security questions you pick, stretched with 1,000,000 PBKDF2 rounds, and the receiving device must enter all of them before it can use the key. A captured key QR or a stolen key file is useless without them. Sharing stays one click after a one-time setup, common passwords are refused, and every password prompt in Manage is now a masked Valid Vault dialog. Personal Info edits try fingerprint or device PIN first. Also fixes Crypto Wallets locking on tab switch and the auto-lock timer ignoring activity outside the Manage page. See \[CHANGELOG.md](CHANGELOG.md) for full details.
-
-> ✅ \*\*Crypto Wallets and Encrypted Bookmarks - v0.7.0\*\*
->
-> The extension now stores crypto wallet seed phrases and bookmarks inside the same encrypted vault as your logins. Seed phrases are organized by wallet and account, checked word by word against the standard 2048-word seed phrase list, and only visible while you choose to show them. Bookmarks are saved from a new icon in the popup and listed in a side panel with search and drag reorder. Both sections are sealed as single AES-GCM blobs, nothing about them is readable at rest, and they travel between browsers through the encrypted vault file. On-page unlocks now open a Valid Vault window with Windows Hello, and the popup lock button is fixed. See \[Crypto Wallet and Bookmark Security](#crypto-wallet-and-bookmark-security) and \[CHANGELOG.md](CHANGELOG.md) for full details.
-
-> 🔧 \*\*Phone app and QR transport: in active development\*\*
->
-> The phone app is being brought up to the extension's feature set (v0.8.x), and live QR scanning is getting its next round of refinement (v0.8.2). Your data stays encrypted through all of it; this is feature work, and nothing about it changes how the vault is protected. Until it lands, Export Vault and Import Vault move the complete vault between browsers and between devices. Carried on a USB drive, the vault file and the key file stay encrypted the whole way, and that path is verified device to device.
-
-\---
+---
 
 ## What is Valid Vault?
 
@@ -65,7 +41,7 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 
 **One vault, many surfaces.** The same master key that unlocks your vault on one browser unlocks the same vault file on another browser, or on the phone. Import a key once and it becomes that browser's key going forward. On one computer, Uni-Vault links every browser to a single encrypted vault file and keeps them in sync automatically. Between devices, moving the vault is a manual Export and Import or QR share, merged by the same timestamp-based logic, no server involved.
 
-\---
+---
 
 ## Core Features
 
@@ -80,7 +56,7 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 **Unlock and Locking:**
 
 * Fingerprint, device PIN, and password all fully unlock the vault
-* Auto-lock inactivity timer in seconds, up to 2 hours on the extension, shown next to the setting as hours, minutes, and seconds; locks the vault and returns to the lock screen
+* Auto-lock inactivity timer in seconds, up to 2 hours, shown next to the setting as hours, minutes, and seconds; locks the vault and returns to the lock screen
 * Both surfaces show an inline unlock overlay on session timeout instead of a dead end
 * Website Credentials, Web Credentials, and Personal Info each require their own explicit re-unlock inside Manage; every unlock and Personal Info edit tries fingerprint or device PIN first, with the master password as the fallback in a masked dialog
 * Clicking a tagged field or a save prompt while locked opens a small Valid Vault unlock window with Windows Hello (fingerprint or device PIN) or password; the unlock runs in the extension's own origin, never in the visited page
@@ -116,11 +92,12 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 * Set once, reused after - the protection is set on the first key share or export, then Share Master Key and Export Key are one click; Change Key Passphrase replaces it
 * Common passwords are refused as a key passphrase, and the form recommends four or more random words
 * Logins, Web Credentials, and Personal Info all travel together through the same export/import/QR flow, merged by timestamp with tombstoned deletes
-* Bookmarks and Crypto Wallets travel inside the encrypted vault file (Export Vault / Import Vault) with the same tombstoned-delete merge; seed phrases are kept out of the live QR share, and a bookmarks QR share is planned for v0.8.2
+* Bookmarks and Crypto Wallets travel inside the encrypted vault file (Export Vault / Import Vault) with the same tombstoned-delete merge; seed phrases are kept out of the live QR share, and a bookmarks QR share is planned with the v0.8.x QR transport work
+* Every import is checked in full before anything is written: a file made with a different key, a damaged section, or a file from a newer version is refused and nothing changes, the same login is never saved twice, deletes stay deleted, and importing the same file again changes nothing
 * Syncing requires both devices to share the same master key; a mismatched key fails with a clear error
-* Importing a master key onto a browser whose vault uses a different key warns first, clears that vault on confirmation, and saves the imported key under the browser's unlock methods (extension; phone follows next release)
+* Importing a master key onto a browser whose vault uses a different key warns first, clears that vault on confirmation, and saves the imported key under that device's unlock methods, on the extension and the phone
 * Key import offers fingerprint or device PIN first, with a master password as the fallback; a password on that browser becomes an optional backup
-* Key QR codes must use the protected format; phone and extension key transfer over QR resumes when the phone learns the protected format in the phone de-drift, and the key file path works in the meantime
+* Key QR codes must use the protected format, and the phone and the extension both send and accept it
 
 **Vault:**
 
@@ -135,11 +112,11 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 
 **Platform:**
 
-* Single-file web bundle - modules assembled by build.js into one self-contained HTML file
+* Single-file web bundle - build.js bundles the phone app from the extension's own modules into one self-contained HTML file, so both clients share one copy of the core code
 * Android via Capacitor, with native plugins for biometric auth and file saving
 * Vendored, self-contained code only, no Google SDKs in the scan path
 
-## Current Status: v0.7.4.3 - Active Testing
+## Current Status: v0.8.0 - Active Testing
 
 **Completed:**
 
@@ -173,13 +150,18 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 * ✅ Clear password-only setup path on computers without Windows Hello
 * ✅ Fingerprint in every browser on one computer, each with its own passkey (Chrome, Brave, and Edge)
 * ✅ Encrypted vault and key carried device to device on a USB drive, no network involved
+* ✅ Setup and unlock show only the unlock methods a browser can use, so computers without a fingerprint reader get a clean password setup
+* ✅ Three-try unlock limit shared across every Valid Vault window, and the Manage page closed to websites
+* ✅ Phone app rebuilt on the extension's own modules, with every extension tab, the protected key transfer, and re-authentication before transfers
+* ✅ Phone setup from an existing key by key QR or key file, and key-file recovery on the lock screen
+* ✅ Vault imports checked in full before writing, with no duplicates, deletes that stay deleted, and no changes on a repeat import
 
 **In Development:**
 
-* 📋 Phone de-drift (v0.8.x): key import, whole-vault carry including bookmarks and wallets, Personal Info, and fingerprint authentication for export and import on the phone
-* 📋 QR scanner reliability on real devices and a bookmarks QR share (v0.8.2)
+* 📋 Android Autofill service and Share-to-bookmark (v0.8.x)
+* 📋 Modified Chromium browser in the phone app (v0.8.x)
+* 📋 QR transport (v0.8.x): a vault QR a phone camera reads reliably, scanner reliability on real devices, and a bookmarks QR share
 * 📋 Continued field testing of sync, backup, and native file saving across Android versions
-* 📋 Per-method auth edit and delete on the phone Manage tab
 
 ## Sync and Backup Model
 
@@ -199,7 +181,7 @@ Recovery follows from the same model. As long as any device still unlocks the va
 * On Android, the master key is additionally wrapped by a hardware Keystore key gated on device authentication
 * The master key only leaves a device wrapped at 1,000,000 PBKDF2 iterations under a passphrase and three security answers, in both the key QR and the key file; the passphrase and answers are never stored
 * No verification hashes are stored; the AES-GCM auth tag is the only verifier
-* Exporting, importing, or sharing a key or vault in the extension requires fingerprint, device PIN, or password first, even while the vault is unlocked
+* Exporting, importing, or sharing a key or vault requires fingerprint, device PIN, or password first, even while the vault is unlocked
 * Website Credentials, Crypto Wallets, and Bookmarks are each sealed as a single encrypted blob, so no domain name, username, password, seed word, saved address, or metadata is readable from storage
 
 **No Google in the scan path.** The scanner uses the web camera and a vendored jsQR decoder, which runs entirely on device.
@@ -278,7 +260,7 @@ cd valid-vault-password-manager
 node build.js
 ```
 
-Open test.html in a browser, or build for Android:
+build.js writes the phone app to www/index.html. Load the extension folder unpacked in Chrome, or build for Android:
 
 ```bash
 npm install
@@ -313,7 +295,7 @@ The master key is wrapped once under a passphrase and three chosen security answ
 Crypto Wallets and Bookmarks share one small module, sealed.js, that serializes a section, deflate-compresses it, and encrypts it as one AES-GCM blob with a fresh IV per write. Each section merges by permanent record IDs with tombstoned deletes, so the same vault file converges on every device.
 
 **Native Biometric (Android):**
-A custom Capacitor plugin bridges JavaScript to Android's BiometricPrompt. It creates a hardware-backed Keystore key that requires user authentication, then uses it to wrap the master key.
+A custom Capacitor plugin bridges JavaScript to Android's BiometricPrompt. It creates a hardware-backed Keystore key that requires user authentication, then uses it to wrap the master key. Re-enrolling writes to a second Keystore slot and swaps it in only after the new fingerprint succeeds, so a cancelled re-enroll never breaks the working one.
 
 **Native File Saving (Android):**
 A custom Capacitor plugin writes exported files directly to the Downloads folder through Android's MediaStore API, and Capacitor's Filesystem and Share plugins back the native share option.
@@ -322,7 +304,7 @@ A custom Capacitor plugin writes exported files directly to the Downloads folder
 Scanning uses the web camera through getUserMedia, drawing frames to a canvas that a vendored jsQR decoder reads. No native scanning plugin, no Google SDK.
 
 **Single-File Bundle:**
-build.js assembles the source modules into one self-contained HTML file. No module loader, no CDN, no external requests at runtime.
+build.js bundles the phone app from the extension's own modules and the phone screens in phone/ into one self-contained HTML file. No module loader, no CDN, no external requests at runtime. The extension and the phone run the same vault, crypto, unlock, key, and merge code.
 
 ## Using Valid Vault on Microsoft Edge
 
@@ -363,7 +345,7 @@ Contributions welcome. This project maintains a compact, readable codebase with 
 
   * Zero comments (self-documenting names) - write an accompanying document
   * In-memory state management (Maps/Sets/objects)
-  * Constants in SCREAMING\_SNAKE\_CASE
+  * Constants in SCREAMING_SNAKE_CASE
   * Complete file implementations (no fragments)
   * No new dependencies without discussion
 
@@ -376,7 +358,7 @@ https://discord.gg/2SP383cJs9
 Report security issues via GitHub Security Advisories.
 
 **Audit Status:**
-Pre-1.0, under active testing. Community review welcome. auth.js, crypto.js, session.js, keypackage.js, sealed.js, wallets.js, linkedvault.js, and the native plugins are the surfaces that matter.
+Pre-1.0, under active testing. Community review welcome. auth.js, crypto.js, session.js, keypackage.js, sealed.js, vaultfile.js, wallets.js, linkedvault.js, and the native plugins are the surfaces that matter.
 
 ## License
 

@@ -5,7 +5,41 @@ All notable changes to Valid Vault will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## \[0.7.4.3] - 2026-10-10
+## [0.8.0] - 2026-10-11
+
+The phone app is rebuilt on the extension's own code, and vault import, export, and merge are hardened on both. The phone and the extension now share one copy of the vault, crypto, unlock, key, and merge modules, so they stay in step from here on.
+
+### Added
+
+* **Phone app on the shared modules.** build.js bundles the phone from the extension's own modules plus new phone screens in phone/, into one self-contained HTML file as before. The old top-level copies of the core modules and test.html are removed.
+* **Every extension tab on the phone.** Website Credentials with Add Login, login type, previous password restore, and extra fields; Personal Info; Misc Credentials; Crypto Wallets with seed word checking and touch reordering; Bookmarks with search, rename, reorder, and open in your browser; Sync; Settings; a phone User Guide; and About.
+* **Protected key transfer on the phone.** Share Master Key and Export Key carry the passphrase-and-questions package, the phone accepts key QRs and key files from the extension, and raw key QRs from older versions are refused.
+* **Set up from an existing key.** A new phone can start from your master key by key QR or key file, choose fingerprint or a password to unlock, and is then offered to bring the vault right away.
+* **Key-file recovery on the lock screen.** Can't unlock? restores access with your key file or a key QR, for a phone whose fingerprint was reset with no password set, or a forgotten password.
+* **Password generator on the phone.** Add Login, Edit password, and Misc Credentials can generate a password with or without special characters, using the length ranges in Settings.
+
+### Changed
+
+* **Re-authentication on the phone.** Transfers, unlock method changes, Clear Vault, and each section ask for fingerprint, device PIN, or password, the same as the extension.
+* **Key import on the phone** survives lock and unlock, warns before a different key clears local data, and collects every choice before writing anything, so an interrupted import never leaves unlock methods split between two keys.
+* **Auto-lock on the phone** follows the setting, up to 2 hours, and locking clears revealed secrets and closes open dialogs without acting on them.
+* **Fingerprint re-enroll** writes to a second Android Keystore slot and swaps it in only after the new fingerprint succeeds. Device PIN in the fingerprint prompt is limited to Android 11 and up, where Android supports it with a hardware key.
+* **Extension masked entry.** Misc Credentials and extra field values are now typed into masked Valid Vault dialogs instead of a plain browser prompt, and exported key files take the current key name.
+
+### Fixed
+
+* **Imports are checked in full before anything is written.** A file made with a different key, a damaged section, or a file from a newer version is refused and nothing changes. Before, a section that failed late could leave earlier sections already merged.
+* **No duplicates on merge.** A login created separately on two devices and then deleted on one now stays deleted, renaming a username or a misc credential no longer produces two entries, and a misc credential saved again keeps its id so a later delete reaches every copy.
+* **Repeat imports change nothing.** Unchanged sections are no longer rewritten, and the result says Already up to date.
+* **Ties resolve the same everywhere.** Two edits with the same timestamp now settle the same way on every device, for logins, misc credentials, personal info, bookmarks, and wallets.
+* **Phone bugs from the old app:** key file import that always reported a wrong passphrase, a hidden 5 minute lock that ignored the setting, error messages that never appeared, deletes made on the phone coming back after a merge, previous-password history erased by phone saves, and a plaintext migration journal.
+
+### Notes
+
+* Verified in Chromium with the real extension and the phone build, using a simulated Android fingerprint reader: two- and three-device syncs with random edits converging with no duplicates, the extension's key and vault carried to the phone and back, an old phone install opening after the update, auto-lock during Clear Vault never deleting, and key-file recovery. Verified on a Samsung phone: in-place upgrade from the old app and the key carried from the extension over QR.
+* Live vault QR scanning is not reliable on a phone yet. Vault files carry everything in the meantime.
+
+## [0.7.4.3] - 2026-10-10
 
 Extension-only security update.
 
@@ -18,7 +52,7 @@ Extension-only security update.
 
 * Verified in Chromium with the actual extension: three wrong passwords in three separate popups, then a fourth try in a new popup is refused even with the right password, the unlock window sees the same lockout, the right password works once the minute passes, and a website's attempts to fetch or frame the Manage page are blocked.
 
-## \[0.7.4.2] - 2026-10-10
+## [0.7.4.2] - 2026-10-10
 
 Extension-only update. Setup and unlock now show only the unlock methods a browser can actually use, so Linux and other computers without a built-in fingerprint reader get a clean password setup.
 
@@ -34,7 +68,7 @@ Extension-only update. Setup and unlock now show only the unlock methods a brows
 
 * Verified in Chromium with the real extension, with and without a simulated built-in authenticator: setup buttons, password setup and unlock, fingerprint enrollment and unlock, password-first Re-enroll and Delete (a wrong password is refused, and re-enrolling replaces the browser's own passkey), the enrolled-fingerprint button with no reader present, and every Manage tab with no page errors.
 
-## \[0.7.4.1] - 2026-10-08
+## [0.7.4.1] - 2026-10-08
 
 Extension-only hotfix. Fingerprint unlock no longer breaks when Valid Vault is used in more than one browser on the same computer.
 
@@ -50,7 +84,7 @@ Extension-only hotfix. Fingerprint unlock no longer breaks when Valid Vault is u
 * `package.json` stays at 0.7.4, since npm only accepts three-part versions. The fourth number appears in the extension manifest only.
 * Verified in Chromium with a simulated fingerprint authenticator: with the old code, a second install's enrollment removed the first install's passkey; with the fix, both installs keep their passkeys and both unlock.
 
-## \[0.7.4] - 2026-10-06
+## [0.7.4] - 2026-10-06
 
 This release requires fingerprint authentication to export or import a key or vault, fixes autofill on sites that build their forms from web components, and lets the password generator make passwords without symbols for sites that reject them. It also replaces three security questions with less public ones, gives computers without Windows Hello a clear password-only setup path, and makes the User Guide accurate about recovery. Extension only, except the security questions, which change on the phone too.
 
@@ -61,7 +95,7 @@ This release requires fingerprint authentication to export or import a key or va
 ### Changed
 
 * **Export and import now require fingerprint authentication.** Export Key, Import Key, Export Vault, Import Vault, Share Master Key, Share Vault, and receiving a key or vault by QR now ask for fingerprint, device PIN, or password first, even while the vault is unlocked. Cancelling stops the action with nothing written, shared, or imported. A brand-new browser with no vault yet skips the check, so first setup with Import Key still works. Export Vault and Import Vault ask right after the file is chosen, because the browser only opens a file picker directly from a click.
-* **Symbols in generated passwords.** Passwords with special characters now draw symbols from `!@#$%^\&\*`, the set most sites accept. Some sites rejected the wider set used before, which included `-` and `/`.
+* **Symbols in generated passwords.** Passwords with special characters now draw symbols from `!@#$%^&*`, the set most sites accept. Some sites rejected the wider set used before, which included `-` and `/`.
 * **Security questions.** Three questions were replaced in the same positions: City where you were born became Name of your favorite childhood toy, Name of your first street (a near duplicate of The street you grew up on) became Your favorite childhood book, and Your mothers maiden name became Your mothers middle name. The other seven are unchanged. A key file saved earlier with one of these three now shows the new wording, and still needs the original answer.
 * **Setup without fingerprint or device PIN.** On a computer without Windows Hello, choosing Fingerprint / PIN at setup now shows a bold green **Fingerprint / PIN not available on this device** with a note to use a master password instead, which works fully, and moves the cursor to the password box. Before, the browser's own error appeared and read as though the computer could not run Valid Vault. If Windows Hello is present but the prompt is cancelled, setup says it did not complete and offers a retry or a password.
 * **User Guide: recovery.** The recovery box, now titled What can and cannot be recovered, states that nothing is lost while any device still unlocks the vault: Change Key Passphrase and a fresh Export Key replace a lost key file or forgotten passphrase. A vault is unrecoverable only when no device unlocks it and no key file can be opened, usually after uninstalling or clearing browser data without exporting the key first. The passphrase advice in Your Master Key says the same. Updated in the extension's guide and on the website.
@@ -80,7 +114,7 @@ This release requires fingerprint authentication to export or import a key or va
 * Valid Vault is published on the [Chrome Web Store](https://chromewebstore.google.com/detail/valid-vault-password-mana/fkpfaemmphmakebhejhaegjgcnieeoab).
 * Verified with Playwright-in-Chromium tests: every transfer action asks for authentication first, cancelling stops each one with nothing written or shared, the correct password continues normally, and a fresh browser's key import skips the check; 18 checks on a web component registration page, 7 style menu checks, a two-step slide form, 43 generator checks, 12 older test pages unchanged, and setup checks with and without a platform authenticator: the notice appears, focuses the password box, and password setup completes, while fingerprint enrollment still succeeds where available.
 
-## \[0.7.3] - 2026-09-30
+## [0.7.3] - 2026-09-30
 
 This release lets every browser on one computer share one vault. Uni-Vault links each browser to a single encrypted vault file and keeps them in sync automatically, with no exporting or importing after the first link. It also adds a searchable User Guide inside the extension, makes fingerprint or device PIN the first choice when importing a key, and closes a gap where unlock methods could be changed without authenticating again. Extension only.
 
@@ -111,14 +145,14 @@ This release lets every browser on one computer share one vault. Uni-Vault links
 
 * Verified with Playwright-in-Chromium tests: 18 Uni-Vault checks across two browser profiles sharing one file (linking, merging both ways, website saves with no Manage page open, deletes, refusing damaged and wrong-key files, recovery, unlink, and the Brave fallback), 17 fingerprint-first key import checks with a virtual authenticator, re-authentication and masked prompt checks, 18 User Guide and search checks, and regression runs of the key transport, wallets, and generator suites.
 
-## \[0.7.2] - 2026-09-28
+## [0.7.2] - 2026-09-28
 
 This release adds a password generator to the extension. New password and change password fields get their own V that creates a strong random password and fills both boxes, and a changed password keeps the old one on hand in case the site never accepted the change. It also polishes Settings, the Manage credential list, and the popup. Extension only; the phone app receives the generator in the v0.8.x de-drift.
 
 ### Added
 
 * **Password generator.** New password and change password fields get an inverted V (black circle, green V). Clicking it generates a password and fills both the new and confirm boxes, which stay masked. A small note explains what happened and offers Generate a different one; it closes on its own after 5 seconds or on Escape so it never covers the form's buttons.
-* **Random and rule-aware.** Characters come from `crypto.getRandomValues` with rejection sampling, so every character is equally likely, and the result is shuffled with a Fisher-Yates pass. Every password includes an uppercase letter, a lowercase letter, a digit, and a symbol from `!@#$%^\&\*()-\_=+\[]{};:,.?/\~`. Any `maxlength`, `minlength`, `pattern`, or `passwordrules` the site declares is followed, and a limit the site declares always wins.
+* **Random and rule-aware.** Characters come from `crypto.getRandomValues` with rejection sampling, so every character is equally likely, and the result is shuffled with a Fisher-Yates pass. Every password includes an uppercase letter, a lowercase letter, a digit, and a symbol from `!@#$%^&*()-_=+[]{};:,.?/~`. Any `maxlength`, `minlength`, `pattern`, or `passwordrules` the site declares is followed, and a limit the site declares always wins.
 * **Password Generator settings.** A new Settings section sets the minimum (16 or 20, default 16) and maximum (24, 32, 48, or 64, default 24). Each maximum picks from its own range: minimum to 24, 25 to 32, 33 to 48, or 49 to 64.
 * **Change password forms.** The current password field keeps the normal V and fills the saved login, the new and confirm fields get the generator, and the save prompt offers to update the matching account.
 * **Previous password safety net.** Changing a saved password keeps the old one as a previous password, stored encrypted with the login inside the vault blob. The login picker shows it under a Previous passwords label with the date it was replaced, and picking it restores it, swapping it back with the new one. It is dropped only after the new password has been used 3 times and 14 days have passed, and counting a use does not change the login's edit time.
@@ -142,7 +176,7 @@ This release adds a password generator to the extension. New password and change
 
 * Verified with Playwright-in-Chromium tests: 43 generator checks covering field roles, both-box fill, masking, character classes, every length range over 60 generations each, site-declared limits, the change password save, and the previous password rule and restore; plus Settings readouts and limits, the Manage list with 24, 32, 48, and 64 character passwords at two window widths, and the popup at 125% display scaling.
 
-## \[0.7.1] - 2026-09-28
+## [0.7.1] - 2026-09-28
 
 This release closes the one place where the master key could travel unprotected. Share Master Key used to stream the raw key, so anyone who photographed the QR had the key. The key now only leaves a device wrapped under a passphrase and three security questions, and the receiving device must enter all of them before it can use it. It also fixes two locking bugs found after v0.7.0. Extension only; the phone learns the protected key format in the v0.8.x de-drift.
 
@@ -176,7 +210,7 @@ This release closes the one place where the master key could travel unprotected.
 
 * Verified with Playwright-in-Chromium tests across separate browser profiles, scanning the real QR stream from one into the other through a simulated camera: setup validation, one-click reuse, wrong-answer rejection, key file import, onward sharing, refusal of a raw key QR from a real v0.7.0 sender, plus regression runs of the wallets, bookmarks, and unlock window suites.
 
-## \[0.7.0] - 2026-09-27
+## [0.7.0] - 2026-09-27
 
 This release adds two new encrypted sections to the vault, Crypto Wallets for seed phrases and Bookmarks, both sealed the same way as Website Credentials and both carried between browsers inside the encrypted vault file. It also moves on-page unlocking into a dedicated extension window with Windows Hello, and fixes the popup lock button. Extension only; the phone app receives these sections in the v0.8.x de-drift.
 
@@ -212,7 +246,7 @@ This release adds two new encrypted sections to the vault, Crypto Wallets for se
 
 * Every change in this release was verified with Playwright-in-Chromium tests, including three-device merges in every import order, the version 4 to 5 database upgrade with existing logins, and regression runs of the earlier autofill and unlock tests.
 
-## \[0.6.4] - 2026-09-26
+## [0.6.4] - 2026-09-26
 
 Hotfix for v0.6.3, extension only. Fixes key import, sync, migration, and autofill problems found in real use after the single-blob release. The phone app receives the matching key and transport fixes in the next release.
 
@@ -240,7 +274,7 @@ Hotfix for v0.6.3, extension only. Fixes key import, sync, migration, and autofi
 * The phone app still has the v0.6.3 key import, key file import, and silent scan result problems; it is next.
 * Old plaintext journal data from a v0.6.3 migration may linger in the browser's own database files until the browser compacts them. New migrations no longer write it.
 
-## \[0.6.3] - 2026-09-22
+## [0.6.3] - 2026-09-22
 
 This release replaces per-credential encryption for Website Credentials with single-blob vault encryption, closing the last major gap in what's readable from the raw database at rest. It also closes out three real migration-safety gaps found across independent code review before shipping, and completes the `loginType` classification work scoped since v0.6.0.
 
@@ -273,7 +307,7 @@ This release replaces per-credential encryption for Website Credentials with sin
 * Every hardening fix in this release was verified across multiple rounds of independent code review before shipping, following the same practice established in v0.6.2.
 * test.html and www/index.html were rebuilt from build.js to include all of the above.
 
-## \[0.6.2] - 2026-09-20
+## [0.6.2] - 2026-09-20
 
 This release resolves the top-priority gap left open by v0.6.1: Website Credentials now reliably saves new logins from real signup flows. It also closes out a long list of correctness and robustness issues in the autofill/injection layer found across several rounds of independent code review, each one verified against the actual code and against real browser behavior (Playwright + Chromium) before shipping.
 
@@ -301,7 +335,7 @@ This release resolves the top-priority gap left open by v0.6.1: Website Credenti
 
 * Every fix in this release was verified with Playwright-in-Chromium tests and/or direct unit tests of the storage logic - following directly from the lesson of the v0.6.1 regression, which shipped without that level of verification.
 
-## \[0.6.1] - 2026-09-18
+## [0.6.1] - 2026-09-18
 
 This release adds real autofill injection to the extension - reading Personal Info and Website Credentials to populate page forms - built the safe way, with background.js holding the session key and content.js only ever receiving plaintext values it explicitly asked for.
 
@@ -328,7 +362,7 @@ This release adds real autofill injection to the extension - reading Personal In
 * Fingerprint/PIN unlock is intentionally unavailable from the inline, on-page prompt. A WebAuthn platform credential is bound to the origin that created it (`chrome-extension://...`), and a content script running in a visited page's own origin can never trigger that credential. Password-only inline unlock is expected behavior, not a bug.
 * No competitor-targeting logic was added, and none is planned. Autofill wins on being fully local and already-unlocked in memory, not on hiding another extension's UI.
 
-## \[0.6.0] - 2026-09-14
+## [0.6.0] - 2026-09-14
 
 This release adds two new pieces of storage to the extension, Web Credentials and Personal Info, and fixes a real correctness bug that would have broken syncing the same vault across multiple browsers.
 
@@ -351,7 +385,7 @@ This release adds two new pieces of storage to the extension, Web Credentials an
 * Autofill injection itself, and login-type tracking (username vs. email vs. phone) on Website Credentials, are scoped but not yet built.
 * Version bumped to 0.6.0 across the phone and the extension.
 
-## \[0.5.5] - 2026-09-13
+## [0.5.5] - 2026-09-13
 
 This release fixes a real export bug that made Export Vault appear to do nothing, and replaces the browser-based file download with a proper native implementation.
 
@@ -371,7 +405,7 @@ This release fixes a real export bug that made Export Vault appear to do nothing
 * This build remains under active testing; see the About section in both the app and the extension.
 * Version bumped to 0.5.5 across the phone and the extension.
 
-## \[0.5.4] - 2026-09-13
+## [0.5.4] - 2026-09-13
 
 This release brings the phone app back into parity with the browser extension's v0.5.3 auth and interface work, and fixes a real bug in the process.
 
@@ -391,7 +425,7 @@ This release brings the phone app back into parity with the browser extension's 
 
 * Version bumped to 0.5.4 for the phone app; the extension remains at 0.5.3 pending its own next release.
 
-## \[0.5.3] - 2026-09-12
+## [0.5.3] - 2026-09-12
 
 This release brings the browser extension into parity with the phone app's auth and sync model. Extension-only; the phone app is unchanged in this release.
 
@@ -422,7 +456,7 @@ This release brings the browser extension into parity with the phone app's auth 
 * This release is scoped to the browser extension. The phone app has not yet received the unlock-overlay, lock-monitor, or corrected timer logic from this release; that port is tracked for a future update.
 * Version bumped to 0.5.3 in the extension only.
 
-## \[0.5.2] - 2026-09-08
+## [0.5.2] - 2026-09-08
 
 This release replaces the barcode-scanning scaffolding with a sovereign implementation, fixes settings persistence, and makes auto-lock a real inactivity timer.
 
@@ -446,7 +480,7 @@ This release replaces the barcode-scanning scaffolding with a sovereign implemen
 * jsQR is vendored as a single MIT-licensed file with no native code and no network calls.
 * Version numbers across the app and extension are aligned to 0.5.2.
 
-## \[0.5.1] - 2026-09-07
+## [0.5.1] - 2026-09-07
 
 This release wires phone sync end to end and adds encrypted offline backup and key naming.
 
@@ -472,7 +506,7 @@ This release wires phone sync end to end and adds encrypted offline backup and k
 * Offline file save uses a standard in-page download rather than a native file plugin, keeping the dependency footprint unchanged.
 * Version numbers across the app and extension are aligned to 0.5.1.
 
-## \[0.5.0] - 2026-09-06
+## [0.5.0] - 2026-09-06
 
 This release is a hardening and feature-completion pass driven by internal Play Store testing. Most changes are bug fixes and feature fixes surfaced by running the app on real devices.
 
@@ -507,7 +541,7 @@ This release is a hardening and feature-completion pass driven by internal Play 
 * Phone sync remains a work in progress. Personal Info is still a placeholder.
 * Version numbers across the app and extension are aligned to 0.5.0.
 
-## \[0.4.0] - 2026-09-01
+## [0.4.0] - 2026-09-01
 
 ### Added
 
@@ -543,7 +577,7 @@ This release is a hardening and feature-completion pass driven by internal Play 
 * Per-method auth edit and delete remain deferred on the phone.
 * Version numbers across the app and extension are aligned to 0.4.0.
 
-## \[0.3.5] - 2026-08-15
+## [0.3.5] - 2026-08-15
 
 ### Added
 
@@ -575,7 +609,7 @@ This release is a hardening and feature-completion pass driven by internal Play 
 
 
 
-## \[0.3.4] - 2026-08-09
+## [0.3.4] - 2026-08-09
 
 ### Added
 
@@ -601,7 +635,7 @@ This release is a hardening and feature-completion pass driven by internal Play 
 * Wiring the decoded payload into the existing merge so both devices converge
 * Play Store prompt when a generic scanner reads a Valid Vault frame without the app installed
 
-## \[0.3.3] - 2026-08-08
+## [0.3.3] - 2026-08-08
 
 ### Added
 
@@ -637,7 +671,7 @@ This release is a hardening and feature-completion pass driven by internal Play 
 * QR frame display on the phone so it can show its credentials to the browser
 * Send-only fallback for devices without a camera
 
-## \[0.3.2] - 2026-08-07
+## [0.3.2] - 2026-08-07
 
 ### Added
 
@@ -678,7 +712,7 @@ This release is a hardening and feature-completion pass driven by internal Play 
 * QR pairing UI on both the app and the extension so a user can start a sync
 * Comparison code confirmation screen during pairing
 
-## \[0.3.1] - 2026-08-05
+## [0.3.1] - 2026-08-05
 
 ### Added
 
@@ -729,7 +763,7 @@ This release is a hardening and feature-completion pass driven by internal Play 
 ### Added
 
 * crypto.js - deriveKeyFromPrfOutput() - HKDF-SHA256 derivation from WebAuthn PRF output to AES-GCM wrapping key
-* crypto.js - PBKDF2\_ITERATIONS raised to 600,000 - LEGACY\_PBKDF2\_ITERATIONS retained at 100,000 for migration unwraps
+* crypto.js - PBKDF2_ITERATIONS raised to 600,000 - LEGACY_PBKDF2_ITERATIONS retained at 100,000 for migration unwraps
 * auth.js - WebAuthn PRF enrollment flow
 
   * PRF extension requested at credential creation with a random 32-byte eval salt
@@ -768,7 +802,7 @@ This release is a hardening and feature-completion pass driven by internal Play 
 
 ### Removed
 
-* FINGERPRINT\_SECRET hardcoded constant - retained internally only for the legacy migration unwrap
+* FINGERPRINT_SECRET hardcoded constant - retained internally only for the legacy migration unwrap
 * sha256Kdf(), hashPin(), hashPassword(), arraysEqual() from crypto.js
 * setPIN(), authenticatePIN(), removePIN(), startPINCreation() from auth.js
 * pinWrappedKey, pinSalt, pinHash, pinKdfIterations from persistent auth storage - purged on any successful unlock
@@ -807,5 +841,5 @@ This release is a hardening and feature-completion pass driven by internal Play 
 * Alpha status - key protection layer contains known weaknesses corrected in 0.3.0
 * Earlier iterations were not formally tagged
 
-\---
+---
 

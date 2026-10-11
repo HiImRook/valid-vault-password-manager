@@ -1,10 +1,25 @@
 # Valid Vault - Development Roadmap
 
-**Current Version:** v0.7.4.3 - **Status: Active Testing**
+**Current Version:** v0.8.0 - **Status: Active Testing**
 
-\---
+---
 
 ## Version History (Completed)
+
+### v0.8.0 - Phone App Rebuilt (Oct 2026)
+
+* ✅ Phone app rebuilt on the extension's own modules, bundled by build.js; the old copies of the core modules removed, so both clients share one copy of the vault, crypto, unlock, key, and merge code
+* ✅ Every extension tab on the phone: Website Credentials, Personal Info, Misc Credentials, Crypto Wallets, Bookmarks, Sync, Settings, a phone User Guide, and About
+* ✅ Protected key transfer on the phone: key QR and key file in both directions with the passphrase and questions, and raw key QRs refused
+* ✅ Key import that survives lock and unlock, with the warning before a different key clears local data
+* ✅ Fingerprint, device PIN, or password required for transfers, unlock method changes, Clear Vault, and each section on the phone
+* ✅ Phone setup from an existing key, and key-file recovery on the lock screen when fingerprint is reset and no password is set
+* ✅ Password generator, 2 hour auto-lock, and per-method Edit and Delete on the phone
+* ✅ Imports checked in full before anything is written; a different key, a damaged section, or a newer file version is refused with nothing changed
+* ✅ No duplicates on merge: separately created logins, renamed usernames, and re-saved misc credentials stay single, and deletes stay deleted
+* ✅ Re-enrolling fingerprint uses a second Keystore slot, so a cancelled re-enroll keeps the working fingerprint; device PIN limited to Android 11 and up
+* ✅ Extension Misc Credentials and extra field values entered in masked boxes
+* ✅ Verified in use: phone upgraded in place from the old app, and the key carried from the extension to the phone over QR
 
 ### v0.7.4.3 - Security Hardening (Oct 2026)
 
@@ -30,7 +45,7 @@
 * ✅ Export and import now require fingerprint authentication: Export Key, Import Key, Export Vault, Import Vault, Share Master Key, Share Vault, and QR receive ask for fingerprint, device PIN, or password first
 * ✅ Autofill finds password fields inside open and closed shadow roots, skips a lone confirm field, and fires fill events web components register
 * ✅ V tags hide when their field is slid, clipped, or made invisible, and reposition after animations and clicks
-* ✅ Password generator style choice: with special characters, or letters and numbers only; symbols narrowed to `!@#$%^\&\*`
+* ✅ Password generator style choice: with special characters, or letters and numbers only; symbols narrowed to `!@#$%^&*`
 * ✅ Three security questions replaced with less public ones, in the same positions, on the extension and the phone
 * ✅ Published on the Chrome Web Store
 
@@ -152,32 +167,21 @@
 
 * ✅ Native biometric auth, phone QR sync and encrypted backup, sovereign QR scanner, terminal-green rebrand - see CHANGELOG.md for full detail
 
-\---
+---
 
-## Upcoming After v0.7.4
+## Upcoming After v0.8.0
 
 ### v0.8.x - The Phone App
 
-Built in this order, each step shipping as its own v0.8 release:
+Built in this order, each step shipping as its own v0.8 release. The phone de-drift shipped in v0.8.0.
 
-**1. Phone de-drift (next)**
-
-* Key import that survives lock and unlock with the same warning flow, working key file import, and visible scan results
-* The protected key format on the phone, so phone and extension key transfer over QR works again with the passphrase and questions
-* Whole-vault carry on the phone: Web Credentials, Personal Info, bookmarks, and Crypto Wallets
-* Personal Info tab on the phone
-* Fingerprint, device PIN, or password required for export and import on the phone
-* The password generator and the 2 hour auto-lock limit on the phone
-
-This is feature work. The vault stays encrypted throughout, and nothing about it changes how data is protected.
-
-**2. Android Autofill**
+**1. Android Autofill (next)**
 
 * Valid Vault registers as an Android Autofill service, so saved logins fill in other apps and in Chrome and other browsers on the phone
 * Saves new logins from those apps and sites when Android offers them
 * Share a link from any app to Valid Vault to add it to your encrypted bookmarks
 
-**3. Modified Chromium browser**
+**2. Modified Chromium browser**
 
 Chromium, through the Android System WebView the phone app already runs on, modified for privacy and Valid Vault:
 
@@ -189,15 +193,16 @@ Chromium, through the Android System WebView the phone app already runs on, modi
 * Valid Vault autofill built in, with the same V tags and pickers as the extension
 * Your encrypted bookmarks, opened directly in the browser
 
-**4. QR transport**
+**3. QR transport**
 
+* A vault QR that a phone camera reads reliably from a computer screen: fewer bytes per frame, a larger code, a slower frame rate, and a sharper camera feed
 * QR scanner reliability on real devices and cameras, including scans that stall before completing
 * Bookmarks QR share
 * Unlock behavior quirks reported by community testing
 
 Until this lands, encrypted files on a USB drive are the dependable device-to-device path, already verified in use.
 
-**5. App injection**
+**4. App injection**
 
 * Filling apps that Android Autofill can't reach
 
@@ -220,10 +225,9 @@ Until this lands, encrypted files on a USB drive are the dependable device-to-de
 
 ### Platform Hardening
 
-* Per-method auth edit and delete on the phone Manage tab
 * Native background-lifecycle lock guarantees on Android
 
-\---
+---
 
 ## Known Limitations
 
@@ -235,37 +239,33 @@ Until this lands, encrypted files on a USB drive are the dependable device-to-de
 
 ⚠️ **Auto-lock is a foreground inactivity timer** on the phone - exact timing while backgrounded is subject to OS suspension
 
-⚠️ **Per-method auth edit and delete deferred on the phone**
-
 ⚠️ **SSN and card storage deliberately deferred**, pending security work
 
-⚠️ **Phone and extension key transfer over QR waits for the phone de-drift** - the extension now refuses unprotected key QRs, and the phone learns the protected format in v0.8.x; the key file path works between them in the meantime, including on a USB drive
+⚠️ **Live vault QR doesn't read reliably on a phone yet** - the key QR works between the phone and the extension; vault QR scanning is the QR transport step, and vault files carry everything in the meantime, including on a USB drive
 
-⚠️ **The password generator and the 2 hour auto-lock limit are extension-only for now** - the phone keeps its 1 hour limit until the v0.8.x de-drift
+⚠️ **Phones upgraded from an older version may need fingerprint re-enrolled once** - unlock with your password and re-enroll in Manage, or use Can't unlock? on the lock screen with your key file
 
 ⚠️ **Uni-Vault needs a browser setting in Brave** - Brave ships the File System Access API switched off; Chrome and Edge work out of the box, and Brave users can switch it on or keep using Export and Import
 
 ⚠️ **Uni-Vault syncs browsers on one computer** - moving the vault between devices is still Export and Import, by USB drive or any file transfer, or QR
 
-⚠️ **Crypto Wallets and bookmarks are extension-only for now** - the phone app receives them in the v0.8.x de-drift; both stay encrypted in the vault file in the meantime
-
 ⚠️ **A lost key-file passphrase and answers cannot be recovered. Writing these down and storing them safely is highly recommended.**
 
 **These are intentional staging decisions or known open bugs, not oversights or knowledge gaps.**
 
-\---
+---
 
 ## Contributing
 
 Valid Vault is currently in solo development by Rook.
 
-\---
+---
 
 ## License
 
 MIT License - See LICENSE file for details
 
-\---
+---
 
-**Last Updated:** Oct 10, 2026
+**Last Updated:** Oct 11, 2026
 
