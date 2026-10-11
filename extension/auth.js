@@ -9,7 +9,7 @@ import {
   wrapMasterKey,
   unwrapMasterKey
 } from './crypto.js'
-import { getAuth, setAuth } from './store.js'
+import { getAuth, setAuth, get, put } from './store.js'
 
 const RP_NAME = 'Valid Vault'
 const RP_ID = location.hostname
@@ -20,36 +20,67 @@ const PLATFORM_TRANSPORTS = ['internal']
 const PLATFORM_HINTS = ['client-device']
 const FINGERPRINT_UNAVAILABLE = 'Fingerprint was cancelled or is no longer registered with this browser. Unlock with your password. If this keeps happening, re-enroll fingerprint in Manage.'
 
-const attempts = new Map()
+const ATTEMPTS_ROW = 'attempts'
 const LOCKOUT_MS = 60000
 const MAX_ATTEMPTS = 3
 const CREATION_TIMEOUT_MS = 60000
 
 const creationTimers = new Map()
 
-function checkRateLimit(type) {
-  const record = attempts.get(type)
-  if (!record) return { allowed: true }
-  if (Date.now() - record.lastAttempt > LOCKOUT_MS) {
-    attempts.delete(type)
+async function readAttempts() {
+  try {
+    const row = await get('auth', ATTEMPTS_ROW)
+    return row && row.records && typeof row.records === 'object' ? row.records : {}
+  } catch (e) {
+    return {}
+  }
+}
+
+async function writeAttempts(records) {
+  try { await put('auth', { id: ATTEMPTS_ROW, records }) } catch (e) {}
+}
+
+function currentRecord(records, type, now) {
+  const record = records[type]
+  if (!record) return null
+  if (record.lastAttempt > now) record.lastAttempt = now
+  if (now - record.lastAttempt > LOCKOUT_MS) return null
+  return record
+}
+
+async function checkRateLimit(type) {
+  const now = Date.now()
+  const records = await readAttempts()
+  const record = currentRecord(records, type, now)
+  if (!record) {
+    if (records[type]) {
+      delete records[type]
+      await writeAttempts(records)
+    }
     return { allowed: true }
   }
   if (record.count >= MAX_ATTEMPTS) {
-    const remaining = Math.ceil((LOCKOUT_MS - (Date.now() - record.lastAttempt)) / 1000)
+    const remaining = Math.max(1, Math.ceil((LOCKOUT_MS - (now - record.lastAttempt)) / 1000))
     return { allowed: false, remaining }
   }
   return { allowed: true }
 }
 
-function recordFailedAttempt(type) {
-  const record = attempts.get(type) || { count: 0, lastAttempt: 0 }
+async function recordFailedAttempt(type) {
+  const now = Date.now()
+  const records = await readAttempts()
+  const record = currentRecord(records, type, now) || { count: 0, lastAttempt: 0 }
   record.count++
-  record.lastAttempt = Date.now()
-  attempts.set(type, record)
+  record.lastAttempt = now
+  records[type] = record
+  await writeAttempts(records)
 }
 
-function clearAttempts(type) {
-  attempts.delete(type)
+async function clearAttempts(type) {
+  const records = await readAttempts()
+  if (!records[type]) return
+  delete records[type]
+  await writeAttempts(records)
 }
 
 function startCreationTimer(type) {
@@ -275,12 +306,12 @@ async function authenticateLegacyFingerprint(auth) {
 
   await migrateLegacyMasterKey()
 
-  clearAttempts('fingerprint')
+  await clearAttempts('fingerprint')
   return { success: true, masterKey, requiresReenroll: true }
 }
 
 async function authenticateFingerprint() {
-  const rateCheck = checkRateLimit('fingerprint')
+  const rateCheck = await checkRateLimit('fingerprint')
   if (!rateCheck.allowed) {
     return { success: false, error: `Too many attempts. Wait ${rateCheck.remaining}s` }
   }
@@ -304,7 +335,7 @@ async function authenticateFingerprint() {
 
     const prfOutput = await evaluatePrf(credentialId, prfSalt)
     if (!prfOutput) {
-      recordFailedAttempt('fingerprint')
+      await recordFailedAttempt('fingerprint')
       return { success: false, error: 'PRF evaluation failed' }
     }
 
@@ -313,10 +344,10 @@ async function authenticateFingerprint() {
 
     await migrateLegacyMasterKey()
 
-    clearAttempts('fingerprint')
+    await clearAttempts('fingerprint')
     return { success: true, masterKey }
   } catch (error) {
-    recordFailedAttempt('fingerprint')
+    await recordFailedAttempt('fingerprint')
     if (error && error.name === 'NotAllowedError') {
       return { success: false, error: FINGERPRINT_UNAVAILABLE }
     }
@@ -361,7 +392,7 @@ async function setPIN(pin, existingMasterKey) {
 }
 
 async function authenticatePIN(pin) {
-  const rateCheck = checkRateLimit('pin')
+  const rateCheck = await checkRateLimit('pin')
   if (!rateCheck.allowed) {
     return { success: false, error: `Too many attempts. Wait ${rateCheck.remaining}s` }
   }
@@ -380,10 +411,10 @@ async function authenticatePIN(pin) {
     await upgradeWrap(auth, 'pin', pin, masterKey)
     await migrateLegacyMasterKey()
 
-    clearAttempts('pin')
+    await clearAttempts('pin')
     return { success: true, masterKey }
   } catch (error) {
-    recordFailedAttempt('pin')
+    await recordFailedAttempt('pin')
     return { success: false, error: 'Invalid PIN' }
   }
 }
@@ -465,7 +496,7 @@ async function setPassword(password, existingMasterKey) {
 }
 
 async function authenticatePassword(password) {
-  const rateCheck = checkRateLimit('password')
+  const rateCheck = await checkRateLimit('password')
   if (!rateCheck.allowed) {
     return { success: false, error: `Too many attempts. Wait ${rateCheck.remaining}s` }
   }
@@ -484,16 +515,16 @@ async function authenticatePassword(password) {
     await upgradeWrap(auth, 'password', password, masterKey)
     await migrateLegacyMasterKey()
 
-    clearAttempts('password')
+    await clearAttempts('password')
     return { success: true, masterKey }
   } catch (error) {
-    recordFailedAttempt('password')
+    await recordFailedAttempt('password')
     return { success: false, error: 'Invalid password' }
   }
 }
 
 async function authenticateLegacyPIN(pin) {
-  const rateCheck = checkRateLimit('pin')
+  const rateCheck = await checkRateLimit('pin')
   if (!rateCheck.allowed) {
     return { success: false, error: `Too many attempts. Wait ${rateCheck.remaining}s` }
   }
@@ -511,11 +542,11 @@ async function authenticateLegacyPIN(pin) {
 
     await migrateLegacyMasterKey()
 
-    clearAttempts('pin')
+    await clearAttempts('pin')
     const requiresAuthSetup = !auth.passwordWrappedKey && !auth.fingerprintWrappedKey
     return { success: true, masterKey, requiresAuthSetup }
   } catch (error) {
-    recordFailedAttempt('pin')
+    await recordFailedAttempt('pin')
     return { success: false, error: 'Invalid PIN' }
   }
 }

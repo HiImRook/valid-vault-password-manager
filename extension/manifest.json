@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Valid Vault Password Manager",
-  "version": "0.7.4.2",
+  "version": "0.7.4.3",
   "description": "Local encrypted password manager. Unlock by fingerprint or password. No cloud, no accounts. Sync by QR code or encrypted file.",
   "permissions": [
     "storage",
@@ -40,15 +40,5 @@
   "background": {
     "service_worker": "background.js",
     "type": "module"
-  },
-  "web_accessible_resources": [
-    {
-      "resources": [
-        "manage.html"
-      ],
-      "matches": [
-        "<all_urls>"
-      ]
-    }
-  ]
+  }
 }
