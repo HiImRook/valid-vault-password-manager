@@ -160,19 +160,32 @@ async function setBookmarksVault(vaultData) {
   return putVault('bookmarks', { id: 'vault', ...vaultData })
 }
 
-async function clearAll() {
+const ALL_STORES = ['auth', 'passwords', 'wallets', 'webcreds', 'personalInfo', 'vaultMigration', 'bookmarks']
+const VAULT_DATA_STORES = ['passwords', 'webcreds', 'personalInfo', 'vaultMigration', 'bookmarks', 'wallets']
+
+async function clearStores(names) {
   const database = await openDB()
-  const stores = ['auth', 'passwords', 'wallets', 'webcreds', 'personalInfo', 'vaultMigration', 'bookmarks']
-  
-  for (const storeName of stores) {
-    const tx = database.transaction(storeName, 'readwrite')
-    const store = tx.objectStore(storeName)
-    store.clear()
-  }
+  await new Promise((resolve, reject) => {
+    const tx = database.transaction(names, 'readwrite')
+    for (const storeName of names) tx.objectStore(storeName).clear()
+    tx.oncomplete = () => resolve()
+    tx.onerror = () => reject(tx.error)
+    tx.onabort = () => reject(tx.error)
+  })
+}
+
+async function clearAll() {
+  await clearStores(ALL_STORES)
+}
+
+async function clearVaultData() {
+  await clearStores(VAULT_DATA_STORES)
+  await markVaultChanged()
 }
 
 export {
   openDB,
+  clearVaultData,
   get,
   put,
   remove,

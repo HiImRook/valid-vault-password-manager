@@ -101,14 +101,13 @@ function tombstone(acct, now) {
 }
 
 function normalize(tree) {
-  const now = Date.now()
   const seen = new Map()
   for (const acct of liveAccounts(tree).sort(byCreated)) {
     if (acct.words.length === 0) continue
     const sig = acct.wallet + '\u0000' + acct.words.join(' ')
     if (seen.has(sig)) {
       const index = tree.accounts.indexOf(acct)
-      tree.accounts[index] = tombstone(acct, Math.max(now, (acct.updatedAt || 0) + 1))
+      tree.accounts[index] = tombstone(acct, (acct.updatedAt || 0) + 1)
     } else {
       seen.set(sig, acct.id)
     }
@@ -297,6 +296,7 @@ async function renameWallet(oldName, newName, key) {
   }
   const pos = orderPos(tree, walletKey(oldName))
   if (pos !== null) tree.order[walletKey(target)] = { pos, updatedAt: now }
+  delete tree.order[walletKey(oldName)]
   await writeTree(tree, key)
 }
 
@@ -381,7 +381,7 @@ function newer(a, b) {
   if (au !== bu) return au > bu ? a : b
   if (a.deleted && !b.deleted) return a
   if (b.deleted && !a.deleted) return b
-  return a
+  return JSON.stringify(a) >= JSON.stringify(b) ? a : b
 }
 
 function mergeTrees(localTree, incomingTree) {
@@ -394,7 +394,10 @@ function mergeTrees(localTree, incomingTree) {
   const order = Object.assign({}, localTree.order)
   for (const [orderKey, entry] of Object.entries(incomingTree.order)) {
     const current = order[orderKey]
-    if (!current || (entry.updatedAt || 0) > (current.updatedAt || 0)) order[orderKey] = entry
+    if (!current) { order[orderKey] = entry; continue }
+    const cu = current.updatedAt || 0
+    const eu = entry.updatedAt || 0
+    if (eu > cu || (eu === cu && JSON.stringify(entry) > JSON.stringify(current))) order[orderKey] = entry
   }
   return normalize({
     meta: {
@@ -407,11 +410,25 @@ function mergeTrees(localTree, incomingTree) {
   })
 }
 
+function canonicalTree(tree) {
+  const accounts = tree.accounts.slice().sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+  const order = {}
+  for (const k of Object.keys(tree.order).sort()) order[k] = tree.order[k]
+  return JSON.stringify({ accounts, order })
+}
+
+function sameTrees(a, b) {
+  return canonicalTree(a) === canonicalTree(b)
+}
+
 async function importRow(incomingRow, key) {
-  if (!incomingRow) return
+  if (!incomingRow) return false
   const incomingTree = await decryptRow(incomingRow, key)
   const localTree = await readTree(key)
-  await writeTree(mergeTrees(localTree, incomingTree), key)
+  const merged = mergeTrees(localTree, incomingTree)
+  if (sameTrees(localTree, merged)) return false
+  await writeTree(merged, key)
+  return true
 }
 
 export {
@@ -433,5 +450,8 @@ export {
   moveAccount,
   sortWalletsAZ,
   mergeTrees,
+  sameTrees,
+  writeTree,
+  readTree,
   importRow
 }

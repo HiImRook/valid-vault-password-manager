@@ -454,12 +454,15 @@ async function deleteCredential(credentialId, masterKey) {
     const index = creds.findIndex((candidate) => candidate.id === credentialId)
 
     if (index !== -1) {
-      creds[index] = {
+      const now = Date.now()
+      const tombstone = {
         id: creds[index].id,
         deleted: true,
-        deletedAt: Date.now(),
-        updatedAt: Date.now()
+        deletedAt: now,
+        updatedAt: Math.max(now, stamp(creds[index]) + 1)
       }
+      if (typeof creds[index].username === 'string') tombstone.username = creds[index].username
+      creds[index] = tombstone
 
       tree.meta.lastAccess = Date.now()
       await writeVaultTree(tree, masterKey)
@@ -488,11 +491,73 @@ async function autofill(domain, credentialId, masterKey) {
   return { success: true, username: cred.username, password: cred.password }
 }
 
+function stamp(record) {
+  return typeof record.updatedAt === 'number' && isFinite(record.updatedAt) ? record.updatedAt : 0
+}
+
+function laterRecord(a, b) {
+  const at = stamp(a)
+  const bt = stamp(b)
+  if (at !== bt) return at > bt ? a : b
+  if (!a.deleted && b.deleted) return a
+  if (a.deleted && !b.deleted) return b
+  return JSON.stringify(a) >= JSON.stringify(b) ? a : b
+}
+
+function mergeRecordLists(localList, incomingList, identities) {
+  const all = [...localList, ...incomingList]
+  const byId = new Map()
+  for (const record of all) {
+    const current = byId.get(record.id)
+    byId.set(record.id, current ? laterRecord(current, record) : record)
+  }
+  const winners = Array.from(byId.values())
+  const byIdentity = new Map()
+  for (const record of winners) {
+    if (record.deleted) continue
+    const identity = identities.get(record)
+    const current = byIdentity.get(identity)
+    byIdentity.set(identity, current ? laterRecord(current, record) : record)
+  }
+  const deletedAt = new Map()
+  for (const record of winners) {
+    if (!record.deleted) continue
+    const identity = identities.get(record)
+    if (identity === undefined) continue
+    deletedAt.set(identity, Math.max(deletedAt.get(identity) || 0, stamp(record)))
+  }
+  const keep = new Set()
+  for (const [identity, record] of byIdentity) {
+    if ((deletedAt.get(identity) || 0) > stamp(record)) continue
+    keep.add(record)
+  }
+  for (const record of winners) if (record.deleted) keep.add(record)
+  const out = []
+  const placed = new Set()
+  for (const record of all) {
+    const chosen = byId.get(record.id)
+    if (!keep.has(chosen) || placed.has(chosen)) continue
+    if (!chosen.deleted) { out.push(chosen); placed.add(chosen) }
+  }
+  for (const record of all) {
+    const chosen = byId.get(record.id)
+    if (!keep.has(chosen) || placed.has(chosen)) continue
+    out.push(chosen)
+    placed.add(chosen)
+  }
+  return out
+}
+
+function credentialIdentity(cred) {
+  if (cred.deleted) return typeof cred.username === 'string' ? 'user:' + cred.username : undefined
+  return 'user:' + cred.username
+}
+
 function mergeVaults(localTree, incomingTree) {
   const merged = {
     meta: {
       version: 2,
-      createdAt: Math.min(localTree.meta.createdAt, incomingTree.meta.createdAt),
+      createdAt: Math.min(localTree.meta.createdAt || Date.now(), incomingTree.meta.createdAt || Date.now()),
       lastAccess: Date.now()
     },
     credentials: {}
@@ -506,45 +571,26 @@ function mergeVaults(localTree, incomingTree) {
   for (const domain of domains) {
     const localCreds = localTree.credentials[domain] || []
     const incomingCreds = incomingTree.credentials[domain] || []
-
-    function keyFor(cred) {
-      if (cred.deleted) return 'tomb:' + cred.id
-      return 'user:' + cred.username
-    }
-
-    const byUsername = new Map()
-    for (const cred of [...localCreds, ...incomingCreds]) {
-      const key = keyFor(cred)
-      const existing = byUsername.get(key)
-      if (!existing || cred.updatedAt > existing.updatedAt) {
-        byUsername.set(key, cred)
-      }
-    }
-
-    const tombstones = new Map()
-    for (const cred of [...localCreds, ...incomingCreds]) {
-      if (cred.deleted) {
-        const prev = tombstones.get(cred.id)
-        if (!prev || cred.updatedAt > prev.updatedAt) tombstones.set(cred.id, cred)
-      }
-    }
-
-    const result = []
-    for (const cred of byUsername.values()) {
-      if (cred.deleted) continue
-      const tomb = tombstones.get(cred.id)
-      if (tomb && tomb.updatedAt > cred.updatedAt) continue
-      result.push(cred)
-    }
-    const liveIds = new Set(result.map((cred) => cred.id))
-    for (const tomb of tombstones.values()) {
-      if (!liveIds.has(tomb.id)) result.push(tomb)
-    }
-
+    const identities = new Map()
+    for (const cred of [...localCreds, ...incomingCreds]) identities.set(cred, credentialIdentity(cred))
+    const result = mergeRecordLists(localCreds, incomingCreds, identities)
     if (result.length > 0) merged.credentials[domain] = result
   }
 
   return merged
+}
+
+function canonicalCredentials(tree) {
+  const out = {}
+  for (const domain of Object.keys(tree.credentials || {}).sort()) {
+    const list = tree.credentials[domain].slice().sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+    if (list.length > 0) out[domain] = list
+  }
+  return JSON.stringify(out)
+}
+
+function sameCredentials(a, b) {
+  return canonicalCredentials(a) === canonicalCredentials(b)
 }
 
 export {
@@ -558,6 +604,9 @@ export {
   restorePreviousPassword,
   autofill,
   mergeVaults,
+  mergeRecordLists,
+  laterRecord,
+  sameCredentials,
   migrateLegacyVault,
   readVaultTree,
   writeVaultTree,

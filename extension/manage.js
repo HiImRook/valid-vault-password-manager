@@ -15,7 +15,7 @@ import { masterKeyToCryptoKey, decrypt } from './crypto.js'
 import { formDialog, askSecret } from './dialogs.js'
 import * as keypackage from './keypackage.js'
 import * as uniVault from './linkedvault.js'
-import { getPasswordVault, setPasswordVault } from './store.js'
+import * as vaultFile from './vaultfile.js'
 
 
 async function restoreMasterKeyFromSession() {
@@ -434,8 +434,9 @@ function renderExtraFields(container, credential, masterKey) {
       '<button class="small danger btn-delete-extra">Delete</button>'
 
     row.querySelector('.btn-edit-extra').onclick = async () => {
-      const newValue = window.prompt('New value for "' + field.label + '":', field.value)
-      if (newValue === null) return
+      const edited = await formDialog({ title: 'Edit ' + field.label, fields: [{ label: field.label, secret: true, value: field.value }], okLabel: 'Save' })
+      if (!edited) return
+      const newValue = edited[0]
       const updated = fields.map((f, i2) => i2 === idx ? { label: f.label, value: newValue } : f)
       const result = await passwords.updateCredential(credential.id, { extraFields: updated }, masterKey)
       if (result.success) { showMsg(msgManage, 'Updated', 'success'); loadAllCredentials() }
@@ -458,10 +459,15 @@ function renderExtraFields(container, credential, masterKey) {
   addBtn.style.marginTop = '4px'
   addBtn.textContent = '+ Add Field'
   addBtn.onclick = async () => {
-    const label = window.prompt('Field name (e.g. Account Number):')
-    if (!label) return
-    const value = window.prompt('Value:')
-    if (value === null) return
+    const added = await formDialog({
+      title: 'Add field',
+      fields: [{ label: 'Field name', placeholder: 'Account Number' }, { label: 'Value', secret: true }],
+      okLabel: 'Add',
+      validate: (v) => (v[0].trim() ? { value: v } : { error: 'Enter a field name.', focus: 0 })
+    })
+    if (!added) return
+    const label = added[0]
+    const value = added[1]
     const updated = fields.concat([{ label: label.trim(), value }])
     const result = await passwords.updateCredential(credential.id, { extraFields: updated }, masterKey)
     if (result.success) { showMsg(msgManage, 'Added', 'success'); loadAllCredentials() }
@@ -574,7 +580,7 @@ async function loadAllWebCredentials() {
           masterKey = authResult.masterKey
           session.setMasterKey(masterKey)
         }
-        const newValue = window.prompt('New value for this item (name stays the same; a different name is a separate item):')
+        const newValue = await askSecret('Edit value', 'New value', 'The name stays the same. A different name is a separate item.')
         if (!newValue) return
         const result = await webcreds.updateWebCredential(cred.id, { value: newValue }, masterKey)
         if (result.success) { showMsg(msgWebcreds, 'Updated', 'success'); loadAllWebCredentials() }
@@ -618,12 +624,21 @@ if (btnAddWebcred) {
       masterKey = authResult.masterKey
       session.setMasterKey(masterKey)
     }
-    const category = prompt('Category (e.g. Wi-Fi):')
-    if (!category) return
-    const name = prompt('Name (e.g. Home Router):')
-    if (!name) return
-    const value = prompt('Value:')
-    if (!value) return
+    const entered = await formDialog({
+      title: 'Add misc credential',
+      fields: [{ label: 'Category', placeholder: 'Wi-Fi' }, { label: 'Name', placeholder: 'Home Router' }, { label: 'Value', secret: true }],
+      okLabel: 'Save',
+      validate: (v) => {
+        if (!v[0].trim()) return { error: 'Enter a category.', focus: 0 }
+        if (!v[1].trim()) return { error: 'Enter a name.', focus: 1 }
+        if (!v[2]) return { error: 'Enter a value.', focus: 2 }
+        return { value: v }
+      }
+    })
+    if (!entered) return
+    const category = entered[0]
+    const name = entered[1]
+    const value = entered[2]
     const result = await webcreds.saveWebCredential(category.trim(), name.trim(), value, masterKey)
     if (result.success) { showMsg(msgWebcreds, 'Saved', 'success'); loadAllWebCredentials() }
     else { showMsg(msgWebcreds, 'Save failed', 'error') }
@@ -734,8 +749,9 @@ async function editPersonalInfoField(fieldKey) {
   const profile = current.profile
 
   const currentValue = await getFieldValue(profile, fieldKey)
-  const newValue = window.prompt('New value:', currentValue)
-  if (newValue === null) return
+  const edited = await formDialog({ title: 'Edit', fields: [{ label: 'New value', value: currentValue }], okLabel: 'Save' })
+  if (!edited) return
+  const newValue = edited[0]
 
   if (fieldKey.indexOf('address.') === 0) {
     const sub = fieldKey.split('.')[1]
@@ -756,8 +772,9 @@ async function addEmail() {
   const masterKey = authResult.masterKey
   session.setMasterKey(masterKey)
 
-  const email = window.prompt('New email address:')
-  if (!email) return
+  const entered = await formDialog({ title: 'Add email', fields: [{ label: 'Email address', placeholder: 'you@example.com' }], okLabel: 'Add' })
+  if (!entered || !entered[0].trim()) return
+  const email = entered[0].trim()
 
   const current = await personalinfo.getProfile(masterKey)
   if (!current.success) { showMsg(msgPersonalInfo, current.error, 'error'); return }
@@ -1124,11 +1141,9 @@ function stopShare() {
 const _btnShareVault = document.getElementById('btn-share-vault'); if (_btnShareVault) _btnShareVault.onclick = async function () {
   if (!session.getMasterKey()) { syncMsg('Unlock your vault first', 'error'); return }
   if (!(await requireTransferAuth())) return
-  const vaultData = await getPasswordVault()
-  const webCredsData = await store.getWebCredsVault()
-  const personalInfoData = await store.getPersonalInfo()
-  if (!vaultData && !webCredsData && !personalInfoData) { syncMsg('Nothing to sync yet', 'error'); return }
-  streamShare(JSON.stringify({ kind: 'vault', vault: vaultData, webcreds: webCredsData, personalInfo: personalInfoData }), 'Scan this with your other device to receive your logins')
+  const payload = vaultFile.payloadFromBundle(await vaultFile.buildBundle())
+  if (!payload.vault && !payload.webcreds && !payload.personalInfo) { syncMsg('Nothing to sync yet', 'error'); return }
+  streamShare(JSON.stringify(payload), 'Scan this with your other device to receive your logins')
 }
 const _btnShareKey = document.getElementById('btn-share-key'); if (_btnShareKey) _btnShareKey.onclick = async function () {
   if (!session.getMasterKey()) { syncMsg('Unlock your vault first', 'error'); return }
@@ -1176,8 +1191,8 @@ const VAULT_FILE_TYPES = [{ description: 'Valid Vault vault', accept: { 'applica
 const _btnExportVault = document.getElementById('btn-export-vault'); if (_btnExportVault) _btnExportVault.onclick = async function () {
   const mk = session.getMasterKey()
   if (!mk) { syncMsg('Unlock first', 'error'); return }
-  const bundle = await uniVault.buildBundle()
-  if (!uniVault.bundleHasData(bundle)) { syncMsg('Nothing to export yet', 'error'); return }
+  const bundle = await vaultFile.buildBundle()
+  if (!vaultFile.bundleHasData(bundle)) { syncMsg('Nothing to export yet', 'error'); return }
   let nickname = ''
   try { const a = await store.getAuth() || {}; nickname = (a.keyNickname || '').trim() } catch (e) {}
   const fname = backupFileName(nickname)
@@ -1227,13 +1242,12 @@ const _btnExportVault = document.getElementById('btn-export-vault'); if (_btnExp
 async function importVaultText(text) {
   if (!text) { syncMsg('No file selected', 'error'); return }
   try {
-    const fileObj = JSON.parse(text)
-    if (fileObj.format !== uniVault.VAULT_FILE_FORMAT) { syncMsg('Not a Valid Vault backup file', 'error'); return }
+    const bundle = vaultFile.parseBundle(text)
     const mk = session.getMasterKey()
     if (!mk) { syncMsg('Unlock first', 'error'); return }
-    await uniVault.mergeBundle(fileObj, mk)
-    syncMsg('Vault merged.', 'success')
-    refreshAfterSync()
+    const result = await vaultFile.mergeBundle(bundle, mk)
+    syncMsg(vaultFile.describeMerge(result), 'success')
+    if (result.changed) refreshAfterSync()
   } catch (e) { syncMsg('Import failed: ' + (e && e.message ? e.message : e), 'error') }
 }
 
@@ -1428,7 +1442,8 @@ const _btnExportKey = document.getElementById('btn-export-key'); if (_btnExportK
   try {
     const pkg = await ensureKeyPackage(mk)
     if (!pkg) return
-    const fname = (pkg.nickname || 'master-key').replace(/[^a-z0-9]+/gi, '-').toLowerCase() + '.vaultkey'
+    const nickname = await keypackage.getNickname()
+    const fname = ((nickname || 'master-key').replace(/[^a-z0-9]+/gi, '-').replace(/^-+|-+$/g, '').toLowerCase() || 'master-key') + '.vaultkey'
     if (downloadFile(fname, JSON.stringify(pkg))) syncMsg('Key exported. Keep the file, passphrase, and answers safe.', 'success')
     else syncMsg('Could not save the file', 'error')
   } catch (e) { syncMsg('Export failed: ' + (e && e.message ? e.message : e), 'error') }
@@ -1455,22 +1470,12 @@ const _btnChangeKeyProtection = document.getElementById('btn-change-key-protecti
   } catch (e) { syncMsg('Could not update key protection: ' + (e && e.message ? e.message : e), 'error') }
 }
 
-const VAULT_STORES = ['passwords', 'webcreds', 'personalInfo', 'vaultMigration', 'bookmarks', 'wallets']
-
 function passwordMeetsRule(pw) {
   return !!pw && pw.length >= 12 && /[a-zA-Z]/.test(pw) && /[0-9]/.test(pw) && /[^a-zA-Z0-9]/.test(pw)
 }
 
 async function clearLocalVaultData() {
-  const database = await store.openDB()
-  for (const storeName of VAULT_STORES) {
-    await new Promise((resolve, reject) => {
-      const tx = database.transaction(storeName, 'readwrite')
-      tx.objectStore(storeName).clear()
-      tx.oncomplete = () => resolve()
-      tx.onerror = () => reject(tx.error)
-    })
-  }
+  await store.clearVaultData()
 }
 
 async function choosePasswordForImport(status) {
@@ -1563,8 +1568,10 @@ async function relinkFingerprint(importedKey, status) {
 }
 
 async function adoptImportedKey(importedKey) {
-  const matches = await uniVault.localVaultOpensWith(importedKey)
-  if (!matches) {
+  const matches = await vaultFile.localVaultOpensWith(importedKey)
+  const currentKey = session.getMasterKey()
+  const holdsData = !matches && (!currentKey || await vaultFile.localVaultHasLiveData(currentKey))
+  if (holdsData) {
     const proceed = window.confirm(
       'WARNING: This browser\'s current vault was made with a different master key.\n\n' +
       'Importing this key makes that vault unusable, so it will be cleared from this browser.\n\n' +
@@ -1688,9 +1695,9 @@ async function handleImported(payloadText) {
       const mk = session.getMasterKey()
       if (!mk) { syncMsg('QR sync not enabled. Import master key first', 'error'); return }
       if (!(await requireTransferAuth())) return
-      await uniVault.mergeBundle(data, session.getMasterKey())
-      syncMsg('Sync complete.', 'success')
-      if (loginCredsUnlocked) loadAllCredentials()
+      const result = await vaultFile.mergeBundle(vaultFile.bundleFromPayload(data), session.getMasterKey())
+      syncMsg(vaultFile.describeMerge(result), 'success')
+      if (result.changed) refreshAfterSync()
       return
     }
     syncMsg('Unrecognized code', 'error')

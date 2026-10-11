@@ -67,6 +67,7 @@ function dialog(options) {
       resolve(value)
     }
     const onKey = (e) => {
+      if (!overlay.isConnected) { document.removeEventListener('keydown', onKey, true); return }
       if (e.key === 'Escape') { e.preventDefault(); finish(input ? null : false) }
       if (e.key === 'Enter' && input) { e.preventDefault(); finish(input.value) }
     }
@@ -98,8 +99,17 @@ function armHideTimer() {
   state.hideTimer = setTimeout(() => closeSection(), state.hideSeconds * 1000)
 }
 
+function actionWord() {
+  return state.deps && state.deps.touch ? 'Tap' : 'Click'
+}
+
 async function loadHideSeconds() {
   try {
+    if (state.deps && typeof state.deps.getHideSeconds === 'function') {
+      const seconds = Number(await state.deps.getHideSeconds())
+      if (seconds > 0) state.hideSeconds = seconds
+      return
+    }
     const stored = await chrome.storage.local.get(['autoLockTimeout'])
     if (stored.autoLockTimeout) state.hideSeconds = stored.autoLockTimeout
   } catch (e) {}
@@ -327,7 +337,7 @@ function wordGridInputs(ed) {
 
 function renderCovered(container) {
   const cover = el('div', 'wv-covered')
-  cover.appendChild(el('div', 'wv-covered-text', 'Hidden. Click to show.'))
+  cover.appendChild(el('div', 'wv-covered-text', 'Hidden. ' + actionWord() + ' to show.'))
   cover.onclick = () => {
     state.editor.covered = false
     render()
@@ -362,14 +372,14 @@ function renderEditor(container) {
     labelInput.value = ed.label
     fields.appendChild(labelInput)
     root.appendChild(fields)
-    root.appendChild(el('div', 'wv-hint', 'Fill in as many boxes as your wallet uses, then click Done. Pasting a whole phrase into box 1 fills the boxes in order.'))
+    root.appendChild(el('div', 'wv-hint', 'Fill in as many boxes as your wallet uses, then ' + actionWord().toLowerCase() + ' Done. Pasting a whole phrase into box 1 fills the boxes in order.'))
     root.appendChild(wordGridInputs(ed))
     const actions = el('div', 'wv-actions')
     actions.appendChild(button('Cancel', 'secondary', () => closeEditor()))
     actions.appendChild(button('Done', '', () => finishWords()))
     root.appendChild(actions)
   } else {
-    root.appendChild(el('div', 'wv-hint', ed.mode === 'edit' ? 'Notes for this account. Leave blank if you do not need them.' : 'Words saved. Add an optional note, like a wallet password, or click Cancel to skip.'))
+    root.appendChild(el('div', 'wv-hint', ed.mode === 'edit' ? 'Notes for this account. Leave blank if you do not need them.' : 'Words saved. Add an optional note, like a wallet password, or ' + actionWord().toLowerCase() + ' Cancel to skip.'))
     const header = el('input', 'wv-notes-header')
     header.type = 'text'
     header.placeholder = 'Header (for example: Password)'
@@ -479,7 +489,31 @@ function dropAfter(node, e) {
   return e.clientY > rect.top + rect.height / 2
 }
 
+function wireTouchMove(grip, kind, id, index, list) {
+  grip.textContent = ''
+  grip.classList.add('wv-grip-touch')
+  const move = async (target) => {
+    if (target < 0 || target >= list.length) return
+    try {
+      if (kind === 'wallet') await wallets.moveWallet(id, target, key())
+      else await wallets.moveAccount(id, target, key())
+    } catch (err) {}
+    await reload()
+  }
+  const up = button('▲', 'secondary small wv-move', () => move(index - 1))
+  const down = button('▼', 'secondary small wv-move', () => move(index + 1))
+  up.disabled = index === 0
+  down.disabled = index === list.length - 1
+  grip.appendChild(up)
+  grip.appendChild(down)
+  grip.onclick = (e) => e.stopPropagation()
+}
+
 function wireDrag(node, grip, kind, id, index, list, scope) {
+  if (state.deps && state.deps.touch) {
+    wireTouchMove(grip, kind, id, index, list)
+    return
+  }
   grip.onmousedown = () => { node.draggable = true }
   grip.onmouseup = () => { node.draggable = false }
   grip.onclick = (e) => e.stopPropagation()
@@ -687,7 +721,7 @@ function render() {
   const orphanNotes = ed && ed.stage === 'notes' && ed.mode !== 'edit' && !state.list.some((w) => w.accounts.some((a) => a.id === ed.accountId))
   if (orphanNotes) renderEditor(content)
   if (state.list.length === 0 && !ed) {
-    content.appendChild(el('div', 'wv-empty', 'No wallets yet. Click Add Wallet to save your first seed phrase.'))
+    content.appendChild(el('div', 'wv-empty', 'No wallets yet. ' + actionWord() + ' Add Wallet to save your first seed phrase.'))
     return
   }
   const names = state.list.map((w) => w.name)
@@ -725,10 +759,12 @@ function init(deps) {
   state.els.content.addEventListener('click', armHideTimer, true)
   state.els.content.addEventListener('keydown', armHideTimer, true)
   window.addEventListener('scroll', () => closeSuggest(), true)
-  chrome.storage.onChanged.addListener((changes, area) => {
-    if (area === 'session' && changes.masterKeyBytes && !changes.masterKeyBytes.newValue) lock()
-    if (area === 'local' && changes.autoLockTimeout && changes.autoLockTimeout.newValue) state.hideSeconds = changes.autoLockTimeout.newValue
-  })
+  if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.onChanged) {
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area === 'session' && changes.masterKeyBytes && !changes.masterKeyBytes.newValue) lock()
+      if (area === 'local' && changes.autoLockTimeout && changes.autoLockTimeout.newValue) state.hideSeconds = changes.autoLockTimeout.newValue
+    })
+  }
   loadHideSeconds()
   render()
 }

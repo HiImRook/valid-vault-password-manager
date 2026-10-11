@@ -1,3 +1,5 @@
+const OPEN_DIALOGS = new Set()
+
 function el(tag, className, text) {
   const node = document.createElement(tag)
   if (className) node.className = className
@@ -46,6 +48,15 @@ function buildField(field, index) {
   if (field.placeholder) input.placeholder = field.placeholder
   if (field.value) input.value = field.value
   row.appendChild(input)
+  const actions = field.actions || (field.action ? [field.action] : [])
+  for (const action of actions) {
+    const extra = actionButton(action.label, 'secondary vv-eye', () => {
+      action.onClick(input)
+      input.focus()
+    })
+    extra.tabIndex = -1
+    row.appendChild(extra)
+  }
   if (field.secret) {
     const eye = actionButton('Show', 'secondary vv-eye', () => {
       const hidden = input.type === 'password'
@@ -76,9 +87,14 @@ function formDialog(options) {
     box.appendChild(error)
     const row = el('div', 'wv-dialog-actions')
     let busy = false
-    const finish = (value) => {
+    const entry = { overlay, onKey: null }
+    const detach = () => {
       overlay.remove()
-      document.removeEventListener('keydown', onKey, true)
+      document.removeEventListener('keydown', entry.onKey, true)
+      OPEN_DIALOGS.delete(entry)
+    }
+    const finish = (value) => {
+      detach()
       resolve(value)
     }
     const submit = async () => {
@@ -91,6 +107,7 @@ function formDialog(options) {
         okButton.textContent = options.busyLabel || 'Checking...'
         let result = null
         try { result = await options.validate(values) } catch (e) { result = { error: e && e.message ? e.message : String(e) } }
+        if (!overlay.isConnected) return
         busy = false
         okButton.disabled = false
         okButton.textContent = options.okLabel || 'Continue'
@@ -105,9 +122,12 @@ function formDialog(options) {
       finish(values)
     }
     const onKey = (e) => {
+      if (!overlay.isConnected) { detach(); return }
       if (e.key === 'Escape' && !busy) { e.preventDefault(); finish(null) }
       if (e.key === 'Enter' && !busy) { e.preventDefault(); submit() }
     }
+    entry.onKey = onKey
+    OPEN_DIALOGS.add(entry)
     row.appendChild(actionButton(options.cancelLabel || 'Cancel', 'secondary', () => { if (!busy) finish(null) }))
     const okButton = actionButton(options.okLabel || 'Continue', options.danger ? 'danger' : '', submit)
     row.appendChild(okButton)
@@ -120,10 +140,23 @@ function formDialog(options) {
   })
 }
 
+function closeAllDialogs() {
+  for (const entry of Array.from(OPEN_DIALOGS)) {
+    entry.overlay.remove()
+    document.removeEventListener('keydown', entry.onKey, true)
+    OPEN_DIALOGS.delete(entry)
+  }
+}
+
+async function confirmDialog(options) {
+  const values = await formDialog({ title: options.title, text: options.text, okLabel: options.okLabel || 'Continue', cancelLabel: options.cancelLabel, danger: !!options.danger })
+  return values !== null
+}
+
 async function askSecret(title, label, text) {
   const values = await formDialog({ title, text, fields: [{ label, secret: true }], okLabel: 'Continue' })
   if (!values || !values[0]) return null
   return values[0]
 }
 
-export { formDialog, askSecret }
+export { formDialog, confirmDialog, askSecret, closeAllDialogs }

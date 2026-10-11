@@ -138,12 +138,19 @@ async function moveBookmark(id, targetIndex, key) {
     else if (next) pos = next.pos - POS_STEP
     else pos = POS_STEP
   }
+  const now = Date.now()
   if (pos === null || (prev && pos <= prev.pos) || (next && pos >= next.pos)) {
-    ordered.forEach((item, i) => { item.pos = (i + 1) * POS_STEP })
+    ordered.forEach((item, i) => {
+      const nextPos = (i + 1) * POS_STEP
+      if (item.pos !== nextPos) {
+        item.pos = nextPos
+        item.updatedAt = now
+      }
+    })
   } else {
     moved.pos = pos
   }
-  moved.updatedAt = Date.now()
+  moved.updatedAt = now
   await writeTree(tree, key)
   return true
 }
@@ -158,11 +165,20 @@ async function removeBookmark(id, key) {
   return true
 }
 
+function laterItem(a, b) {
+  const at = a.updatedAt || 0
+  const bt = b.updatedAt || 0
+  if (at !== bt) return at > bt ? a : b
+  if (!a.deleted && b.deleted) return a
+  if (a.deleted && !b.deleted) return b
+  return JSON.stringify(a) >= JSON.stringify(b) ? a : b
+}
+
 function mergeTrees(localTree, incomingTree) {
   const byUrl = new Map()
   for (const item of [...localTree.items, ...incomingTree.items]) {
     const current = byUrl.get(item.url)
-    if (!current || (item.updatedAt || 0) > (current.updatedAt || 0)) byUrl.set(item.url, item)
+    byUrl.set(item.url, current ? laterItem(current, item) : item)
   }
   return {
     meta: {
@@ -174,11 +190,22 @@ function mergeTrees(localTree, incomingTree) {
   }
 }
 
+function canonicalItems(tree) {
+  return JSON.stringify(tree.items.slice().sort((a, b) => (a.url < b.url ? -1 : a.url > b.url ? 1 : 0)))
+}
+
+function sameTrees(a, b) {
+  return canonicalItems(a) === canonicalItems(b)
+}
+
 async function importRow(incomingRow, key) {
-  if (!incomingRow) return
+  if (!incomingRow) return false
   const incomingTree = await decryptRow(incomingRow, key)
   const localTree = await readTree(key)
-  await writeTree(mergeTrees(localTree, incomingTree), key)
+  const merged = mergeTrees(localTree, incomingTree)
+  if (sameTrees(localTree, merged)) return false
+  await writeTree(merged, key)
+  return true
 }
 
 export {
@@ -194,5 +221,8 @@ export {
   removeBookmark,
   orderItems,
   mergeTrees,
+  sameTrees,
+  writeTree,
+  readTree,
   importRow
 }

@@ -13,11 +13,31 @@ const TIMEOUT_CHECK_MS = 2000
 const PIN_KEY = 'sessionPin'
 const SOFT_KEY = 'softLocked'
 const SHARED_ACTIVITY_KEY = 'lastActivity'
+const lockListeners = new Set()
+let autoLockProvider = null
+
+function setAutoLockProvider(provider) {
+  autoLockProvider = typeof provider === 'function' ? provider : null
+}
+
+function onLock(listener) {
+  lockListeners.add(listener)
+  return () => lockListeners.delete(listener)
+}
+
+function notifyLock() {
+  for (const listener of lockListeners) {
+    try { listener() } catch (e) {}
+  }
+}
 
 async function getTimeouts() {
   let seconds = DEFAULT_AUTOLOCK_SEC
   try {
-    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+    if (autoLockProvider) {
+      const provided = Number(await autoLockProvider())
+      if (provided > 0) seconds = provided
+    } else if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
       const r = await chrome.storage.local.get(['autoLockTimeout'])
       if (r.autoLockTimeout) seconds = r.autoLockTimeout
     }
@@ -136,13 +156,15 @@ async function softLock() {
 }
 
 async function lockAll() {
+  const wasUnlocked = session.masterKey !== null
   session.masterKey = null
   session.unlockedDomains.clear()
   session.lastActivity = 0
   session.softLocked = false
+  stopTimeout()
   await writeSoftFlag(false)
   await clearStorageSession()
-  stopTimeout()
+  if (wasUnlocked) notifyLock()
 }
 
 async function clearStorageSession() {
@@ -160,6 +182,8 @@ async function getState() {
 }
 
 export {
+  setAutoLockProvider,
+  onLock,
   setMasterKey,
   getMasterKey,
   hasMasterKey,

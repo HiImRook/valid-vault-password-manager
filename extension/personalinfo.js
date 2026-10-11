@@ -45,7 +45,10 @@ async function saveProfile(profile, masterKey) {
 function mergeProfiles(localRecord, incomingRecord) {
   const localUpdated = localRecord && localRecord.updatedAt ? localRecord.updatedAt : 0
   const incomingUpdated = incomingRecord && incomingRecord.updatedAt ? incomingRecord.updatedAt : 0
-  return incomingUpdated > localUpdated ? incomingRecord : localRecord
+  if (incomingUpdated !== localUpdated) return incomingUpdated > localUpdated ? incomingRecord : localRecord
+  if (!localRecord) return incomingRecord
+  if (!incomingRecord) return localRecord
+  return JSON.stringify(incomingRecord) > JSON.stringify(localRecord) ? incomingRecord : localRecord
 }
 
 export {

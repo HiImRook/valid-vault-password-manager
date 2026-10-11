@@ -1,5 +1,6 @@
 import { encrypt, decrypt } from './crypto.js'
 import { getWebCredsVault, setWebCredsVault } from './store.js'
+import { mergeRecordLists } from './passwords.js'
 
 function generateId() {
   return crypto.randomUUID()
@@ -38,23 +39,28 @@ async function saveWebCredential(category, name, value, masterKey) {
   }
 
   const existing = []
+  let previous = null
   for (const cred of vault.credentials[category]) {
     if (cred.deleted) {
       existing.push(cred)
       continue
     }
     const existingName = await decrypt(cred.name, masterKey)
-    if (existingName === name) continue
+    if (existingName === name) {
+      if (!previous) previous = cred
+      continue
+    }
     existing.push(cred)
   }
 
-  const id = generateId()
+  const now = Date.now()
+  const id = previous ? previous.id : generateId()
   existing.push({
     id,
     name: encName,
     value: encValue,
-    createdAt: Date.now(),
-    updatedAt: Date.now()
+    createdAt: previous && previous.createdAt ? previous.createdAt : now,
+    updatedAt: previous ? Math.max(now, (previous.updatedAt || 0) + 1) : now
   })
 
   vault.credentials[category] = existing
@@ -146,12 +152,15 @@ async function deleteWebCredential(credentialId) {
     const index = creds.findIndex(matchesId)
 
     if (index !== -1) {
-      creds[index] = {
+      const now = Date.now()
+      const tombstone = {
         id: creds[index].id,
         deleted: true,
-        deletedAt: Date.now(),
-        updatedAt: Date.now()
+        deletedAt: now,
+        updatedAt: Math.max(now, (creds[index].updatedAt || 0) + 1)
       }
+      if (creds[index].name) tombstone.name = creds[index].name
+      creds[index] = tombstone
 
       vault.meta.lastAccess = Date.now()
       await setWebCredsVault(vault)
@@ -172,7 +181,11 @@ async function reEncryptVault(vault, oldKey, newKey) {
     const list = []
     for (const cred of vault.credentials[category]) {
       if (cred.deleted) {
-        list.push(cred)
+        const tomb = { id: cred.id, deleted: true, deletedAt: cred.deletedAt, updatedAt: cred.updatedAt }
+        if (cred.name) {
+          try { tomb.name = await encrypt(await decrypt(cred.name, oldKey), newKey) } catch (error) {}
+        }
+        list.push(tomb)
         continue
       }
       const name = await decrypt(cred.name, oldKey)
@@ -191,11 +204,20 @@ async function reEncryptVault(vault, oldKey, newKey) {
   return out
 }
 
+async function identityFor(cred, masterKey) {
+  if (!cred.name) return cred.deleted ? undefined : 'id:' + cred.id
+  try {
+    return 'name:' + (await decrypt(cred.name, masterKey))
+  } catch (error) {
+    return cred.deleted ? undefined : 'id:' + cred.id
+  }
+}
+
 async function mergeWebCredsVaults(localVault, incomingVault, masterKey) {
   const merged = {
     meta: {
       version: localVault.meta.version,
-      createdAt: Math.min(localVault.meta.createdAt, incomingVault.meta.createdAt),
+      createdAt: Math.min(localVault.meta.createdAt || Date.now(), incomingVault.meta.createdAt || Date.now()),
       lastAccess: Date.now()
     },
     credentials: {}
@@ -209,50 +231,26 @@ async function mergeWebCredsVaults(localVault, incomingVault, masterKey) {
   for (const category of categories) {
     const localCreds = localVault.credentials[category] || []
     const incomingCreds = incomingVault.credentials[category] || []
-
-    const byName = new Map()
-
-    async function keyFor(cred) {
-      if (cred.deleted) return 'tomb:' + cred.id
-      try {
-        return 'name:' + (await decrypt(cred.name, masterKey))
-      } catch (error) {
-        return 'id:' + cred.id
-      }
-    }
-
-    for (const cred of [...localCreds, ...incomingCreds]) {
-      const key = await keyFor(cred)
-      const existing = byName.get(key)
-      if (!existing || cred.updatedAt > existing.updatedAt) {
-        byName.set(key, cred)
-      }
-    }
-
-    const tombstones = new Map()
-    for (const cred of [...localCreds, ...incomingCreds]) {
-      if (cred.deleted) {
-        const prev = tombstones.get(cred.id)
-        if (!prev || cred.updatedAt > prev.updatedAt) tombstones.set(cred.id, cred)
-      }
-    }
-
-    const result = []
-    for (const cred of byName.values()) {
-      if (cred.deleted) continue
-      const tomb = tombstones.get(cred.id)
-      if (tomb && tomb.updatedAt > cred.updatedAt) continue
-      result.push(cred)
-    }
-    const liveIds = new Set(result.map((cred) => cred.id))
-    for (const tomb of tombstones.values()) {
-      if (!liveIds.has(tomb.id)) result.push(tomb)
-    }
-
+    const identities = new Map()
+    for (const cred of [...localCreds, ...incomingCreds]) identities.set(cred, await identityFor(cred, masterKey))
+    const result = mergeRecordLists(localCreds, incomingCreds, identities)
     if (result.length > 0) merged.credentials[category] = result
   }
 
   return merged
+}
+
+function canonicalWebCreds(vault) {
+  const out = {}
+  for (const category of Object.keys((vault && vault.credentials) || {}).sort()) {
+    const list = vault.credentials[category].slice().sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+    if (list.length > 0) out[category] = list
+  }
+  return JSON.stringify(out)
+}
+
+function sameWebCreds(a, b) {
+  return canonicalWebCreds(a) === canonicalWebCreds(b)
 }
 
 export {
@@ -263,5 +261,6 @@ export {
   updateWebCredential,
   deleteWebCredential,
   reEncryptVault,
-  mergeWebCredsVaults
+  mergeWebCredsVaults,
+  sameWebCreds
 }

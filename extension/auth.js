@@ -113,9 +113,13 @@ function cancelCreationTimer(type) {
   }
 }
 
+function hasNativeFingerprint(auth) {
+  return !!(auth && auth.fingerprintNative && auth.fingerprintNative.wrapped && auth.fingerprintNative.iv)
+}
+
 function hasWrappedKeys(auth) {
   if (!auth) return false
-  return !!(auth.fingerprintWrappedKey || auth.passwordWrappedKey || auth.pinWrappedKey)
+  return !!(auth.fingerprintWrappedKey || auth.passwordWrappedKey || auth.pinWrappedKey || hasNativeFingerprint(auth))
 }
 
 async function purgeLegacyPin() {
@@ -169,7 +173,7 @@ async function upgradeWrap(auth, method, secret, masterKey) {
 async function initAuth() {
   const auth = await getAuth()
   return {
-    hasFingerprint: !!(auth && auth.fingerprintEnabled && auth.fingerprintWrappedKey),
+    hasFingerprint: !!(auth && ((auth.fingerprintEnabled && auth.fingerprintWrappedKey) || hasNativeFingerprint(auth))),
     hasPIN: !!(auth && auth.pinWrappedKey),
     hasPassword: !!(auth && auth.passwordWrappedKey),
     hasLegacyPIN: !!(auth && auth.pinWrappedKey),
@@ -564,6 +568,7 @@ async function removeFingerprint() {
   delete auth.fingerprintCredentialId
   delete auth.fingerprintPrfSalt
   delete auth.fingerprintSalt
+  delete auth.fingerprintNative
   await setAuth(auth)
 
   return { success: true }
@@ -573,7 +578,7 @@ async function removePassword() {
   const auth = await getAuth()
   if (!auth) return { success: false, error: 'No auth configured' }
 
-  if (!auth.fingerprintEnabled) {
+  if (!auth.fingerprintEnabled && !hasNativeFingerprint(auth)) {
     return { success: false, error: 'Cannot remove password without fingerprint backup' }
   }
 

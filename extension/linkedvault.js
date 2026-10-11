@@ -1,21 +1,22 @@
-import * as store from './store.js'
-import * as passwords from './passwords.js'
-import * as webcreds from './webcreds.js'
-import * as personalinfo from './personalinfo.js'
-import * as bookmarks from './bookmarks.js'
-import * as wallets from './wallets.js'
-import { decrypt } from './crypto.js'
+import {
+  VAULT_FILE_FORMAT,
+  VAULT_FILE_VERSION,
+  KEY_MISMATCH_MSG,
+  LOCAL_MISMATCH_MSG,
+  parseBundle as parseVaultFile,
+  localVaultOpensWith,
+  bundleOpensWith,
+  buildBundle,
+  bundleHasData,
+  mergeBundle
+} from './vaultfile.js'
 
-const VAULT_FILE_FORMAT = 'valid-vault-vault'
-const VAULT_FILE_VERSION = 1
 const LINK_DB_NAME = 'ValidVaultLink'
 const LINK_DB_VERSION = 1
 const LINK_STORE = 'link'
 const LINK_KEY = 'vaultFile'
 const SYNC_LOCK = 'valid-vault-uni-vault-sync'
 const STATE_KEYS = ['vaultChangedAt', 'linkSyncedAt', 'linkFileSig']
-const KEY_MISMATCH_MSG = 'This vault was made with a different master key. Import that master key first, then import the vault.'
-const LOCAL_MISMATCH_MSG = 'This browser\'s saved data uses a different master key than the one unlocked. Import the matching master key first.'
 const NOT_VAULT_MSG = 'The linked file is not a readable Valid Vault vault file. Nothing was changed.'
 const UNAVAILABLE_MSG = 'The linked vault file cannot be reached. It may have been moved, renamed, or be on a drive that is not plugged in. This browser keeps working with its own copy.'
 const PERMISSION_MSG = 'This browser needs your permission again to use the vault file. Click Reconnect.'
@@ -84,97 +85,9 @@ async function getStatus() {
   return { linked: true, name: link.name, status, syncedAt: synced }
 }
 
-async function rowOpensWith(row, key) {
-  if (!row) return true
-  try { await passwords.decryptAnyRowToTree(row, key); return true } catch (e) { return false }
-}
-
-async function webCredsOpenWith(vault, key) {
-  if (!vault || !vault.credentials) return true
-  for (const category of Object.keys(vault.credentials)) {
-    for (const cred of vault.credentials[category]) {
-      if (cred.deleted) continue
-      try { await decrypt(cred.name, key); return true } catch (e) { return false }
-    }
-  }
-  return true
-}
-
-async function personalInfoOpensWith(record, key) {
-  if (!record || !record.data) return true
-  try { await decrypt(record.data, key); return true } catch (e) { return false }
-}
-
-async function localVaultOpensWith(key) {
-  if (!(await rowOpensWith(await store.getPasswordVault(), key))) return false
-  if (!(await webCredsOpenWith(await store.getWebCredsVault(), key))) return false
-  if (!(await personalInfoOpensWith(await store.getPersonalInfo(), key))) return false
-  if (!(await bookmarks.rowOpensWith(await store.getBookmarksVault(), key))) return false
-  return wallets.rowOpensWith(await store.getWalletVault(), key)
-}
-
-async function bundleOpensWith(bundle, key) {
-  if (!(await rowOpensWith(bundle.vault, key))) return false
-  if (!(await webCredsOpenWith(bundle.webcreds, key))) return false
-  if (!(await personalInfoOpensWith(bundle.personalInfo, key))) return false
-  if (!(await bookmarks.rowOpensWith(bundle.bookmarks, key))) return false
-  return wallets.rowOpensWith(bundle.wallets, key)
-}
-
-async function buildBundle() {
-  return {
-    format: VAULT_FILE_FORMAT,
-    version: VAULT_FILE_VERSION,
-    vault: await store.getPasswordVault(),
-    webcreds: await store.getWebCredsVault(),
-    personalInfo: await store.getPersonalInfo(),
-    bookmarks: await store.getBookmarksVault(),
-    wallets: await store.getWalletVault()
-  }
-}
-
-function bundleHasData(bundle) {
-  return !!(bundle.vault || bundle.webcreds || bundle.personalInfo || bundle.bookmarks || bundle.wallets)
-}
-
 function parseBundle(text) {
   if (!text || !text.trim()) return null
-  const obj = JSON.parse(text)
-  if (!obj || obj.format !== VAULT_FILE_FORMAT) throw new Error(NOT_VAULT_MSG)
-  return obj
-}
-
-async function mergeBundle(bundle, mk) {
-  if (!(await bundleOpensWith(bundle, mk))) throw new Error(KEY_MISMATCH_MSG)
-  if (!(await localVaultOpensWith(mk))) throw new Error(LOCAL_MISMATCH_MSG)
-  if (bundle.vault) {
-    const localRow = await store.getPasswordVault()
-    const incomingTree = await passwords.decryptAnyRowToTree(bundle.vault, mk)
-    if (!localRow) {
-      await passwords.writeVaultTree(incomingTree, mk)
-    } else {
-      const localTree = await passwords.decryptAnyRowToTree(localRow, mk)
-      const merged = passwords.mergeVaults(localTree, incomingTree)
-      merged.meta.lastAccess = Date.now()
-      await passwords.writeVaultTree(merged, mk)
-    }
-  }
-  if (bundle.webcreds) {
-    const localWc = await store.getWebCredsVault()
-    if (!localWc) {
-      await store.setWebCredsVault(bundle.webcreds)
-    } else {
-      const mergedWc = await webcreds.mergeWebCredsVaults(localWc, bundle.webcreds, mk)
-      mergedWc.meta.lastAccess = Date.now()
-      await store.setWebCredsVault(mergedWc)
-    }
-  }
-  if (bundle.personalInfo) {
-    const localPi = await store.getPersonalInfo()
-    await store.setPersonalInfo(personalinfo.mergeProfiles(localPi, bundle.personalInfo))
-  }
-  if (bundle.bookmarks) await bookmarks.importRow(bundle.bookmarks, mk)
-  if (bundle.wallets) await wallets.importRow(bundle.wallets, mk)
+  return parseVaultFile(text)
 }
 
 async function hasWritePermission(handle, ask) {
@@ -224,16 +137,19 @@ async function runSync(mk, force) {
   if (force || sig !== meta.linkFileSig) {
     let bundle
     try { bundle = parseBundle(await file.text()) } catch (e) {
-      await setStatus('refused', NOT_VAULT_MSG)
-      return { state: 'refused', message: NOT_VAULT_MSG }
+      const msg = e && e.message ? e.message : NOT_VAULT_MSG
+      await setStatus('refused', msg)
+      return { state: 'refused', message: msg }
     }
     if (bundle) {
-      try { await mergeBundle(bundle, mk) } catch (e) {
+      try {
+        const result = await mergeBundle(bundle, mk)
+        merged = result.changed
+      } catch (e) {
         const msg = e && e.message ? e.message : String(e)
         await setStatus('refused', msg)
         return { state: 'refused', message: msg }
       }
-      merged = true
     }
   }
   const syncedAt = Date.now()

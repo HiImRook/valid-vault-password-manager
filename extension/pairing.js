@@ -328,7 +328,7 @@ async function applyIncomingVault(payloadText, sharedKey, localMasterKey) {
   }
 
   if (!(await sameMasterKey(localMasterKey, incomingMasterKey))) {
-    return { success: false, error: 'Master key mismatch — import the same master key on both devices before syncing' }
+    return { success: false, error: 'Master key mismatch. Import the same master key on both devices before syncing.' }
   }
 
   const localTree = await decryptAnyRowToTree(localRow, localMasterKey)
@@ -377,7 +377,7 @@ async function receiveTransfer(transferData, sharedKey, localMasterKey) {
   }
 
   if (!(await sameMasterKey(localMasterKey, masterKey))) {
-    return { success: false, error: 'Master key mismatch — import the same master key on both devices before syncing' }
+    return { success: false, error: 'Master key mismatch. Import the same master key on both devices before syncing.' }
   }
 
   const localTree = await decryptAnyRowToTree(localRow, localMasterKey)
