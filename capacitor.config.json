@@ -2,5 +2,8 @@
   "appId": "com.valid.vault",
   "appName": "Valid Vault",
   "webDir": "www",
-  "bundledWebRuntime": false
+  "bundledWebRuntime": false,
+  "android": {
+    "loggingBehavior": "none"
+  }
 }

@@ -3,6 +3,7 @@ import { getPasswordVault, setPasswordVault, getVaultMigrationJournal, setVaultM
 
 const PREVIOUS_KEEP_MS = 14 * 24 * 60 * 60 * 1000
 const PREVIOUS_KEEP_USES = 3
+const APP_PACKAGE_PATTERN = /^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+$/
 
 function retirePassword(cred, oldPassword, now) {
   if (!oldPassword || oldPassword === cred.password) return
@@ -46,11 +47,26 @@ function normalizeLabel(label) {
     .replace(/\s+/g, ' ')
 }
 
+function isValidAppLinks(links) {
+  if (links === undefined) return true
+  if (!links || typeof links !== 'object' || Array.isArray(links)) return false
+  for (const [pkg, link] of Object.entries(links)) {
+    if (!APP_PACKAGE_PATTERN.test(pkg)) return false
+    if (!link || typeof link !== 'object' || link.id !== pkg) return false
+    if (typeof link.updatedAt !== 'number' || !isFinite(link.updatedAt)) return false
+    if (link.deleted !== undefined && link.deleted !== true) return false
+    if (!link.deleted && (typeof link.site !== 'string' || !link.site)) return false
+    if (link.cert !== undefined && typeof link.cert !== 'string') return false
+  }
+  return true
+}
+
 function isValidVaultTree(value) {
   if (!value || typeof value !== 'object') return false
   if (!value.meta || typeof value.meta !== 'object') return false
   if (!value.credentials || typeof value.credentials !== 'object') return false
   if (Array.isArray(value.credentials)) return false
+  if (!isValidAppLinks(value.appLinks)) return false
 
   for (const [domain, credentials] of Object.entries(value.credentials)) {
     if (typeof domain !== 'string' || !Array.isArray(credentials)) return false
@@ -553,6 +569,66 @@ function credentialIdentity(cred) {
   return 'user:' + cred.username
 }
 
+function mergeAppLinks(localLinks, incomingLinks) {
+  const out = {}
+  const local = localLinks || {}
+  const incoming = incomingLinks || {}
+  const packages = new Set([...Object.keys(local), ...Object.keys(incoming)])
+  for (const pkg of Array.from(packages).sort()) {
+    const a = local[pkg]
+    const b = incoming[pkg]
+    out[pkg] = a && b ? laterRecord(a, b) : (a || b)
+  }
+  return out
+}
+
+function liveAppLinks(tree) {
+  const out = {}
+  for (const [pkg, link] of Object.entries(tree.appLinks || {})) {
+    if (!link.deleted) out[pkg] = link.site
+  }
+  return out
+}
+
+async function getAppLink(pkg, masterKey) {
+  const tree = await readVaultTree(masterKey)
+  const link = (tree.appLinks || {})[pkg]
+  if (!link || link.deleted) return null
+  return link.site
+}
+
+async function listAppLinks(masterKey) {
+  return liveAppLinks(await readVaultTree(masterKey))
+}
+
+function nextStamp(previous) {
+  const now = Date.now()
+  return previous && typeof previous.updatedAt === 'number' && previous.updatedAt >= now ? previous.updatedAt + 1 : now
+}
+
+async function setAppLink(pkg, site, masterKey, cert) {
+  if (!APP_PACKAGE_PATTERN.test(pkg) || typeof site !== 'string' || !site) throw new Error('Invalid app link')
+  const tree = await readVaultTree(masterKey)
+  const links = Object.assign({}, tree.appLinks || {})
+  const previous = links[pkg]
+  const certValue = typeof cert === 'string' ? cert : ''
+  if (previous && !previous.deleted && previous.site === site && (previous.cert || '') === certValue) return
+  links[pkg] = { id: pkg, site, updatedAt: nextStamp(previous) }
+  if (certValue) links[pkg].cert = certValue
+  tree.appLinks = links
+  await writeVaultTree(tree, masterKey)
+}
+
+async function removeAppLink(pkg, masterKey) {
+  const tree = await readVaultTree(masterKey)
+  const links = Object.assign({}, tree.appLinks || {})
+  const previous = links[pkg]
+  if (!previous || previous.deleted) return
+  links[pkg] = { id: pkg, deleted: true, updatedAt: nextStamp(previous) }
+  tree.appLinks = links
+  await writeVaultTree(tree, masterKey)
+}
+
 function mergeVaults(localTree, incomingTree) {
   const merged = {
     meta: {
@@ -577,6 +653,9 @@ function mergeVaults(localTree, incomingTree) {
     if (result.length > 0) merged.credentials[domain] = result
   }
 
+  const appLinks = mergeAppLinks(localTree.appLinks, incomingTree.appLinks)
+  if (Object.keys(appLinks).length > 0) merged.appLinks = appLinks
+
   return merged
 }
 
@@ -586,7 +665,9 @@ function canonicalCredentials(tree) {
     const list = tree.credentials[domain].slice().sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
     if (list.length > 0) out[domain] = list
   }
-  return JSON.stringify(out)
+  const links = {}
+  for (const pkg of Object.keys(tree.appLinks || {}).sort()) links[pkg] = tree.appLinks[pkg]
+  return JSON.stringify({ credentials: out, appLinks: links })
 }
 
 function sameCredentials(a, b) {
@@ -603,6 +684,10 @@ export {
   noteCredentialUse,
   restorePreviousPassword,
   autofill,
+  getAppLink,
+  setAppLink,
+  removeAppLink,
+  listAppLinks,
   mergeVaults,
   mergeRecordLists,
   laterRecord,

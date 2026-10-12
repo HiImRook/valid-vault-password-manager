@@ -157,6 +157,69 @@ function pickTextFile() {
   })
 }
 
+async function takeShared() {
+  const st = plugin('ShareTarget')
+  if (!st) return null
+  try {
+    const r = await st.takePending()
+    return r && r.found ? { text: r.text || '', subject: r.subject || '' } : null
+  } catch (e) {
+    return null
+  }
+}
+
+function onShared(callback) {
+  const st = plugin('ShareTarget')
+  if (!st || typeof st.addListener !== 'function') return
+  try { st.addListener('shareReceived', () => { callback() }) } catch (e) {}
+}
+
+async function returnToSender() {
+  const st = plugin('ShareTarget')
+  if (!st) return
+  try { await st.returnToSender() } catch (e) {}
+}
+
+async function autofillRequest() {
+  const ab = plugin('AutofillBridge')
+  if (!ab) return null
+  try {
+    const r = await ab.getRequest()
+    return r && (r.mode === 'fill' || r.mode === 'save') ? r : null
+  } catch (e) {
+    return null
+  }
+}
+
+async function autofillComplete(username, password) {
+  const ab = plugin('AutofillBridge')
+  if (!ab) throw new Error('Autofill is not available')
+  await ab.complete({ username, password })
+}
+
+async function autofillClose() {
+  const ab = plugin('AutofillBridge')
+  if (!ab) return
+  try { await ab.close() } catch (e) {}
+}
+
+async function autofillStatus() {
+  const as = plugin('AutofillSetup')
+  if (!as) return { supported: false, enabled: false }
+  try {
+    const r = await as.status()
+    return { supported: !!(r && r.supported), enabled: !!(r && r.enabled) }
+  } catch (e) {
+    return { supported: false, enabled: false }
+  }
+}
+
+async function openAutofillSettings() {
+  const as = plugin('AutofillSetup')
+  if (!as) throw new Error('Autofill is not available on this device')
+  await as.openSettings()
+}
+
 function openExternal(url) {
   try { window.open(url, '_blank') } catch (e) {}
 }
@@ -171,5 +234,13 @@ export {
   canShareFiles,
   shareFile,
   pickTextFile,
+  takeShared,
+  onShared,
+  returnToSender,
+  autofillRequest,
+  autofillComplete,
+  autofillClose,
+  autofillStatus,
+  openAutofillSettings,
   openExternal
 }

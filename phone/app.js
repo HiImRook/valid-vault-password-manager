@@ -29,6 +29,13 @@ const MASK = '••••••••'
 const DEFAULT_NICKNAME = 'My Master Key'
 const GLOBE_SPIN_PER_MS = 0.0003
 const GLOBE_EARLY_MARGIN = '240px 0px 240px 0px'
+const SHARE_URL_PATTERN = /https?:\/\/[^\s<>"'`]+/i
+const SHARE_URL_TRAILING = /[)\].,;:!?'"]+$/
+const SHARE_TITLE_MAX = 200
+const SHARE_RETURN_MS = 900
+const FILL_IDLE_MS = 120000
+const FILL_DONE_MS = 1200
+const SITE_INPUT_PATTERN = /^[a-z0-9-]+(\.[a-z0-9-]+)+$/
 const DEAD_FINGERPRINT_CODES = ['missing', 'invalidated']
 const FINGERPRINT_RESET_TEXT = 'Android reset fingerprint unlock on this phone, so the old fingerprint setting was removed. Tap Enroll under Fingerprint to set it up again.'
 const PASSWORD_RULE_TEXT = '12+ characters with a letter, a number, and a symbol.'
@@ -51,6 +58,10 @@ const state = {
   shareToken: null,
   tab: 'manage',
   deadFingerprint: null,
+  pendingShare: null,
+  fillIdle: null,
+  fillBusy: false,
+  fillWired: false,
   bookmarkFilter: '',
   msgTimers: new Map()
 }
@@ -411,6 +422,73 @@ async function enterApp(masterKey) {
   loadSettingsIntoForm()
   showTab(state.tab)
   if (migrationError) showMsg('msg-manage', 'Your saved logins could not be upgraded: ' + errText(migrationError) + '. Nothing was lost; the old copy was kept.', 'error')
+  if (state.pendingShare) saveSharedLink()
+}
+
+function sharedLinkFrom(item) {
+  const text = String(item.text || '')
+  const match = text.match(SHARE_URL_PATTERN)
+  if (!match) return null
+  const url = normalizeBookmarkInput(match[0].replace(SHARE_URL_TRAILING, ''))
+  if (!url) return null
+  const subject = String(item.subject || '').trim()
+  const rest = text.replace(match[0], '').replace(/\s+/g, ' ').trim()
+  const title = (subject && subject !== match[0] ? subject : rest).slice(0, SHARE_TITLE_MAX)
+  return { url, title }
+}
+
+async function receiveShare(item) {
+  if (!item) return
+  const link = sharedLinkFrom(item)
+  if (!link) {
+    state.pendingShare = null
+    showMsg(currentMsgId(), 'That share had no web address, so nothing was saved.', 'error')
+    return
+  }
+  state.pendingShare = link
+  if (key()) { saveSharedLink(); return }
+  const status = await auth.initAuth()
+  if (status.isNew) {
+    state.pendingShare = null
+    showMsg('msg-setup', 'Set up Valid Vault first, then share the link again.', 'error')
+    return
+  }
+  showView('locked')
+  showMsg('msg-locked', 'Unlock to save the shared link to Bookmarks.', 'info')
+  if (status.hasFingerprint) unlockWithFingerprint()
+  else $('input-unlock-password').focus()
+}
+
+async function checkShares() {
+  receiveShare(await platform.takeShared())
+}
+
+async function saveSharedLink() {
+  const link = state.pendingShare
+  state.pendingShare = null
+  if (!link || !key()) return
+  showTab('bookmarks')
+  const values = await formDialog({
+    title: 'Save bookmark',
+    fields: [{ label: 'Address', value: link.url }, { label: 'Title (optional)', value: link.title }],
+    okLabel: 'Save',
+    validate: (v) => {
+      const url = normalizeBookmarkInput(v[0])
+      if (!url) return { error: 'Enter a web address that starts with http or https, or just the site, like example.com.', focus: 0 }
+      return { value: { url, title: v[1].trim() } }
+    }
+  })
+  if (!key()) return
+  if (!values) {
+    showMsg('msg-bookmarks', 'Shared link not saved', 'info')
+    setTimeout(() => { platform.returnToSender() }, SHARE_RETURN_MS)
+    return
+  }
+  const existing = await bookmarks.findByUrl(values.url, key())
+  await bookmarks.saveBookmark(values.url, values.title || (existing ? existing.title : ''), key())
+  showMsg('msg-bookmarks', existing ? 'That bookmark already existed, so it was updated' : 'Bookmark saved', 'success')
+  loadBookmarks()
+  setTimeout(() => { platform.returnToSender() }, SHARE_RETURN_MS)
 }
 
 function resetSectionLocks() {
@@ -739,6 +817,7 @@ function showTab(name) {
   if (name === 'webcreds') loadWebCredentials()
   if (name === 'wallets') walletsTab.onTabShown()
   if (name === 'bookmarks') loadBookmarks()
+  if (name === 'settings') loadAutofillSettings()
 }
 
 async function loadAuthStatus() {
@@ -1858,6 +1937,8 @@ function attachActivity() {
 }
 
 function wire() {
+  $('btn-autofill-settings').onclick = () => { platform.openAutofillSettings().catch((e) => showMsg('msg-settings', errText(e), 'error')) }
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && state.tab === 'settings' && key()) loadAutofillSettings() })
   $('btn-setup-fp').onclick = setupEnrollFingerprint
   $('btn-setup-pw').onclick = setupEnrollPassword
   $('setup-password').onkeydown = (e) => { if (e.key === 'Enter') setupEnrollPassword() }
@@ -1901,7 +1982,284 @@ function wire() {
   $('about-version').textContent = APP_VERSION ? 'v' + APP_VERSION : ''
 }
 
+function fillMsg(text, kind) {
+  showMsg('msg-fill', text, kind || 'info')
+}
+
+function fillHeader(title, sub) {
+  $('fill-title').textContent = title
+  $('fill-sub').textContent = sub || ''
+}
+
+function clearFillBody() {
+  $('fill-list').textContent = ''
+  $('fill-actions').textContent = ''
+  $('fill-actions').classList.add('hidden')
+  $('fill-search').classList.add('hidden')
+  $('fill-search').value = ''
+  $('fill-search').oninput = null
+}
+
+function closeFillSoon() {
+  setTimeout(() => { platform.autofillClose() }, FILL_DONE_MS)
+}
+
+function liveSitesOf(tree) {
+  return Object.keys(tree.credentials || {}).filter((site) => tree.credentials[site].some((c) => !c.deleted)).sort()
+}
+
+function liveLoginsAt(tree, site) {
+  return (tree.credentials[site] || []).filter((c) => !c.deleted)
+}
+
+function matchSite(host, sites) {
+  const bare = host.replace(/^www\./, '')
+  for (const candidate of [host, bare, 'www.' + bare]) if (sites.includes(candidate)) return candidate
+  return null
+}
+
+function siteFromInput(text) {
+  let raw = String(text || '').trim().toLowerCase()
+  if (!raw) return null
+  try { if (/^[a-z][a-z0-9+.-]*:\/\//.test(raw)) raw = new URL(raw).hostname } catch (e) { return null }
+  raw = raw.split('/')[0].split('?')[0].split('#')[0]
+  return SITE_INPUT_PATTERN.test(raw) ? raw : null
+}
+
+function isLinkableApp(req) {
+  return !!req.packageName && !req.isBrowser && !req.webDomain && !req.domain
+}
+
+function linkMatchesApp(link, req) {
+  if (!link.cert) return true
+  return !!req.appCert && link.cert === req.appCert
+}
+
+function fillPickTitle(req) {
+  if (req.domain) return 'No saved login for ' + req.domain
+  return 'Which site is ' + (req.appLabel || req.packageName) + ' for?'
+}
+
+function fillPickNote(req, linkable) {
+  if (req.domain) return 'Pick a saved site to use this time.'
+  if (req.webDomain) return 'This is a web page inside ' + (req.appLabel || req.packageName) + ', reported as ' + req.webDomain + '. Pick a site only if you trust the page. Nothing is remembered.'
+  if (req.isBrowser) return 'This browser did not say which site is open. Pick a site to use this time. Nothing is remembered.'
+  return linkable ? 'Valid Vault remembers your choice for this app, encrypted in your vault.' : 'Pick a saved site to use this time.'
+}
+
+function fillButton(label, sub, onClick) {
+  const b = el('button', 'fill-item')
+  b.appendChild(document.createTextNode(label))
+  if (sub) b.appendChild(el('span', 'fill-item-sub', sub))
+  b.onclick = onClick
+  return b
+}
+
+function chooseSite(sites, allowNew) {
+  return new Promise((resolve) => {
+    const search = $('fill-search')
+    search.placeholder = allowNew ? 'Search, or type a new site like example.com' : 'Search saved sites'
+    search.classList.remove('hidden')
+    const render = () => {
+      const q = search.value.trim().toLowerCase()
+      const list = $('fill-list')
+      list.textContent = ''
+      const shown = sites.filter((site) => !q || site.includes(q))
+      for (const site of shown) list.appendChild(fillButton(site, '', () => resolve(site)))
+      const typed = allowNew ? siteFromInput(q) : null
+      if (typed && !sites.includes(typed)) list.appendChild(fillButton('Use ' + typed, 'New site', () => resolve(typed)))
+      if (!shown.length && !typed) list.appendChild(el('div', 'note', sites.length ? 'No saved site matches that.' : 'No saved logins yet.'))
+    }
+    search.oninput = render
+    render()
+  })
+}
+
+async function completeFill(site, login, mk) {
+  try { await passwords.noteCredentialUse(site, login.username, mk) } catch (e) {}
+  await platform.autofillComplete(login.username, login.password)
+}
+
+async function runFill(req, mk) {
+  const tree = await passwords.readVaultTree(mk)
+  const sites = liveSitesOf(tree)
+  const linkable = isLinkableApp(req)
+  let site = null
+  let warning = ''
+  if (req.domain) {
+    site = matchSite(req.domain, sites)
+  } else if (linkable) {
+    const link = (tree.appLinks || {})[req.packageName]
+    if (link && !link.deleted && sites.includes(link.site)) {
+      if (linkMatchesApp(link, req)) site = link.site
+      else warning = 'This app is not signed the way it was when you linked it. Pick a site only if you trust it.'
+    }
+  }
+  if (site && linkable) {
+    const link = (tree.appLinks || {})[req.packageName]
+    if (link && !link.cert && req.appCert) { try { await passwords.setAppLink(req.packageName, site, mk, req.appCert) } catch (e) {} }
+  }
+  if (!site) {
+    if (!sites.length) { fillMsg('There are no saved logins yet. Add one in Valid Vault first.', 'error'); return }
+    fillHeader(fillPickTitle(req), warning || fillPickNote(req, linkable))
+    site = await chooseSite(sites, false)
+    clearFillBody()
+    if (linkable) {
+      try { await passwords.setAppLink(req.packageName, site, mk, req.appCert) } catch (e) {}
+    }
+  }
+  const logins = liveLoginsAt(tree, site)
+  if (logins.length === 1) { await completeFill(site, logins[0], mk); return }
+  fillHeader('Choose a login', site)
+  for (const login of logins) {
+    $('fill-list').appendChild(fillButton(login.username || '(no username)', '', () => {
+      clearFillBody()
+      completeFill(site, login, mk).catch((e) => fillMsg('Could not fill: ' + errText(e), 'error'))
+    }))
+  }
+}
+
+async function saveSite(req, mk) {
+  const tree = await passwords.readVaultTree(mk)
+  const sites = liveSitesOf(tree)
+  if (req.domain) return matchSite(req.domain, sites) || req.domain
+  const linkable = isLinkableApp(req)
+  let warning = ''
+  if (linkable) {
+    const link = (tree.appLinks || {})[req.packageName]
+    if (link && !link.deleted) {
+      if (linkMatchesApp(link, req)) return link.site
+      warning = 'This app is not signed the way it was when you linked it. Pick a site only if you trust it.'
+    }
+  }
+  fillHeader(fillPickTitle(req), warning || (linkable ? 'Pick a saved site or type a new one. Valid Vault remembers this for the app, encrypted in your vault.' : fillPickNote(req, false)))
+  const site = await chooseSite(sites, true)
+  clearFillBody()
+  if (linkable) await passwords.setAppLink(req.packageName, site, mk, req.appCert)
+  return site
+}
+
+function fillConfirm(okLabel) {
+  return new Promise((resolve) => {
+    const actions = $('fill-actions')
+    actions.textContent = ''
+    actions.classList.remove('hidden')
+    const no = btn('Not now', 'secondary', () => resolve(false))
+    const yes = btn(okLabel, '', () => resolve(true))
+    actions.appendChild(no)
+    actions.appendChild(yes)
+  })
+}
+
+async function runSave(req, mk) {
+  if (!req.password) { fillMsg('Nothing to save.', 'info'); closeFillSoon(); return }
+  const site = await saveSite(req, mk)
+  let username = req.username || ''
+  if (!username) {
+    const values = await formDialog({ title: 'Username', text: 'This sign-in had no username field. Add the username or email for ' + site + ', or leave it blank.', fields: [{ label: 'Username or email' }], okLabel: 'Continue', cancelLabel: 'Cancel' })
+    if (!values) { platform.autofillClose(); return }
+    username = values[0].trim()
+  }
+  const tree = await passwords.readVaultTree(mk)
+  const existing = liveLoginsAt(tree, site).find((c) => c.username === username)
+  if (existing && existing.password === req.password) {
+    fillHeader('Already saved', site)
+    fillMsg('This login is already in Valid Vault.', 'success')
+    closeFillSoon()
+    return
+  }
+  fillHeader(existing ? 'Update saved password?' : 'Save login?', site + (username ? ' \u00b7 ' + username : ''))
+  if (existing) $('fill-sub').textContent += '. The old password is kept as a previous password.'
+  if (!(await fillConfirm(existing ? 'Update' : 'Save'))) { platform.autofillClose(); return }
+  clearFillBody()
+  state.fillBusy = true
+  try { await passwords.saveCredential(site, username, req.password, mk, [], undefined) } finally { state.fillBusy = false }
+  fillHeader(existing ? 'Password updated' : 'Login saved', site)
+  fillMsg('Encrypted in Valid Vault.', 'success')
+  closeFillSoon()
+}
+
+function armFillIdle() {
+  clearTimeout(state.fillIdle)
+  state.fillIdle = setTimeout(() => {
+    if (state.fillBusy) { armFillIdle(); return }
+    platform.autofillClose()
+  }, FILL_IDLE_MS)
+}
+
+async function runAutofill(req) {
+  document.documentElement.classList.add('fill-mode')
+  document.body.classList.add('fill-mode')
+  $('view-fill').classList.remove('hidden')
+  $('btn-fill-close').onclick = () => { platform.autofillClose() }
+  if (!state.fillWired) {
+    state.fillWired = true
+    for (const type of ['pointerdown', 'keydown', 'input']) document.addEventListener(type, armFillIdle, true)
+  }
+  armFillIdle()
+  const target = req.domain || req.appLabel || req.packageName || ''
+  fillHeader(req.mode === 'save' ? 'Save to Valid Vault' : 'Fill from Valid Vault', target)
+  if (req.mode === 'save' && req.expired) { fillMsg('That save request expired. Sign in again to save it.', 'error'); return }
+  try {
+    const status = await auth.initAuth()
+    if (status.isNew) { fillMsg('Set up Valid Vault first, then try again.', 'error'); return }
+    const r = await promptAuth()
+    if (!r.success) {
+      fillMsg((r.error ? r.error + '. ' : '') + 'Not unlocked, so nothing was ' + (req.mode === 'save' ? 'saved.' : 'filled.'), 'error')
+      const actions = $('fill-actions')
+      actions.textContent = ''
+      actions.classList.remove('hidden')
+      actions.appendChild(btn('Try again', '', () => { clearFillBody(); runAutofill(req) }))
+      return
+    }
+    await passwords.ensureVault(r.masterKey)
+    if (req.mode === 'save') await runSave(req, r.masterKey)
+    else await runFill(req, r.masterKey)
+  } catch (e) {
+    fillMsg('Something went wrong: ' + errText(e), 'error')
+  }
+}
+
+async function loadAutofillSettings() {
+  const statusEl = $('autofill-status')
+  const button = $('btn-autofill-settings')
+  const st = await platform.autofillStatus()
+  if (!st.supported) {
+    statusEl.textContent = 'Not available on this phone (needs Android 8 or newer).'
+    button.classList.add('hidden')
+  } else {
+    statusEl.textContent = st.enabled ? 'On: Valid Vault is the autofill service. To change it, use Android Settings, Passwords, or Autofill service.' : 'Off'
+    button.textContent = 'Turn on'
+    button.classList.toggle('hidden', st.enabled)
+  }
+  const list = $('app-links-list')
+  list.textContent = ''
+  if (!key()) return
+  let links = {}
+  try { links = await passwords.listAppLinks(key()) } catch (e) { return }
+  const packages = Object.keys(links).sort()
+  if (!packages.length) { list.appendChild(el('div', 'empty', 'No linked apps yet.')); return }
+  for (const pkg of packages) {
+    const row = el('div', 'item')
+    row.style.padding = '12px'
+    const head = el('div', 'item-top')
+    head.appendChild(el('div', 'item-label', pkg + '  \u2192  ' + links[pkg]))
+    const actions = el('div', 'item-actions')
+    actions.appendChild(btn('Unlink', 'small danger', async () => {
+      if (!(await confirmDialog({ title: 'Unlink this app?', text: pkg + ' will ask which site it belongs to on its next fill.', okLabel: 'Unlink', danger: true }))) return
+      await passwords.removeAppLink(pkg, key())
+      showMsg('msg-settings', 'App unlinked', 'success')
+      loadAutofillSettings()
+    }))
+    head.appendChild(actions)
+    row.appendChild(head)
+    list.appendChild(row)
+  }
+}
+
 async function init() {
+  const fillRequest = await platform.autofillRequest()
+  if (fillRequest) { await runAutofill(fillRequest); return }
   session.setAutoLockProvider(() => state.settings.autoLock)
   session.onLock(() => { handleLocked() })
   wire()
@@ -1920,11 +2278,14 @@ async function init() {
   })
   await loadSettings()
   await routeView()
+  platform.onShared(checkShares)
+  checkShares()
 }
 
 const TAB_MSG = { manage: 'msg-manage', personal: 'msg-personalinfo', webcreds: 'msg-webcreds', wallets: 'msg-wallets', bookmarks: 'msg-bookmarks', sync: 'msg-sync', settings: 'msg-settings' }
 
 function currentMsgId() {
+  if (document.body.classList.contains('fill-mode')) return 'msg-fill'
   if (!$('view-app').classList.contains('hidden')) return TAB_MSG[state.tab] || 'msg-manage'
   if (!$('view-locked').classList.contains('hidden')) return 'msg-locked'
   return 'msg-setup'

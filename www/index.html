@@ -162,6 +162,17 @@
     .wv-suggest { position: absolute; z-index: 1000; background: var(--bg-raise); border: 1px solid var(--green-dim); border-radius: 6px; box-shadow: 0 4px 16px rgba(0,0,0,0.5); overflow: hidden; }
     .wv-suggest-item { padding: 9px 12px; font-size: 14px; color: var(--text); cursor: pointer; }
     .wv-suggest-item:first-child { background: var(--green-faint); color: var(--green); }
+    html.fill-mode, body.fill-mode { background: transparent; }
+    body.fill-mode > .topbar, body.fill-mode > #view-loading, body.fill-mode > #view-setup, body.fill-mode > #view-locked, body.fill-mode > #view-app, body.fill-mode > #qr-overlay { display: none !important; }
+    .fill-sheet { position: fixed; left: 0; right: 0; bottom: 0; display: flex; justify-content: center; padding: 12px 12px calc(12px + env(safe-area-inset-bottom)); z-index: 1000; }
+    .fill-card { width: min(100%, 560px); max-height: 72vh; overflow-y: auto; background: var(--bg-raise); border: 1px solid var(--green-dim); border-radius: 12px; padding: 16px; box-shadow: 0 -6px 28px rgba(0,0,0,0.65); }
+    .fill-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+    .fill-title { color: var(--green); font-weight: 700; font-size: 15px; margin-bottom: 4px; word-break: break-word; }
+    .fill-search { width: 100%; margin: 10px 0 2px; }
+    .fill-item { display: block; width: 100%; text-align: left; background: var(--bg); color: var(--text); border: 1px solid var(--green-faint); margin-top: 8px; font-weight: 400; word-break: break-all; }
+    .fill-item .fill-item-sub { display: block; color: var(--text-dim); font-size: 12px; margin-top: 3px; }
+    .fill-actions { display: flex; gap: 8px; margin-top: 12px; }
+    .fill-actions button { flex: 1; }
     .wv-dialog-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 2000; padding: 16px; }
     .wv-dialog { background: var(--bg-raise); border: 1px solid var(--green-dim); border-radius: 8px; padding: 18px; width: min(460px, 100%); }
     .wv-dialog-title { color: var(--green); font-size: 16px; font-weight: 700; margin-bottom: 10px; }
@@ -314,7 +325,7 @@
 
       <div id="tab-bookmarks" class="panel">
         <h1>Bookmarks</h1>
-        <p class="lead">Encrypted bookmarks, the same list as your browser extension once you sync. Tap a bookmark to open it in your browser.</p>
+        <p class="lead">Encrypted bookmarks, the same list as your browser extension once you sync. Tap a bookmark to open it in your browser. To save a page from any app, tap Share and choose Valid Vault.</p>
         <button id="btn-add-bookmark" class="block" style="margin-bottom:12px;">Add Bookmark</button>
         <input type="search" id="bookmark-filter" class="bm-search" placeholder="Search bookmarks" autocomplete="off">
         <div class="list" id="bookmarks-list"></div>
@@ -385,6 +396,20 @@
             <option value="64">64</option>
           </select>
         </div>
+        <h2>Autofill</h2>
+        <div class="setting">
+          <div class="setting-label">Fill logins in other apps and browsers</div>
+          <div class="setting-desc">Set Valid Vault as this phone's autofill service. Each fill asks for your fingerprint, device PIN, or password, and only the login you pick is filled. In Chrome, also turn on Settings, Passwords, Autofill using another service.</div>
+          <div class="row">
+            <span id="autofill-status" class="note" style="flex:1;margin:0;">Checking...</span>
+            <button class="small" id="btn-autofill-settings">Turn on</button>
+          </div>
+        </div>
+        <div class="setting">
+          <div class="setting-label">Linked apps</div>
+          <div class="setting-desc">Apps you have filled into are linked to one of your saved sites, so the next fill goes straight to the right logins. Links are encrypted in your vault and travel with it.</div>
+          <div class="list" id="app-links-list"></div>
+        </div>
         <div class="danger-zone">
           <h2 style="color:var(--danger);margin-top:0;">Clear Vault</h2>
           <p class="lead">This permanently deletes all stored credentials, unlock methods, and settings on this phone. <strong style="color:var(--danger);">This cannot be undone.</strong><br><br><strong>Recommendation:</strong> back up your vault to another device or a file first.</p>
@@ -403,6 +428,16 @@
           <div class="body">
             <p>Everything is encrypted on this phone under one master key. Nothing goes to a server, and there is no account. Your fingerprint, device PIN, or master password each unlock that same key.</p>
             <p>Each section (logins, misc credentials, personal info, crypto wallets) asks you to unlock again before it shows anything.</p>
+          </div>
+        </details>
+        <details>
+          <summary>Autofill in other apps and browsers</summary>
+          <div class="body">
+            <p>Turn it on in Settings, Autofill, Turn on, then choose Valid Vault. In Chrome, also turn on Settings, Passwords, Autofill using another service.</p>
+            <p>Tap a login field and choose Valid Vault from the suggestions. Confirm with your fingerprint, device PIN, or password. With one saved login for the site it fills right away; with several, pick the one you want. Only that login is handed to Android.</p>
+            <p>In browsers, Valid Vault matches the website the same way the extension does. Apps only tell Android their name, so the first time you fill in an app you pick which saved site it belongs to. Settings, Linked apps lists these links and lets you remove one.</p>
+            <p>When you sign in somewhere new, Android offers to save the login to Valid Vault. Confirm with your fingerprint and it is encrypted like any other login.</p>
+            <p>To save a page from any app as a bookmark, tap Share and choose Valid Vault.</p>
           </div>
         </details>
         <details>
@@ -458,6 +493,21 @@
         </div>
       </div>
 
+    </div>
+  </div>
+
+  <div id="view-fill" class="fill-sheet hidden">
+    <div class="fill-card">
+      <div class="fill-head">
+        <div class="brand">VALID VAULT</div>
+        <button id="btn-fill-close" class="small secondary">Cancel</button>
+      </div>
+      <div id="fill-title" class="fill-title"></div>
+      <div id="fill-sub" class="note"></div>
+      <input type="search" id="fill-search" class="fill-search hidden" placeholder="Search saved sites" autocomplete="off">
+      <div id="fill-list"></div>
+      <div id="fill-actions" class="fill-actions hidden"></div>
+      <div id="msg-fill" class="msg hidden"></div>
     </div>
   </div>
 
@@ -10574,7 +10624,7 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
 <script>
 (function () {
 'use strict'
-const VALID_VAULT_VERSION = "0.8.1"
+const VALID_VAULT_VERSION = "0.8.2"
 const __modules = Object.create(null)
 __modules["extension/crypto.js"] = (function () {
 const SALT_LENGTH = 16
@@ -11534,6 +11584,7 @@ const { encrypt, decrypt } = __modules["extension/crypto.js"]
 const { getPasswordVault, setPasswordVault, getVaultMigrationJournal, setVaultMigrationJournal, clearVaultMigrationJournal } = __modules["extension/store.js"]
 const PREVIOUS_KEEP_MS = 14 * 24 * 60 * 60 * 1000
 const PREVIOUS_KEEP_USES = 3
+const APP_PACKAGE_PATTERN = /^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+$/
 
 function retirePassword(cred, oldPassword, now) {
   if (!oldPassword || oldPassword === cred.password) return
@@ -11577,11 +11628,26 @@ function normalizeLabel(label) {
     .replace(/\s+/g, ' ')
 }
 
+function isValidAppLinks(links) {
+  if (links === undefined) return true
+  if (!links || typeof links !== 'object' || Array.isArray(links)) return false
+  for (const [pkg, link] of Object.entries(links)) {
+    if (!APP_PACKAGE_PATTERN.test(pkg)) return false
+    if (!link || typeof link !== 'object' || link.id !== pkg) return false
+    if (typeof link.updatedAt !== 'number' || !isFinite(link.updatedAt)) return false
+    if (link.deleted !== undefined && link.deleted !== true) return false
+    if (!link.deleted && (typeof link.site !== 'string' || !link.site)) return false
+    if (link.cert !== undefined && typeof link.cert !== 'string') return false
+  }
+  return true
+}
+
 function isValidVaultTree(value) {
   if (!value || typeof value !== 'object') return false
   if (!value.meta || typeof value.meta !== 'object') return false
   if (!value.credentials || typeof value.credentials !== 'object') return false
   if (Array.isArray(value.credentials)) return false
+  if (!isValidAppLinks(value.appLinks)) return false
 
   for (const [domain, credentials] of Object.entries(value.credentials)) {
     if (typeof domain !== 'string' || !Array.isArray(credentials)) return false
@@ -12084,6 +12150,66 @@ function credentialIdentity(cred) {
   return 'user:' + cred.username
 }
 
+function mergeAppLinks(localLinks, incomingLinks) {
+  const out = {}
+  const local = localLinks || {}
+  const incoming = incomingLinks || {}
+  const packages = new Set([...Object.keys(local), ...Object.keys(incoming)])
+  for (const pkg of Array.from(packages).sort()) {
+    const a = local[pkg]
+    const b = incoming[pkg]
+    out[pkg] = a && b ? laterRecord(a, b) : (a || b)
+  }
+  return out
+}
+
+function liveAppLinks(tree) {
+  const out = {}
+  for (const [pkg, link] of Object.entries(tree.appLinks || {})) {
+    if (!link.deleted) out[pkg] = link.site
+  }
+  return out
+}
+
+async function getAppLink(pkg, masterKey) {
+  const tree = await readVaultTree(masterKey)
+  const link = (tree.appLinks || {})[pkg]
+  if (!link || link.deleted) return null
+  return link.site
+}
+
+async function listAppLinks(masterKey) {
+  return liveAppLinks(await readVaultTree(masterKey))
+}
+
+function nextStamp(previous) {
+  const now = Date.now()
+  return previous && typeof previous.updatedAt === 'number' && previous.updatedAt >= now ? previous.updatedAt + 1 : now
+}
+
+async function setAppLink(pkg, site, masterKey, cert) {
+  if (!APP_PACKAGE_PATTERN.test(pkg) || typeof site !== 'string' || !site) throw new Error('Invalid app link')
+  const tree = await readVaultTree(masterKey)
+  const links = Object.assign({}, tree.appLinks || {})
+  const previous = links[pkg]
+  const certValue = typeof cert === 'string' ? cert : ''
+  if (previous && !previous.deleted && previous.site === site && (previous.cert || '') === certValue) return
+  links[pkg] = { id: pkg, site, updatedAt: nextStamp(previous) }
+  if (certValue) links[pkg].cert = certValue
+  tree.appLinks = links
+  await writeVaultTree(tree, masterKey)
+}
+
+async function removeAppLink(pkg, masterKey) {
+  const tree = await readVaultTree(masterKey)
+  const links = Object.assign({}, tree.appLinks || {})
+  const previous = links[pkg]
+  if (!previous || previous.deleted) return
+  links[pkg] = { id: pkg, deleted: true, updatedAt: nextStamp(previous) }
+  tree.appLinks = links
+  await writeVaultTree(tree, masterKey)
+}
+
 function mergeVaults(localTree, incomingTree) {
   const merged = {
     meta: {
@@ -12108,6 +12234,9 @@ function mergeVaults(localTree, incomingTree) {
     if (result.length > 0) merged.credentials[domain] = result
   }
 
+  const appLinks = mergeAppLinks(localTree.appLinks, incomingTree.appLinks)
+  if (Object.keys(appLinks).length > 0) merged.appLinks = appLinks
+
   return merged
 }
 
@@ -12117,13 +12246,15 @@ function canonicalCredentials(tree) {
     const list = tree.credentials[domain].slice().sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
     if (list.length > 0) out[domain] = list
   }
-  return JSON.stringify(out)
+  const links = {}
+  for (const pkg of Object.keys(tree.appLinks || {}).sort()) links[pkg] = tree.appLinks[pkg]
+  return JSON.stringify({ credentials: out, appLinks: links })
 }
 
 function sameCredentials(a, b) {
   return canonicalCredentials(a) === canonicalCredentials(b)
 }
-return Object.freeze({ "ensureVault": ensureVault, "saveCredential": saveCredential, "getCredentials": getCredentials, "getAllDomains": getAllDomains, "updateCredential": updateCredential, "deleteCredential": deleteCredential, "noteCredentialUse": noteCredentialUse, "restorePreviousPassword": restorePreviousPassword, "autofill": autofill, "mergeVaults": mergeVaults, "mergeRecordLists": mergeRecordLists, "laterRecord": laterRecord, "sameCredentials": sameCredentials, "migrateLegacyVault": migrateLegacyVault, "readVaultTree": readVaultTree, "writeVaultTree": writeVaultTree, "decryptAnyRowToTree": decryptAnyRowToTree })
+return Object.freeze({ "ensureVault": ensureVault, "saveCredential": saveCredential, "getCredentials": getCredentials, "getAllDomains": getAllDomains, "updateCredential": updateCredential, "deleteCredential": deleteCredential, "noteCredentialUse": noteCredentialUse, "restorePreviousPassword": restorePreviousPassword, "autofill": autofill, "getAppLink": getAppLink, "setAppLink": setAppLink, "removeAppLink": removeAppLink, "listAppLinks": listAppLinks, "mergeVaults": mergeVaults, "mergeRecordLists": mergeRecordLists, "laterRecord": laterRecord, "sameCredentials": sameCredentials, "migrateLegacyVault": migrateLegacyVault, "readVaultTree": readVaultTree, "writeVaultTree": writeVaultTree, "decryptAnyRowToTree": decryptAnyRowToTree })
 })()
 
 __modules["extension/webcreds.js"] = (function () {
@@ -15843,10 +15974,73 @@ function pickTextFile() {
   })
 }
 
+async function takeShared() {
+  const st = plugin('ShareTarget')
+  if (!st) return null
+  try {
+    const r = await st.takePending()
+    return r && r.found ? { text: r.text || '', subject: r.subject || '' } : null
+  } catch (e) {
+    return null
+  }
+}
+
+function onShared(callback) {
+  const st = plugin('ShareTarget')
+  if (!st || typeof st.addListener !== 'function') return
+  try { st.addListener('shareReceived', () => { callback() }) } catch (e) {}
+}
+
+async function returnToSender() {
+  const st = plugin('ShareTarget')
+  if (!st) return
+  try { await st.returnToSender() } catch (e) {}
+}
+
+async function autofillRequest() {
+  const ab = plugin('AutofillBridge')
+  if (!ab) return null
+  try {
+    const r = await ab.getRequest()
+    return r && (r.mode === 'fill' || r.mode === 'save') ? r : null
+  } catch (e) {
+    return null
+  }
+}
+
+async function autofillComplete(username, password) {
+  const ab = plugin('AutofillBridge')
+  if (!ab) throw new Error('Autofill is not available')
+  await ab.complete({ username, password })
+}
+
+async function autofillClose() {
+  const ab = plugin('AutofillBridge')
+  if (!ab) return
+  try { await ab.close() } catch (e) {}
+}
+
+async function autofillStatus() {
+  const as = plugin('AutofillSetup')
+  if (!as) return { supported: false, enabled: false }
+  try {
+    const r = await as.status()
+    return { supported: !!(r && r.supported), enabled: !!(r && r.enabled) }
+  } catch (e) {
+    return { supported: false, enabled: false }
+  }
+}
+
+async function openAutofillSettings() {
+  const as = plugin('AutofillSetup')
+  if (!as) throw new Error('Autofill is not available on this device')
+  await as.openSettings()
+}
+
 function openExternal(url) {
   try { window.open(url, '_blank') } catch (e) {}
 }
-return Object.freeze({ "isNative": isNative, "biometricAvailable": biometricAvailable, "biometricEnroll": biometricEnroll, "biometricUnlock": biometricUnlock, "biometricRemove": biometricRemove, "saveToDownloads": saveToDownloads, "canShareFiles": canShareFiles, "shareFile": shareFile, "pickTextFile": pickTextFile, "openExternal": openExternal })
+return Object.freeze({ "isNative": isNative, "biometricAvailable": biometricAvailable, "biometricEnroll": biometricEnroll, "biometricUnlock": biometricUnlock, "biometricRemove": biometricRemove, "saveToDownloads": saveToDownloads, "canShareFiles": canShareFiles, "shareFile": shareFile, "pickTextFile": pickTextFile, "takeShared": takeShared, "onShared": onShared, "returnToSender": returnToSender, "autofillRequest": autofillRequest, "autofillComplete": autofillComplete, "autofillClose": autofillClose, "autofillStatus": autofillStatus, "openAutofillSettings": openAutofillSettings, "openExternal": openExternal })
 })()
 
 __modules["phone/app.js"] = (function () {
@@ -15880,6 +16074,13 @@ const MASK = '••••••••'
 const DEFAULT_NICKNAME = 'My Master Key'
 const GLOBE_SPIN_PER_MS = 0.0003
 const GLOBE_EARLY_MARGIN = '240px 0px 240px 0px'
+const SHARE_URL_PATTERN = /https?:\/\/[^\s<>"'`]+/i
+const SHARE_URL_TRAILING = /[)\].,;:!?'"]+$/
+const SHARE_TITLE_MAX = 200
+const SHARE_RETURN_MS = 900
+const FILL_IDLE_MS = 120000
+const FILL_DONE_MS = 1200
+const SITE_INPUT_PATTERN = /^[a-z0-9-]+(\.[a-z0-9-]+)+$/
 const DEAD_FINGERPRINT_CODES = ['missing', 'invalidated']
 const FINGERPRINT_RESET_TEXT = 'Android reset fingerprint unlock on this phone, so the old fingerprint setting was removed. Tap Enroll under Fingerprint to set it up again.'
 const PASSWORD_RULE_TEXT = '12+ characters with a letter, a number, and a symbol.'
@@ -15902,6 +16103,10 @@ const state = {
   shareToken: null,
   tab: 'manage',
   deadFingerprint: null,
+  pendingShare: null,
+  fillIdle: null,
+  fillBusy: false,
+  fillWired: false,
   bookmarkFilter: '',
   msgTimers: new Map()
 }
@@ -16262,6 +16467,73 @@ async function enterApp(masterKey) {
   loadSettingsIntoForm()
   showTab(state.tab)
   if (migrationError) showMsg('msg-manage', 'Your saved logins could not be upgraded: ' + errText(migrationError) + '. Nothing was lost; the old copy was kept.', 'error')
+  if (state.pendingShare) saveSharedLink()
+}
+
+function sharedLinkFrom(item) {
+  const text = String(item.text || '')
+  const match = text.match(SHARE_URL_PATTERN)
+  if (!match) return null
+  const url = normalizeBookmarkInput(match[0].replace(SHARE_URL_TRAILING, ''))
+  if (!url) return null
+  const subject = String(item.subject || '').trim()
+  const rest = text.replace(match[0], '').replace(/\s+/g, ' ').trim()
+  const title = (subject && subject !== match[0] ? subject : rest).slice(0, SHARE_TITLE_MAX)
+  return { url, title }
+}
+
+async function receiveShare(item) {
+  if (!item) return
+  const link = sharedLinkFrom(item)
+  if (!link) {
+    state.pendingShare = null
+    showMsg(currentMsgId(), 'That share had no web address, so nothing was saved.', 'error')
+    return
+  }
+  state.pendingShare = link
+  if (key()) { saveSharedLink(); return }
+  const status = await auth.initAuth()
+  if (status.isNew) {
+    state.pendingShare = null
+    showMsg('msg-setup', 'Set up Valid Vault first, then share the link again.', 'error')
+    return
+  }
+  showView('locked')
+  showMsg('msg-locked', 'Unlock to save the shared link to Bookmarks.', 'info')
+  if (status.hasFingerprint) unlockWithFingerprint()
+  else $('input-unlock-password').focus()
+}
+
+async function checkShares() {
+  receiveShare(await platform.takeShared())
+}
+
+async function saveSharedLink() {
+  const link = state.pendingShare
+  state.pendingShare = null
+  if (!link || !key()) return
+  showTab('bookmarks')
+  const values = await formDialog({
+    title: 'Save bookmark',
+    fields: [{ label: 'Address', value: link.url }, { label: 'Title (optional)', value: link.title }],
+    okLabel: 'Save',
+    validate: (v) => {
+      const url = normalizeBookmarkInput(v[0])
+      if (!url) return { error: 'Enter a web address that starts with http or https, or just the site, like example.com.', focus: 0 }
+      return { value: { url, title: v[1].trim() } }
+    }
+  })
+  if (!key()) return
+  if (!values) {
+    showMsg('msg-bookmarks', 'Shared link not saved', 'info')
+    setTimeout(() => { platform.returnToSender() }, SHARE_RETURN_MS)
+    return
+  }
+  const existing = await bookmarks.findByUrl(values.url, key())
+  await bookmarks.saveBookmark(values.url, values.title || (existing ? existing.title : ''), key())
+  showMsg('msg-bookmarks', existing ? 'That bookmark already existed, so it was updated' : 'Bookmark saved', 'success')
+  loadBookmarks()
+  setTimeout(() => { platform.returnToSender() }, SHARE_RETURN_MS)
 }
 
 function resetSectionLocks() {
@@ -16590,6 +16862,7 @@ function showTab(name) {
   if (name === 'webcreds') loadWebCredentials()
   if (name === 'wallets') walletsTab.onTabShown()
   if (name === 'bookmarks') loadBookmarks()
+  if (name === 'settings') loadAutofillSettings()
 }
 
 async function loadAuthStatus() {
@@ -17709,6 +17982,8 @@ function attachActivity() {
 }
 
 function wire() {
+  $('btn-autofill-settings').onclick = () => { platform.openAutofillSettings().catch((e) => showMsg('msg-settings', errText(e), 'error')) }
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && state.tab === 'settings' && key()) loadAutofillSettings() })
   $('btn-setup-fp').onclick = setupEnrollFingerprint
   $('btn-setup-pw').onclick = setupEnrollPassword
   $('setup-password').onkeydown = (e) => { if (e.key === 'Enter') setupEnrollPassword() }
@@ -17752,7 +18027,284 @@ function wire() {
   $('about-version').textContent = APP_VERSION ? 'v' + APP_VERSION : ''
 }
 
+function fillMsg(text, kind) {
+  showMsg('msg-fill', text, kind || 'info')
+}
+
+function fillHeader(title, sub) {
+  $('fill-title').textContent = title
+  $('fill-sub').textContent = sub || ''
+}
+
+function clearFillBody() {
+  $('fill-list').textContent = ''
+  $('fill-actions').textContent = ''
+  $('fill-actions').classList.add('hidden')
+  $('fill-search').classList.add('hidden')
+  $('fill-search').value = ''
+  $('fill-search').oninput = null
+}
+
+function closeFillSoon() {
+  setTimeout(() => { platform.autofillClose() }, FILL_DONE_MS)
+}
+
+function liveSitesOf(tree) {
+  return Object.keys(tree.credentials || {}).filter((site) => tree.credentials[site].some((c) => !c.deleted)).sort()
+}
+
+function liveLoginsAt(tree, site) {
+  return (tree.credentials[site] || []).filter((c) => !c.deleted)
+}
+
+function matchSite(host, sites) {
+  const bare = host.replace(/^www\./, '')
+  for (const candidate of [host, bare, 'www.' + bare]) if (sites.includes(candidate)) return candidate
+  return null
+}
+
+function siteFromInput(text) {
+  let raw = String(text || '').trim().toLowerCase()
+  if (!raw) return null
+  try { if (/^[a-z][a-z0-9+.-]*:\/\//.test(raw)) raw = new URL(raw).hostname } catch (e) { return null }
+  raw = raw.split('/')[0].split('?')[0].split('#')[0]
+  return SITE_INPUT_PATTERN.test(raw) ? raw : null
+}
+
+function isLinkableApp(req) {
+  return !!req.packageName && !req.isBrowser && !req.webDomain && !req.domain
+}
+
+function linkMatchesApp(link, req) {
+  if (!link.cert) return true
+  return !!req.appCert && link.cert === req.appCert
+}
+
+function fillPickTitle(req) {
+  if (req.domain) return 'No saved login for ' + req.domain
+  return 'Which site is ' + (req.appLabel || req.packageName) + ' for?'
+}
+
+function fillPickNote(req, linkable) {
+  if (req.domain) return 'Pick a saved site to use this time.'
+  if (req.webDomain) return 'This is a web page inside ' + (req.appLabel || req.packageName) + ', reported as ' + req.webDomain + '. Pick a site only if you trust the page. Nothing is remembered.'
+  if (req.isBrowser) return 'This browser did not say which site is open. Pick a site to use this time. Nothing is remembered.'
+  return linkable ? 'Valid Vault remembers your choice for this app, encrypted in your vault.' : 'Pick a saved site to use this time.'
+}
+
+function fillButton(label, sub, onClick) {
+  const b = el('button', 'fill-item')
+  b.appendChild(document.createTextNode(label))
+  if (sub) b.appendChild(el('span', 'fill-item-sub', sub))
+  b.onclick = onClick
+  return b
+}
+
+function chooseSite(sites, allowNew) {
+  return new Promise((resolve) => {
+    const search = $('fill-search')
+    search.placeholder = allowNew ? 'Search, or type a new site like example.com' : 'Search saved sites'
+    search.classList.remove('hidden')
+    const render = () => {
+      const q = search.value.trim().toLowerCase()
+      const list = $('fill-list')
+      list.textContent = ''
+      const shown = sites.filter((site) => !q || site.includes(q))
+      for (const site of shown) list.appendChild(fillButton(site, '', () => resolve(site)))
+      const typed = allowNew ? siteFromInput(q) : null
+      if (typed && !sites.includes(typed)) list.appendChild(fillButton('Use ' + typed, 'New site', () => resolve(typed)))
+      if (!shown.length && !typed) list.appendChild(el('div', 'note', sites.length ? 'No saved site matches that.' : 'No saved logins yet.'))
+    }
+    search.oninput = render
+    render()
+  })
+}
+
+async function completeFill(site, login, mk) {
+  try { await passwords.noteCredentialUse(site, login.username, mk) } catch (e) {}
+  await platform.autofillComplete(login.username, login.password)
+}
+
+async function runFill(req, mk) {
+  const tree = await passwords.readVaultTree(mk)
+  const sites = liveSitesOf(tree)
+  const linkable = isLinkableApp(req)
+  let site = null
+  let warning = ''
+  if (req.domain) {
+    site = matchSite(req.domain, sites)
+  } else if (linkable) {
+    const link = (tree.appLinks || {})[req.packageName]
+    if (link && !link.deleted && sites.includes(link.site)) {
+      if (linkMatchesApp(link, req)) site = link.site
+      else warning = 'This app is not signed the way it was when you linked it. Pick a site only if you trust it.'
+    }
+  }
+  if (site && linkable) {
+    const link = (tree.appLinks || {})[req.packageName]
+    if (link && !link.cert && req.appCert) { try { await passwords.setAppLink(req.packageName, site, mk, req.appCert) } catch (e) {} }
+  }
+  if (!site) {
+    if (!sites.length) { fillMsg('There are no saved logins yet. Add one in Valid Vault first.', 'error'); return }
+    fillHeader(fillPickTitle(req), warning || fillPickNote(req, linkable))
+    site = await chooseSite(sites, false)
+    clearFillBody()
+    if (linkable) {
+      try { await passwords.setAppLink(req.packageName, site, mk, req.appCert) } catch (e) {}
+    }
+  }
+  const logins = liveLoginsAt(tree, site)
+  if (logins.length === 1) { await completeFill(site, logins[0], mk); return }
+  fillHeader('Choose a login', site)
+  for (const login of logins) {
+    $('fill-list').appendChild(fillButton(login.username || '(no username)', '', () => {
+      clearFillBody()
+      completeFill(site, login, mk).catch((e) => fillMsg('Could not fill: ' + errText(e), 'error'))
+    }))
+  }
+}
+
+async function saveSite(req, mk) {
+  const tree = await passwords.readVaultTree(mk)
+  const sites = liveSitesOf(tree)
+  if (req.domain) return matchSite(req.domain, sites) || req.domain
+  const linkable = isLinkableApp(req)
+  let warning = ''
+  if (linkable) {
+    const link = (tree.appLinks || {})[req.packageName]
+    if (link && !link.deleted) {
+      if (linkMatchesApp(link, req)) return link.site
+      warning = 'This app is not signed the way it was when you linked it. Pick a site only if you trust it.'
+    }
+  }
+  fillHeader(fillPickTitle(req), warning || (linkable ? 'Pick a saved site or type a new one. Valid Vault remembers this for the app, encrypted in your vault.' : fillPickNote(req, false)))
+  const site = await chooseSite(sites, true)
+  clearFillBody()
+  if (linkable) await passwords.setAppLink(req.packageName, site, mk, req.appCert)
+  return site
+}
+
+function fillConfirm(okLabel) {
+  return new Promise((resolve) => {
+    const actions = $('fill-actions')
+    actions.textContent = ''
+    actions.classList.remove('hidden')
+    const no = btn('Not now', 'secondary', () => resolve(false))
+    const yes = btn(okLabel, '', () => resolve(true))
+    actions.appendChild(no)
+    actions.appendChild(yes)
+  })
+}
+
+async function runSave(req, mk) {
+  if (!req.password) { fillMsg('Nothing to save.', 'info'); closeFillSoon(); return }
+  const site = await saveSite(req, mk)
+  let username = req.username || ''
+  if (!username) {
+    const values = await formDialog({ title: 'Username', text: 'This sign-in had no username field. Add the username or email for ' + site + ', or leave it blank.', fields: [{ label: 'Username or email' }], okLabel: 'Continue', cancelLabel: 'Cancel' })
+    if (!values) { platform.autofillClose(); return }
+    username = values[0].trim()
+  }
+  const tree = await passwords.readVaultTree(mk)
+  const existing = liveLoginsAt(tree, site).find((c) => c.username === username)
+  if (existing && existing.password === req.password) {
+    fillHeader('Already saved', site)
+    fillMsg('This login is already in Valid Vault.', 'success')
+    closeFillSoon()
+    return
+  }
+  fillHeader(existing ? 'Update saved password?' : 'Save login?', site + (username ? ' \u00b7 ' + username : ''))
+  if (existing) $('fill-sub').textContent += '. The old password is kept as a previous password.'
+  if (!(await fillConfirm(existing ? 'Update' : 'Save'))) { platform.autofillClose(); return }
+  clearFillBody()
+  state.fillBusy = true
+  try { await passwords.saveCredential(site, username, req.password, mk, [], undefined) } finally { state.fillBusy = false }
+  fillHeader(existing ? 'Password updated' : 'Login saved', site)
+  fillMsg('Encrypted in Valid Vault.', 'success')
+  closeFillSoon()
+}
+
+function armFillIdle() {
+  clearTimeout(state.fillIdle)
+  state.fillIdle = setTimeout(() => {
+    if (state.fillBusy) { armFillIdle(); return }
+    platform.autofillClose()
+  }, FILL_IDLE_MS)
+}
+
+async function runAutofill(req) {
+  document.documentElement.classList.add('fill-mode')
+  document.body.classList.add('fill-mode')
+  $('view-fill').classList.remove('hidden')
+  $('btn-fill-close').onclick = () => { platform.autofillClose() }
+  if (!state.fillWired) {
+    state.fillWired = true
+    for (const type of ['pointerdown', 'keydown', 'input']) document.addEventListener(type, armFillIdle, true)
+  }
+  armFillIdle()
+  const target = req.domain || req.appLabel || req.packageName || ''
+  fillHeader(req.mode === 'save' ? 'Save to Valid Vault' : 'Fill from Valid Vault', target)
+  if (req.mode === 'save' && req.expired) { fillMsg('That save request expired. Sign in again to save it.', 'error'); return }
+  try {
+    const status = await auth.initAuth()
+    if (status.isNew) { fillMsg('Set up Valid Vault first, then try again.', 'error'); return }
+    const r = await promptAuth()
+    if (!r.success) {
+      fillMsg((r.error ? r.error + '. ' : '') + 'Not unlocked, so nothing was ' + (req.mode === 'save' ? 'saved.' : 'filled.'), 'error')
+      const actions = $('fill-actions')
+      actions.textContent = ''
+      actions.classList.remove('hidden')
+      actions.appendChild(btn('Try again', '', () => { clearFillBody(); runAutofill(req) }))
+      return
+    }
+    await passwords.ensureVault(r.masterKey)
+    if (req.mode === 'save') await runSave(req, r.masterKey)
+    else await runFill(req, r.masterKey)
+  } catch (e) {
+    fillMsg('Something went wrong: ' + errText(e), 'error')
+  }
+}
+
+async function loadAutofillSettings() {
+  const statusEl = $('autofill-status')
+  const button = $('btn-autofill-settings')
+  const st = await platform.autofillStatus()
+  if (!st.supported) {
+    statusEl.textContent = 'Not available on this phone (needs Android 8 or newer).'
+    button.classList.add('hidden')
+  } else {
+    statusEl.textContent = st.enabled ? 'On: Valid Vault is the autofill service. To change it, use Android Settings, Passwords, or Autofill service.' : 'Off'
+    button.textContent = 'Turn on'
+    button.classList.toggle('hidden', st.enabled)
+  }
+  const list = $('app-links-list')
+  list.textContent = ''
+  if (!key()) return
+  let links = {}
+  try { links = await passwords.listAppLinks(key()) } catch (e) { return }
+  const packages = Object.keys(links).sort()
+  if (!packages.length) { list.appendChild(el('div', 'empty', 'No linked apps yet.')); return }
+  for (const pkg of packages) {
+    const row = el('div', 'item')
+    row.style.padding = '12px'
+    const head = el('div', 'item-top')
+    head.appendChild(el('div', 'item-label', pkg + '  \u2192  ' + links[pkg]))
+    const actions = el('div', 'item-actions')
+    actions.appendChild(btn('Unlink', 'small danger', async () => {
+      if (!(await confirmDialog({ title: 'Unlink this app?', text: pkg + ' will ask which site it belongs to on its next fill.', okLabel: 'Unlink', danger: true }))) return
+      await passwords.removeAppLink(pkg, key())
+      showMsg('msg-settings', 'App unlinked', 'success')
+      loadAutofillSettings()
+    }))
+    head.appendChild(actions)
+    row.appendChild(head)
+    list.appendChild(row)
+  }
+}
+
 async function init() {
+  const fillRequest = await platform.autofillRequest()
+  if (fillRequest) { await runAutofill(fillRequest); return }
   session.setAutoLockProvider(() => state.settings.autoLock)
   session.onLock(() => { handleLocked() })
   wire()
@@ -17771,11 +18323,14 @@ async function init() {
   })
   await loadSettings()
   await routeView()
+  platform.onShared(checkShares)
+  checkShares()
 }
 
 const TAB_MSG = { manage: 'msg-manage', personal: 'msg-personalinfo', webcreds: 'msg-webcreds', wallets: 'msg-wallets', bookmarks: 'msg-bookmarks', sync: 'msg-sync', settings: 'msg-settings' }
 
 function currentMsgId() {
+  if (document.body.classList.contains('fill-mode')) return 'msg-fill'
   if (!$('view-app').classList.contains('hidden')) return TAB_MSG[state.tab] || 'msg-manage'
   if (!$('view-locked').classList.contains('hidden')) return 'msg-locked'
   return 'msg-setup'
