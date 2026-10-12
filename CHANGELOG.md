@@ -5,6 +5,29 @@ All notable changes to Valid Vault will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.2] - 2026-10-12
+ 
+Android Autofill and Share to Bookmarks for the phone app, with a matching update to the extension so linked apps survive syncing.
+ 
+### Added
+ 
+* **Android Autofill.** Valid Vault can be the phone's autofill service. Tap a login field in an app or browser and choose Valid Vault from the suggestions. A small Valid Vault sheet opens over the app and asks for your fingerprint or device PIN, with the master password as the fallback. With one saved login for the site it fills right away; with several, pick one by username. Only that login's username and password are handed to Android, and every fill asks again, even while the app is unlocked.
+* **Save from other apps.** When you sign in somewhere new, Android offers to save the login to Valid Vault. Confirm with your fingerprint and it is encrypted like any other login. A changed password updates the saved one and keeps the old one as the previous password, and a login that is already saved is left alone.
+* **Linked apps.** Browsers report the website, so matching works like the extension. Apps only report their name, so the first fill in an app asks which saved site it belongs to. That link is stored inside the encrypted logins and travels with your vault. Settings, Linked apps lists them with Unlink.
+* **Share to Bookmarks.** Tap Share in any app and choose Valid Vault to save the page as an encrypted bookmark, with an editable title, then return to that app. A locked vault asks for fingerprint or device PIN right away, links are picked out of shared text, a share with no web address is refused, and sharing a page twice updates it instead of adding a duplicate.
+* **Autofill in Settings and the User Guide.** Settings shows whether Valid Vault is the autofill service with a Turn on button, and the phone User Guide covers turning it on, including the Chrome setting for other autofill services.
+### Security
+ 
+* **Websites are only trusted from known browsers.** The website a screen reports is used only when the app is a known browser. A web page inside any other app never uses or creates an app link, and the sheet names the page so you can decide.
+* **Linked apps are tied to the app's signature.** A link remembers the signing certificate of the app it was made for when Android makes it available. If a different app with the same name asks to fill, the link is not used and the sheet warns you.
+* **Nothing kept outside the vault.** The autofill service only reads which fields a form has, never your data. A typed password waiting for you to confirm a save is held in memory for at most two minutes. The fill sheet blocks screenshots, and plugin call logging is turned off so filled values never reach the Android log.
+### Changed
+ 
+* **Extension:** merging and Uni-Vault keep linked apps from the phone, so a vault that passes through the extension still carries them.
+### Notes
+ 
+* Verified in Chromium on the phone build: browser and app fills with one or several logins, linking an app and filling straight through on later fills, a web page inside an app, a browser with no site, a re-signed app, failed and retried unlocks, saving new, repeated, and changed logins, linked apps syncing to a second phone through a vault file, and merges in either order.
+
 ## [0.8.1.1] - 2026-10-11
 
 Hotfix for the extension and the phone app.

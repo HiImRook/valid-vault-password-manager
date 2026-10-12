@@ -24,6 +24,10 @@ A local, encrypted, QR code portable password manager. No cloud, accounts, or sy
 >
 > The vault QR is drawn larger, carries less data per frame, and is compressed first, so a typical vault needs about half as many frames. Frames the camera misses are filled in by later ones, so a scan finishes a few frames after enough are read. The vault QR and key QR now match in size, and the scanner reads a sharper camera feed. Update the phone and the extension together, since a 0.8.0 scanner can't read the new QR. This is verified in Chromium, but still being tested and hardened on the phone camera, so Export Vault and Import Vault, carried on a USB drive if you like, remain the dependable path until QR share is finalized. See [CHANGELOG.md](CHANGELOG.md) for full details.
 
+> ✅ **Android Autofill and Share to Bookmarks - v0.8.2**
+>
+> Valid Vault can now be the phone's autofill service. Tap a login field in any app or browser, choose Valid Vault, and confirm with your fingerprint or device PIN. One saved login fills right away, and several are listed so you can pick. Only the login you pick is handed to Android, and every fill asks again. When you sign in somewhere new, Android offers to save it to Valid Vault. Apps are linked to a saved site on their first fill, and that link is stored in your encrypted vault and travels with it. Saving a page is one tap too: share any link to Valid Vault and it becomes an encrypted bookmark. This is verified in Chromium with Android's autofill simulated and is being tested on phones now. See [CHANGELOG.md](CHANGELOG.md) for full details.
+
 ---
 
 ## What is Valid Vault?
@@ -79,6 +83,15 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 * Each saved login now classifies its `loginType` (username, email, or phone) for more reliable matching
 * Works with standard form controls (`<input>`, `<select>`, and `<textarea>`), which is how sites build login, signup, and checkout forms
 
+**Autofill (Android):**
+
+* Valid Vault can be the phone's autofill service; tap Valid Vault in the suggestions on a login field in any app or browser
+* Every fill asks for fingerprint or device PIN, with the master password as the fallback, even while the app is unlocked
+* One saved login fills right away; several are listed by username, and only the one you pick is handed to Android
+* Android offers to save new and changed logins to Valid Vault, confirmed with your fingerprint
+* Browsers report the website and match like the extension; apps are linked to a saved site on their first fill, and the link is stored in the encrypted vault, synced, and tied to the app's signature
+* A website is only trusted from a known browser, so a web page inside another app never fills from an app link
+
 **Sync and Backup:**
 
 * Uni-Vault - link every browser on one computer to a single encrypted vault file; saves reach the file within about a second and other linked browsers pick them up within about 30 seconds, or within seconds while Manage is open, merged by timestamp with tombstoned deletes
@@ -107,16 +120,16 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 * Web Credentials - category-organized secrets like Wi-Fi passwords or license keys, view/edit/delete
 * Personal Info - one profile per vault: name, phone, address, and ranked emails, used as an autofill source only, never stored per-site
 * Crypto Wallets - seed phrases organized by wallet and account, 1 to 24 numbered words per account plus one optional note (for example a wallet password), stored as one sealed AES-GCM blob
-* Bookmarks - saved from the popup's bookmark icon, listed in a side panel with search, rename, remove, and drag reorder, stored as one sealed AES-GCM blob
+* Bookmarks - saved from the popup's bookmark icon or shared from any app on the phone, listed in a side panel with search, rename, remove, and drag reorder, stored as one sealed AES-GCM blob
 * IndexedDB persistence - no external database or server
 
 **Platform:**
 
 * Single-file web bundle - build.js bundles the phone app from the extension's own modules into one self-contained HTML file, so both clients share one copy of the core code
-* Android via Capacitor, with native plugins for biometric auth and file saving
+* Android via Capacitor, with native plugins for biometric auth, file saving, autofill, and sharing
 * Vendored, self-contained code only, no Google SDKs in the scan path
 
-## Current Status: v0.8.1.1 - Active Testing
+## Current Status: v0.8.2 - Active Testing
 
 **Completed:**
 
@@ -157,10 +170,11 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 * ✅ Vault imports checked in full before writing, with no duplicates, deletes that stay deleted, and no changes on a repeat import
 * ✅ Vault QR rebuilt: larger, compressed, and able to fill in missed frames, matched in size to the key QR
 * ✅ Key files and key QRs checked against the exact format Valid Vault writes before any key derivation starts
+* ✅ Android Autofill: fill and save logins in other apps and browsers, fingerprint first, with linked apps synced in the encrypted vault
+* ✅ Share to Bookmarks on the phone: share a link from any app to save it as an encrypted bookmark
 
 **In Development:**
 
-* 📋 Android Autofill service and Share-to-bookmark (v0.8.x)
 * 📋 Modified Chromium browser in the phone app (v0.8.x)
 * 📋 QR transport (v0.8.x): confirming the vault QR on phone cameras, scanner reliability across devices, and a bookmarks QR share
 * 📋 Continued field testing of sync, backup, and native file saving across Android versions
@@ -301,6 +315,9 @@ A custom Capacitor plugin bridges JavaScript to Android's BiometricPrompt. It cr
 
 **Native File Saving (Android):**
 A custom Capacitor plugin writes exported files directly to the Downloads folder through Android's MediaStore API, and Capacitor's Filesystem and Share plugins back the native share option.
+
+**Android Autofill:**
+A native autofill service reads only which fields a form has, never their contents, and offers one Valid Vault entry that requires authentication. Tapping it opens a separate Valid Vault screen running the same bundled code in its own session, so the unlocked key never crosses from the main app. After fingerprint, device PIN, or password, that screen decrypts the vault, matches the site, and hands Android exactly one username and password for that form. Saving works the same way in reverse: a typed password waits in memory for at most two minutes until you confirm.
 
 **Sovereign QR Scanner:**
 Scanning uses the web camera through getUserMedia, drawing the square shown in the scan box to a canvas that a vendored jsQR decoder reads. No native scanning plugin, no Google SDK. The stream itself is a fountain code: the payload is compressed, split into small pieces shown once in order, then followed by mixes of pieces, and the receiver solves for any pieces it missed.

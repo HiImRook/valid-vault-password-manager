@@ -1,10 +1,20 @@
 # Valid Vault - Development Roadmap
 
-**Current Version:** v0.8.1.1 - **Status: Active Testing**
+**Current Version:** v0.8.2 - **Status: Active Testing**
 
 ---
 
 ## Version History (Completed)
+
+### v0.8.2 - Android Autofill and Share to Bookmarks (Oct 2026)
+
+* ✅ Valid Vault as the Android autofill service: tap Valid Vault in the suggestions, confirm with fingerprint or device PIN, and the login fills
+* ✅ Every fill asks for fingerprint, device PIN, or password, and only the chosen login is handed to Android
+* ✅ Save new and changed logins when Android offers, with the old password kept as the previous password
+* ✅ Linked apps: the first fill in an app links it to a saved site, stored in the encrypted vault so it syncs, and tied to the app's signature
+* ✅ Websites trusted only from known browsers; web pages inside other apps never use a link
+* ✅ Share a link from any app to save it as an encrypted bookmark
+* ✅ Autofill status and Turn on in Settings, linked apps with Unlink, and a User Guide section
 
 ### v0.8.1.1 - Key File Validation Hotfix (Oct 2026)
 
@@ -183,19 +193,17 @@
 
 ---
 
-## Upcoming After v0.8.1
+## Upcoming After v0.8.2
 
 ### v0.8.x - The Phone App
 
-Built in this order, each step shipping as its own v0.8 release. The phone de-drift shipped in v0.8.0, and the vault QR rebuild in v0.8.1.
+Built in this order, each step shipping as its own v0.8 release. The phone de-drift shipped in v0.8.0, the vault QR rebuild in v0.8.1, and Android Autofill with Share to Bookmarks in v0.8.2.
 
-**1. Android Autofill (next)**
+**1. Android Autofill** - shipped in v0.8.2
 
-* Valid Vault registers as an Android Autofill service, so saved logins fill in other apps and in Chrome and other browsers on the phone
-* Saves new logins from those apps and sites when Android offers them
-* Share a link from any app to Valid Vault to add it to your encrypted bookmarks
+* Confirm autofill and save across apps and browsers on phones, and widen browser support from what testing shows
 
-**2. Modified Chromium browser**
+**2. Modified Chromium browser (next)**
 
 Chromium, through the Android System WebView the phone app already runs on, modified for privacy and Valid Vault:
 
@@ -258,6 +266,8 @@ Until the vault QR is confirmed on devices, encrypted files on a USB drive are t
 ⚠️ **The v0.8.1 vault QR is not yet confirmed with a phone camera** - it is rebuilt larger, lighter, and compressed, and verified in Chromium; vault files carry everything in the meantime, including on a USB drive
 
 ⚠️ **QR needs v0.8.1 on both sides** - a 0.8.0 scanner can't read the new QR, while the 0.8.1 scanner still reads 0.8.0 codes
+
+⚠️ **Android Autofill is new and not yet confirmed on a phone** - it is verified in Chromium with Android's autofill calls simulated. Chrome needs its Autofill using another service setting turned on, and browsers without support for third-party autofill do not ask Valid Vault at all
 
 ⚠️ **Phones upgraded from an older version may need fingerprint re-enrolled once** - unlock with your password, which removes the old fingerprint setting, and re-enroll in Manage, or use Can't unlock? on the lock screen with your key file
 
