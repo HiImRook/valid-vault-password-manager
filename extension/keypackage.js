@@ -149,13 +149,19 @@ function cleanNickname(value) {
   return value.replace(CONTROL_CHARS, ' ').trim().slice(0, MAX_NICKNAME_LENGTH).trim()
 }
 
-async function savePackage(masterKey, pkg) {
+async function savePackage(masterKey, pkg, newKey) {
   const authRec = await getAuth() || {}
   authRec.keyPackage = pkg
   authRec.keyPackageId = await keyIdFor(masterKey)
   const nickname = cleanNickname(pkg.nickname)
-  if (nickname) authRec.keyNickname = nickname
+  if (nickname && nickname !== DEFAULT_NICKNAME) authRec.keyNickname = nickname
+  else if (newKey) delete authRec.keyNickname
   await setAuth(authRec)
+}
+
+async function isSameKey(a, b) {
+  if (!a || !b) return false
+  return (await keyIdFor(a)) === (await keyIdFor(b))
 }
 
 async function getNickname() {
@@ -173,5 +179,6 @@ export {
   openPackage,
   getSavedPackage,
   savePackage,
+  isSameKey,
   getNickname
 }

@@ -410,6 +410,31 @@
           <div class="setting-desc">Apps you have filled into are linked to one of your saved sites, so the next fill goes straight to the right logins. Links are encrypted in your vault and travel with it.</div>
           <div class="list" id="app-links-list"></div>
         </div>
+        <h2>Browser</h2>
+        <div class="setting">
+          <div class="setting-label">Private browser</div>
+          <div class="setting-desc">A Chromium browser built into Valid Vault. Trackers are blocked, tracking tags are stripped from links, third-party cookies are off, and everything is wiped when you close it. Add a Valid Vault widget to your home screen, or long-press the app icon and tap Search.</div>
+          <div id="browser-unsupported" class="note hidden">Needs Android 9 or newer.</div>
+          <div id="browser-controls">
+            <button class="small" id="btn-open-browser">Open browser</button>
+          </div>
+        </div>
+        <div id="browser-more">
+        <div class="setting">
+          <div class="setting-label">Search engine</div>
+          <div class="setting-desc">Used when you type something that is not a web address.</div>
+          <select id="select-browser-engine">
+            <option value="startpage">Startpage</option>
+            <option value="duckduckgo">DuckDuckGo</option>
+            <option value="brave">Brave Search</option>
+          </select>
+        </div>
+        <div class="setting">
+          <div class="setting-label">Sites with tracker blocking off</div>
+          <div class="setting-desc">If a site breaks, tap the tracker count at the left of the browser's address bar, or use the menu, to turn blocking off for that site. Remove a site here to turn blocking back on.</div>
+          <div class="list" id="browser-sites-list"></div>
+        </div>
+        </div>
         <div class="danger-zone">
           <h2 style="color:var(--danger);margin-top:0;">Clear Vault</h2>
           <p class="lead">This permanently deletes all stored credentials, unlock methods, and settings on this phone. <strong style="color:var(--danger);">This cannot be undone.</strong><br><br><strong>Recommendation:</strong> back up your vault to another device or a file first.</p>
@@ -438,6 +463,19 @@
             <p>In browsers, Valid Vault matches the website the same way the extension does. Apps only tell Android their name, so the first time you fill in an app you pick which saved site it belongs to. Settings, Linked apps lists these links and lets you remove one.</p>
             <p>When you sign in somewhere new, Android offers to save the login to Valid Vault. Confirm with your fingerprint and it is encrypted like any other login.</p>
             <p>To save a page from any app as a bookmark, tap Share and choose Valid Vault.</p>
+            <p>Valid Vault has two home screen widgets. The small one is a Search privately bar with a Bookmarks button. The larger one adds Bookmarks, Logins, Wallet, and Personal buttons. Each button opens Valid Vault, asks for your fingerprint or device PIN once, and goes straight to that section.</p>
+          </div>
+        </details>
+        <details>
+          <summary>Private browser</summary>
+          <div class="body">
+            <p>Valid Vault includes a Chromium browser for private browsing. Open it from Settings, from a Valid Vault widget, or by long-pressing the app icon and tapping Search. Tapping a bookmark opens it there too.</p>
+            <p>The bar along the bottom has Back, Bookmarks, Home, Share, and Forward. Both bars slide away as you scroll down a page and come back when you scroll up. Bookmarks opens Valid Vault and asks for your fingerprint or device PIN. The menu at the top right has Reload, Copy link, the tracker switch for the site, Open in another app, and Close and wipe.</p>
+            <p>Type a web address to go straight to it, or anything else to search. Startpage is the default search engine. DuckDuckGo and Brave Search are in Settings, Browser.</p>
+            <p>Known trackers and ad scripts are blocked. Tracking tags such as utm and fbclid, and share tags like YouTube's si, are removed from links, and redirect wrappers from Google, Facebook, and others are skipped so you land on the real page. Third-party cookies are off.</p>
+            <p>The number at the left of the address bar shows how many trackers were blocked on the page. If a site breaks, tap it to turn blocking off for that site. Settings, Browser lists those sites so you can turn blocking back on.</p>
+            <p>Closing the browser wipes cookies, site data, cache, and history. It runs separately from your vault and never sees your vault data.</p>
+            <p>For Tor or a VPN, run an app such as Orbot in VPN mode. The browser's traffic goes through it like any other app.</p>
           </div>
         </details>
         <details>
@@ -484,8 +522,12 @@
       <div id="tab-about" class="panel">
         <h1>About Valid Vault</h1>
         <p class="lead"><strong style="color:var(--green);">Valid Vault Password Manager <span id="about-version"></span></strong></p>
-        <p class="lead">A local, encrypted password manager. Your credentials live on your device, encrypted under keys only you can produce. No cloud, no accounts, no sync servers. Unlock with your fingerprint or device PIN, or your password. Move credentials between devices over a local QR stream or an encrypted backup file.</p>
-        <p class="lead">Built by Rook</p>
+        <p class="lead">Hi, I'm Rook.</p>
+        <p class="lead">I made a password manager. I found myself wanting two things I just wasn't getting: relevant features and far less betrayal.</p>
+        <p class="lead">This is my best effort at common sense features with low friction, and how about we try zero betrayal?</p>
+        <p class="lead">Valid Vault is fully local. The only person who sees, or even touches, your data is you. There is no cloud sync, by design. To me, the idea of this data, YOUR data, traveling across countries and even continents and then back to you is insane. That data never needed to leave your device. More things should be handled locally, and cloud connectivity should be approached with caution. Unfortunately, we see the opposite.</p>
+        <p class="lead">Take back your data with the Valid ecosystem. Privacy should not come at a premium. Join the Discord to connect with other privacy-minded people.</p>
+        <p class="lead">Regards,<br>Rook</p>
         <div class="about-links">
           <button class="secondary block" data-link="https://discord.gg/2SP383cJs9">Discord</button>
           <button class="secondary block" data-link="https://github.com/HiImRook/valid-vault-password-manager">GitHub Repository</button>

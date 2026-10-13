@@ -59,6 +59,8 @@ const state = {
   tab: 'manage',
   deadFingerprint: null,
   pendingShare: null,
+  pendingLaunch: null,
+  launchGrant: false,
   fillIdle: null,
   fillBusy: false,
   fillWired: false,
@@ -420,9 +422,74 @@ async function enterApp(masterKey) {
   showView('app')
   await loadAuthStatus()
   loadSettingsIntoForm()
-  showTab(state.tab)
+  if (state.pendingLaunch && Date.now() - state.pendingLaunch.at <= LAUNCH_TTL_MS) {
+    await openLaunch(true)
+  } else {
+    state.pendingLaunch = null
+    showTab(state.tab)
+  }
   if (migrationError) showMsg('msg-manage', 'Your saved logins could not be upgraded: ' + errText(migrationError) + '. Nothing was lost; the old copy was kept.', 'error')
   if (state.pendingShare) saveSharedLink()
+}
+
+const LAUNCH_TABS = { bookmarks: 'bookmarks', logins: 'manage', wallets: 'wallets', personal: 'personal' }
+const LAUNCH_LABELS = { bookmarks: 'Bookmarks', logins: 'your logins', wallets: 'Crypto Wallets', personal: 'Personal Info' }
+const LAUNCH_WAIT_MS = 3000
+const LAUNCH_POLL_MS = 50
+const LAUNCH_TTL_MS = 120000
+let launchPrompting = false
+
+async function receiveLaunch(name) {
+  if (!name || !LAUNCH_TABS[name]) return
+  state.pendingLaunch = { name, at: Date.now() }
+  if (key()) { await openLaunch(false); return }
+  const status = await auth.initAuth()
+  if (status.isNew) {
+    state.pendingLaunch = null
+    showMsg('msg-setup', 'Set up Valid Vault first.', 'info')
+    return
+  }
+  state.tab = LAUNCH_TABS[name]
+  showView('locked')
+  showMsg('msg-locked', 'Unlock to open ' + LAUNCH_LABELS[name] + '.', 'info')
+  if (!status.hasFingerprint) { $('input-unlock-password').focus(); return }
+  if (launchPrompting) return
+  launchPrompting = true
+  try { await unlockWithFingerprint() } finally { launchPrompting = false }
+}
+
+async function checkLaunch() {
+  receiveLaunch(await platform.takeLaunch())
+}
+
+async function waitForGate(tab) {
+  const started = Date.now()
+  while (Date.now() - started < LAUNCH_WAIT_MS) {
+    if (state.tab !== tab) return null
+    const b = document.querySelector('#tab-' + tab + ' .gate button, #tab-' + tab + ' .wv-gate button')
+    if (b) return b
+    await new Promise((r) => setTimeout(r, LAUNCH_POLL_MS))
+  }
+  return null
+}
+
+async function openLaunch(fresh) {
+  const pending = state.pendingLaunch
+  state.pendingLaunch = null
+  if (!pending || !key() || Date.now() - pending.at > LAUNCH_TTL_MS) return
+  const name = pending.name
+  const tab = LAUNCH_TABS[name]
+  if (fresh) {
+    if (name === 'logins') state.unlocked.logins = true
+    if (name === 'personal') state.unlocked.personal = true
+    if (name === 'wallets') state.launchGrant = true
+  }
+  showTab(tab)
+  if (name === 'bookmarks') return
+  if (fresh && name !== 'wallets') return
+  const gate = await waitForGate(tab)
+  if (gate && state.tab === tab) gate.click()
+  else state.launchGrant = false
 }
 
 function sharedLinkFrom(item) {
@@ -509,6 +576,7 @@ async function handleLocked() {
   stopScanner()
   closeDialogs()
   resetSectionLocks()
+  state.launchGrant = false
   walletsTab.lock()
   for (const id of ['credentials-list', 'webcreds-list', 'personalinfo-content', 'bookmarks-list']) {
     const node = $(id)
@@ -706,7 +774,7 @@ async function setupFromPackage(pkg, sourceLabel, msgId, recovering) {
     return
   }
   if (!matches) await store.clearVaultData()
-  try { await keypackage.savePackage(importedKey, pkg) } catch (e) {}
+  try { await keypackage.savePackage(importedKey, pkg, !matches) } catch (e) {}
   state.setup = { masterKey: null, hasFp: false, hasPw: false }
   if (recovering && matches) {
     state.tab = 'manage'
@@ -817,7 +885,7 @@ function showTab(name) {
   if (name === 'webcreds') loadWebCredentials()
   if (name === 'wallets') walletsTab.onTabShown()
   if (name === 'bookmarks') loadBookmarks()
-  if (name === 'settings') loadAutofillSettings()
+  if (name === 'settings') { loadAutofillSettings(); loadBrowserSettings() }
 }
 
 async function loadAuthStatus() {
@@ -1383,7 +1451,7 @@ async function loadBookmarks() {
     const text = el('div', 'bm-text')
     text.appendChild(el('div', 'bm-title', item.title))
     text.appendChild(el('div', 'bm-url', item.url))
-    text.onclick = () => platform.openExternal(item.url)
+    text.onclick = () => platform.openInBrowser(item.url)
     row.appendChild(text)
     const actions = el('div', 'bm-actions')
     const pair = el('div', 'pair')
@@ -1638,9 +1706,10 @@ async function unlockKeyPackage(pkg, sourceLabel) {
 async function acceptKeyPackage(pkg, sourceLabel) {
   const importedKey = await unlockKeyPackage(pkg, sourceLabel)
   if (!importedKey) { showMsg('msg-sync', 'Key import cancelled. Nothing changed.', 'error'); return }
+  const newKey = !(await keypackage.isSameKey(key(), importedKey))
   const adopted = await adoptImportedKey(importedKey)
   if (adopted) {
-    try { await keypackage.savePackage(importedKey, pkg) } catch (e) {}
+    try { await keypackage.savePackage(importedKey, pkg, newKey) } catch (e) {}
     $('key-nickname-input').value = await keypackage.getNickname()
   }
 }
@@ -1649,7 +1718,7 @@ async function choosePasswordForImport(status) {
   if (status.hasPassword) {
     const current = await formDialog({
       title: 'Confirm key import',
-      text: 'The imported key gets locked under this phone\'s master password, so it survives lock and unlock.',
+      text: 'Enter this phone\'s master password to unlock the imported key here. The password stays on this phone and is never put in a key file.',
       fields: [{ label: 'This phone\'s master password', secret: true }],
       okLabel: 'Continue',
       validate: async (v) => {
@@ -1662,7 +1731,7 @@ async function choosePasswordForImport(status) {
     if (!current) { showMsg('msg-sync', 'Key import cancelled. Nothing changed.', 'error'); return null }
     if (passwordMeetsRule(current)) return current
   }
-  const fresh = await newPasswordDialog('Set a master password', 'This phone needs a master password for the imported key.')
+  const fresh = await newPasswordDialog('Set a master password', 'Set a master password to unlock the imported key on this phone. It stays on this phone and is never put in a key file.')
   if (!fresh) { showMsg('msg-sync', 'Key import cancelled. Nothing changed.', 'error'); return null }
   return fresh
 }
@@ -1937,8 +2006,18 @@ function attachActivity() {
 }
 
 function wire() {
+  $('select-browser-engine').onchange = async (e) => {
+    try {
+      await platform.setBrowserEngine(e.target.value)
+      showMsg('msg-settings', 'Search engine saved', 'success')
+    } catch (err) {
+      showMsg('msg-settings', errText(err), 'error')
+      loadBrowserSettings()
+    }
+  }
+  $('btn-open-browser').onclick = () => { platform.openBrowserSearch().catch((e) => showMsg('msg-settings', errText(e), 'error')) }
   $('btn-autofill-settings').onclick = () => { platform.openAutofillSettings().catch((e) => showMsg('msg-settings', errText(e), 'error')) }
-  document.addEventListener('visibilitychange', () => { if (!document.hidden && state.tab === 'settings' && key()) loadAutofillSettings() })
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && state.tab === 'settings' && key()) { loadAutofillSettings(); loadBrowserSettings() } })
   $('btn-setup-fp').onclick = setupEnrollFingerprint
   $('btn-setup-pw').onclick = setupEnrollPassword
   $('setup-password').onkeydown = (e) => { if (e.key === 'Enter') setupEnrollPassword() }
@@ -2257,6 +2336,37 @@ async function loadAutofillSettings() {
   }
 }
 
+async function loadBrowserSettings() {
+  const st = await platform.browserSettings()
+  $('browser-unsupported').classList.toggle('hidden', st.supported)
+  $('browser-controls').classList.toggle('hidden', !st.supported)
+  $('browser-more').classList.toggle('hidden', !st.supported)
+  if (!st.supported) return
+  $('select-browser-engine').value = st.engine
+  const list = $('browser-sites-list')
+  list.textContent = ''
+  if (!st.allowedSites.length) { list.appendChild(el('div', 'empty', 'Tracker blocking is on everywhere.')); return }
+  for (const site of st.allowedSites) {
+    const row = el('div', 'item')
+    row.style.padding = '12px'
+    const head = el('div', 'item-top')
+    head.appendChild(el('div', 'item-label', site))
+    const actions = el('div', 'item-actions')
+    actions.appendChild(btn('Remove', 'small secondary', async () => {
+      try {
+        await platform.removeBrowserSite(site)
+        showMsg('msg-settings', 'Tracker blocking is back on for ' + site, 'success')
+      } catch (e) {
+        showMsg('msg-settings', errText(e), 'error')
+      }
+      loadBrowserSettings()
+    }))
+    head.appendChild(actions)
+    row.appendChild(head)
+    list.appendChild(row)
+  }
+}
+
 async function init() {
   const fillRequest = await platform.autofillRequest()
   if (fillRequest) { await runAutofill(fillRequest); return }
@@ -2268,6 +2378,10 @@ async function init() {
   walletsTab.init({
     getKey: () => key(),
     authenticate: async () => {
+      if (state.launchGrant) {
+        state.launchGrant = false
+        if (key()) return true
+      }
       const r = await promptAuth()
       if (!r.success) return false
       session.setMasterKey(r.masterKey)
@@ -2280,6 +2394,8 @@ async function init() {
   await routeView()
   platform.onShared(checkShares)
   checkShares()
+  platform.onLaunch(checkLaunch)
+  checkLaunch()
 }
 
 const TAB_MSG = { manage: 'msg-manage', personal: 'msg-personalinfo', webcreds: 'msg-webcreds', wallets: 'msg-wallets', bookmarks: 'msg-bookmarks', sync: 'msg-sync', settings: 'msg-settings' }

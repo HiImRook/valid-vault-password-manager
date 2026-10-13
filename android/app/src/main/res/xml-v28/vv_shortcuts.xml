@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="vv_search"
+        android:enabled="true"
+        android:icon="@drawable/vv_shortcut_logo"
+        android:shortcutShortLabel="@string/vv_shortcut_search_short"
+        android:shortcutLongLabel="@string/vv_shortcut_search_long">
+        <intent
+            android:action="com.valid.vault.SEARCH"
+            android:targetPackage="com.valid.vault"
+            android:targetClass="com.valid.vault.SearchShortcut" />
+    </shortcut>
+</shortcuts>

@@ -1431,9 +1431,10 @@ async function unlockKeyPackage(pkg, sourceLabel) {
 async function acceptKeyPackage(pkg, sourceLabel) {
   const importedKey = await unlockKeyPackage(pkg, sourceLabel)
   if (!importedKey) { syncMsg('Key import cancelled. Nothing changed.', 'error'); return }
+  const newKey = !(await keypackage.isSameKey(session.getMasterKey(), importedKey))
   const adopted = await adoptImportedKey(importedKey)
   if (adopted) {
-    try { await keypackage.savePackage(importedKey, pkg) } catch (e) {}
+    try { await keypackage.savePackage(importedKey, pkg, newKey) } catch (e) {}
     const nickInput = document.getElementById('key-nickname-input')
     if (nickInput) nickInput.value = await keypackage.getNickname()
   }
@@ -1485,13 +1486,13 @@ async function clearLocalVaultData() {
 
 async function choosePasswordForImport(status) {
   if (status.hasPassword) {
-    const current = await askSecret('Confirm key import', 'This browser\'s master password', 'The imported key gets locked under this browser\'s password so it survives lock and unlock.')
+    const current = await askSecret('Confirm key import', 'This browser\'s master password', 'Enter this browser\'s master password to unlock the imported key here. The password stays on this browser and is never put in a key file.')
     if (!current) { syncMsg('Key import cancelled. Nothing changed.', 'error'); return null }
     const check = await auth.authenticatePassword(current)
     if (!check.success) { syncMsg('Wrong password. Key import cancelled, nothing changed.', 'error'); return null }
     if (passwordMeetsRule(current)) return current
   }
-  const fresh = await askSecret('Set a master password', 'New master password', 'This browser has no password yet. Set one for the imported key: 12+ characters with a letter, a number, and a symbol.')
+  const fresh = await askSecret('Set a master password', 'New master password', 'Set a master password to unlock the imported key on this browser: 12+ characters with a letter, a number, and a symbol. It stays on this browser and is never put in a key file.')
   if (!fresh) { syncMsg('Key import cancelled. Nothing changed.', 'error'); return null }
   if (!passwordMeetsRule(fresh)) { syncMsg('Password must be 12+ characters with a letter, a number, and a symbol. Key import cancelled, nothing changed.', 'error'); return null }
   return fresh
@@ -1542,7 +1543,7 @@ async function planBackupPassword(status) {
   if (!status.hasPassword) return { password: null, removePassword: false }
   const keep = window.confirm('Keep a master password on this browser as a backup unlock?\n\nOK: set the password for the imported key (you can reuse this browser\'s current password).\nCancel: turn password unlock off. You can add one later in Manage.')
   if (keep) {
-    const pw = await askSecret('Backup password', 'Master password', 'Set the backup password for the imported key: 12+ characters with a letter, a number, and a symbol.')
+    const pw = await askSecret('Backup password', 'Master password', 'Set a backup password to unlock the imported key on this browser: 12+ characters with a letter, a number, and a symbol. It stays on this browser and is never put in a key file.')
     if (pw && passwordMeetsRule(pw)) return { password: pw, removePassword: false }
   }
   return { password: null, removePassword: true }

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="vv_search_privately">Search privately</string>
+    <string name="vv_shortcut_search_short">Search</string>
+    <string name="vv_shortcut_search_long">Search privately</string>
+    <string name="vv_widget_label">Valid Vault Search</string>
+    <string name="vv_panel_label">Valid Vault</string>
+    <string name="vv_widget_bookmarks">Bookmarks</string>
+    <string name="vv_widget_logins">Logins</string>
+    <string name="vv_widget_wallets">Wallet</string>
+    <string name="vv_widget_personal">Personal</string>
+</resources>

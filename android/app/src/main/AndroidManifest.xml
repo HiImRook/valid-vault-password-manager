@@ -4,11 +4,21 @@
 
     <application
         android:allowBackup="true"
+        android:fullBackupContent="@xml/vv_backup_rules"
+        android:dataExtractionRules="@xml/vv_data_extraction_rules"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
+
+        <meta-data
+            android:name="android.webkit.WebView.MetricsOptOut"
+            android:value="true" />
+
+        <meta-data
+            android:name="android.webkit.WebView.EnableSafeBrowsing"
+            android:value="false" />
 
         <activity
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation"
@@ -29,7 +39,59 @@
                 <data android:mimeType="text/plain" />
             </intent-filter>
 
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/vv_shortcuts" />
+
         </activity>
+
+        <activity
+            android:name=".BrowserActivity"
+            android:process=":browser"
+            android:taskAffinity="com.valid.vault.browser"
+            android:launchMode="singleTask"
+            android:theme="@android:style/Theme.Material.NoActionBar"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation|density|fontScale"
+            android:windowSoftInputMode="adjustResize"
+            android:label="Search"
+            android:exported="false" />
+
+        <activity-alias
+            android:name=".SearchShortcut"
+            android:targetActivity=".BrowserActivity"
+            android:label="Search"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.valid.vault.SEARCH" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity-alias>
+
+        <receiver
+            android:name=".SearchWidgetProvider"
+            android:label="@string/vv_widget_label"
+            android:enabled="@bool/vv_browser_supported"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/vv_search_widget_info" />
+        </receiver>
+
+        <receiver
+            android:name=".PanelWidgetProvider"
+            android:label="@string/vv_panel_label"
+            android:enabled="@bool/vv_browser_supported"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/vv_panel_widget_info" />
+        </receiver>
 
         <activity
             android:name=".AutofillActivity"

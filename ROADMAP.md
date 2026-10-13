@@ -1,10 +1,26 @@
 # Valid Vault - Development Roadmap
 
-**Current Version:** v0.8.2 - **Status: Active Testing**
+**Current Version:** v0.8.3 - **Status: Active Testing**
 
 ---
 
 ## Version History (Completed)
+
+### v0.8.3 - Private Browser and Widgets (Oct 2026)
+
+* ✅ Modified Chromium browser in the phone app, through the Android System WebView, in its own process apart from the vault
+* ✅ Tracker and ad script blocking from a bundled list, with a blocked count and a per-site switch
+* ✅ Tracking tags stripped from links, and redirect wrappers from Google, Facebook, Instagram, YouTube, Steam, and Reddit skipped
+* ✅ Third-party cookies blocked, app identity header hidden, and cookies, site data, cache, and history wiped on close
+* ✅ Startpage search by default, with DuckDuckGo and Brave Search in Settings
+* ✅ Address bar with tracker count and menu, bottom toolbar with Back, Bookmarks, Home, Share, and Forward, and bars that slide away as you scroll
+* ✅ New tab page with the full-size logo, a Search privately box, and trackers blocked this session
+* ✅ 4x1 and 4x2 home screen widgets for search, bookmarks, logins, wallets, and personal info, one fingerprint each, and a Search shortcut with the logo
+* ✅ Bookmarks open in the browser, and the browser's Bookmarks button opens them in Valid Vault
+* ✅ Globe V logo as the app icon
+* ✅ Browser settings and a User Guide section on the phone
+* ✅ Key files with the default name no longer overwrite a name you set, and key import prompts say the password stays on the device, on the extension and the phone
+* ✅ Extension dialogs stop Chrome from offering to save passphrases and answers
 
 ### v0.8.2 - Android Autofill and Share to Bookmarks (Oct 2026)
 
@@ -193,27 +209,21 @@
 
 ---
 
-## Upcoming After v0.8.2
+## Upcoming After v0.8.3
 
 ### v0.8.x - The Phone App
 
-Built in this order, each step shipping as its own v0.8 release. The phone de-drift shipped in v0.8.0, the vault QR rebuild in v0.8.1, and Android Autofill with Share to Bookmarks in v0.8.2.
+Built in this order, each step shipping as its own v0.8 release. The phone de-drift shipped in v0.8.0, the vault QR rebuild in v0.8.1, Android Autofill with Share to Bookmarks in v0.8.2, and the private browser core in v0.8.3.
 
 **1. Android Autofill** - shipped in v0.8.2
 
 * Confirm autofill and save across apps and browsers on phones, and widen browser support from what testing shows
 
-**2. Modified Chromium browser (next)**
+**2. Modified Chromium browser** - core shipped in v0.8.3
 
-Chromium, through the Android System WebView the phone app already runs on, modified for privacy and Valid Vault:
-
-* Private by default: no history kept, and cookies and site data cleared when you leave
-* Tracker blocking, with a per-site switch to turn it off when a site doesn't work right
-* Tracking tags stripped from links
-* Third-party cookies blocked
-* The app's identity header hidden from sites
-* Valid Vault autofill built in, with the same V tags and pickers as the extension
-* Your encrypted bookmarks, opened directly in the browser
+* Valid Vault autofill built in, with the same V tags and pickers as the extension (next, v0.8.4)
+* Reorder or choose the widget buttons
+* Confirm the browser on phones, and grow the tracker list from what testing shows
 
 **3. QR transport**
 
@@ -227,6 +237,10 @@ Until the vault QR is confirmed on devices, encrypted files on a USB drive are t
 **4. App injection**
 
 * Filling apps that Android Autofill can't reach
+
+**5. Importing from other managers**
+
+* Import passwords exported from other password managers and bookmarks exported from other browsers, read on the device and encrypted straight into the vault
 
 ### v0.9.x - Hardening and Polish
 
@@ -269,6 +283,8 @@ Until the vault QR is confirmed on devices, encrypted files on a USB drive are t
 
 ⚠️ **Android Autofill is new and not yet confirmed on a phone** - it is verified in Chromium with Android's autofill calls simulated. Chrome needs its Autofill using another service setting turned on, and browsers without support for third-party autofill do not ask Valid Vault at all
 
+⚠️ **The private browser and widgets are new** - the first browser build runs on a Samsung phone, and the v0.8.3 layout and widgets are being tested on phones now. The browser needs Android 9 or newer, opens one page at a time, and does not download files yet
+
 ⚠️ **Phones upgraded from an older version may need fingerprint re-enrolled once** - unlock with your password, which removes the old fingerprint setting, and re-enroll in Manage, or use Can't unlock? on the lock screen with your key file
 
 ⚠️ **Uni-Vault needs a browser setting in Brave** - Brave ships the File System Access API switched off; Chrome and Edge work out of the box, and Brave users can switch it on or keep using Export and Import
@@ -293,4 +309,4 @@ MIT License - See LICENSE file for details
 
 ---
 
-**Last Updated:** Oct 11, 2026
+**Last Updated:** Oct 13, 2026

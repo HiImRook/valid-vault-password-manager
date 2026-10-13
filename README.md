@@ -28,6 +28,10 @@ A local, encrypted, QR code portable password manager. No cloud, accounts, or sy
 >
 > Valid Vault can now be the phone's autofill service. Tap a login field in any app or browser, choose Valid Vault, and confirm with your fingerprint or device PIN. One saved login fills right away, and several are listed so you can pick. Only the login you pick is handed to Android, and every fill asks again. When you sign in somewhere new, Android offers to save it to Valid Vault. Apps are linked to a saved site on their first fill, and that link is stored in your encrypted vault and travels with it. Saving a page is one tap too: share any link to Valid Vault and it becomes an encrypted bookmark. This is verified in Chromium with Android's autofill simulated and is being tested on phones now. See [CHANGELOG.md](CHANGELOG.md) for full details.
 
+> ✅ **Private Browser and Widgets - v0.8.3**
+>
+> The phone app now includes a private browser, a modified Chromium built on the Android System WebView. Known trackers and ad scripts are blocked, tracking tags are stripped from links, redirect wrappers are skipped, third-party cookies are off, and cookies, site data, cache, and history are wiped when you close it. The address bar and a bottom toolbar slide away as you scroll, and Home opens a new tab page with the logo front and center. Search with Startpage by default, or DuckDuckGo or Brave Search. The app icon is now the globe V logo. Two home screen widgets put Search privately, Bookmarks, Logins, Wallet, and Personal one tap and one fingerprint away. Key files with the default name no longer overwrite the name you set, on the extension and the phone. Needs Android 9 or newer for the browser. See [CHANGELOG.md](CHANGELOG.md) for full details.
+
 ---
 
 ## What is Valid Vault?
@@ -92,6 +96,21 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 * Browsers report the website and match like the extension; apps are linked to a saved site on their first fill, and the link is stored in the encrypted vault, synced, and tied to the app's signature
 * A website is only trusted from a known browser, so a web page inside another app never fills from an app link
 
+**Private Browser (Android):**
+
+* Modified Chromium, through the Android System WebView, built into the phone app
+* Known trackers and ad scripts blocked, with a count in the address bar and a per-site switch for sites that break
+* Tracking tags stripped from links (utm, fbclid, gclid, YouTube and Spotify si, and more), and redirect wrappers from Google, Facebook, Instagram, YouTube, Steam, and Reddit skipped
+* Third-party cookies blocked, and the app identity header hidden from sites
+* Private by default: cookies, site data, cache, and history wiped when you close it
+* Search with Startpage by default, or DuckDuckGo or Brave Search, chosen in Settings
+* Bottom toolbar with Back, Bookmarks, Home, Share, and Forward, and bars that slide away as you scroll
+* New tab page with the Valid Vault logo, a Search privately box, and trackers blocked this session
+* 4x1 Search privately widget with a Bookmarks button, a 4x2 widget with Bookmarks, Logins, Wallet, and Personal, and a Search shortcut on the app icon; every button asks for fingerprint or device PIN once
+* Bookmarks open in the browser, and the browser's Bookmarks button opens them in Valid Vault
+* Runs in its own process with its own storage, so it never touches the vault
+* Works with Tor or a VPN through an app such as Orbot in VPN mode
+
 **Sync and Backup:**
 
 * Uni-Vault - link every browser on one computer to a single encrypted vault file; saves reach the file within about a second and other linked browsers pick them up within about 30 seconds, or within seconds while Manage is open, merged by timestamp with tombstoned deletes
@@ -126,10 +145,10 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 **Platform:**
 
 * Single-file web bundle - build.js bundles the phone app from the extension's own modules into one self-contained HTML file, so both clients share one copy of the core code
-* Android via Capacitor, with native plugins for biometric auth, file saving, autofill, and sharing
+* Android via Capacitor, with native plugins for biometric auth, file saving, autofill, sharing, and the private browser
 * Vendored, self-contained code only, no Google SDKs in the scan path
 
-## Current Status: v0.8.2 - Active Testing
+## Current Status: v0.8.3 - Active Testing
 
 **Completed:**
 
@@ -172,10 +191,12 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 * ✅ Key files and key QRs checked against the exact format Valid Vault writes before any key derivation starts
 * ✅ Android Autofill: fill and save logins in other apps and browsers, fingerprint first, with linked apps synced in the encrypted vault
 * ✅ Share to Bookmarks on the phone: share a link from any app to save it as an encrypted bookmark
+* ✅ Private browser on the phone: modified Chromium with tracker blocking, clean links, and a wipe on close
+* ✅ Home screen widgets for search, bookmarks, logins, wallets, and personal info, each one fingerprint away
 
 **In Development:**
 
-* 📋 Modified Chromium browser in the phone app (v0.8.x)
+* 📋 Valid Vault autofill inside the private browser (v0.8.4)
 * 📋 QR transport (v0.8.x): confirming the vault QR on phone cameras, scanner reliability across devices, and a bookmarks QR share
 * 📋 Continued field testing of sync, backup, and native file saving across Android versions
 
@@ -318,6 +339,9 @@ A custom Capacitor plugin writes exported files directly to the Downloads folder
 
 **Android Autofill:**
 A native autofill service reads only which fields a form has, never their contents, and offers one Valid Vault entry that requires authentication. Tapping it opens a separate Valid Vault screen running the same bundled code in its own session, so the unlocked key never crosses from the main app. After fingerprint, device PIN, or password, that screen decrypts the vault, matches the site, and hands Android exactly one username and password for that form. Saving works the same way in reverse: a typed password waits in memory for at most two minutes until you confirm.
+
+**Private Browser:**
+The browser is its own Android activity running in a separate process, with the WebView's data directory split off from the vault's. Every page request is checked against a bundled tracker list and blocked requests get an empty response. Main-frame navigations are cleaned of tracking tags and unwrapped from known redirect links before loading. Closing the browser deletes its cookies, storage, cache, and history, and opening it clears anything left from a session Android ended early. Browser files are left out of Android backups.
 
 **Sovereign QR Scanner:**
 Scanning uses the web camera through getUserMedia, drawing the square shown in the scan box to a canvas that a vendored jsQR decoder reads. No native scanning plugin, no Google SDK. The stream itself is a fountain code: the payload is compressed, split into small pieces shown once in order, then followed by mixes of pieces, and the receiver solves for any pieces it missed.

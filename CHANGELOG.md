@@ -5,6 +5,45 @@ All notable changes to Valid Vault will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.3] - 2026-10-13
+
+A private browser and home screen widgets for the phone app, plus a key name fix and clearer key import prompts for the extension and the phone.
+
+### Added
+
+* **Private browser.** The phone app includes a modified Chromium browser, built on the Android System WebView. Type a web address to go to it, or anything else to search. It opens one page at a time. The address bar sits at the top with the tracker count on its left and a menu on its right (Reload, Copy link, the tracker switch for the site, Open in another app, and Close and wipe). A bar along the bottom has Back, Bookmarks, Home, Share, and Forward. Both bars slide away as you scroll down and come back when you scroll up.
+* **New tab page.** Home shows the Valid Vault logo full size, a Search privately box, your search engine, and how many trackers were blocked this session.
+* **Tracker blocking.** Requests to known trackers and ad scripts, such as Google Analytics, DoubleClick, the Facebook pixel, Microsoft Clarity, Hotjar, and Criteo, are blocked before they load. The address bar shows how many were blocked on the page. If a site breaks, tap the count to turn blocking off for that site, and turn it back on from Settings.
+* **Clean links.** Tracking tags such as utm, fbclid, gclid, and msclkid are removed from every link you open, along with site share tags such as YouTube's si. Redirect wrappers from Google, Facebook, Instagram, YouTube, Steam, and Reddit are skipped, so you land on the page itself.
+* **Private by default.** Third-party cookies are blocked, the header that names the app to sites is hidden, and location, camera, and microphone requests are denied. Closing the browser wipes cookies, site data, cache, and history, and opening it clears anything left from a session Android ended early.
+* **Search engines.** Startpage is the default. DuckDuckGo and Brave Search can be picked in Settings, Browser.
+* **Home screen widgets.** A 4x1 Search privately bar with a Bookmarks button, and a 4x2 widget that adds Bookmarks, Logins, Wallet, and Personal buttons. Each button opens Valid Vault, asks for your fingerprint or device PIN once, and goes straight to that section.
+* **App icon.** Valid Vault's launcher icon is now the globe V logo, filling the icon edge to edge.
+* **Ways in.** The widgets, a Search shortcut with the Valid Vault logo when you long-press the app icon, an Open browser button in Settings, and bookmarks, which now open in the browser. The browser's Bookmarks button opens Valid Vault's Bookmarks the same way.
+* **Tor and VPNs.** The browser works with Tor or a VPN through an app such as Orbot in VPN mode, like any other app.
+* **Settings and User Guide.** Settings, Browser has the search engine, the sites with blocking off, and Open browser. The phone User Guide has a Private browser section and covers the widgets.
+
+### Fixed
+
+* **Key name kept on import.** Importing a key file that still had the default name, My Master Key, replaced a name you had set. A default name no longer overwrites yours. A key file with its own name still brings it along, and importing a different key with the default name resets the label to the default. Extension and phone.
+* **Clearer key import prompts.** The password asked for while importing a key unlocks that key on this browser or phone only. The prompt now says so, and that it is never put in a key file. Extension and phone.
+* **No browser save prompts on passphrases.** Passphrase, answer, and password boxes in the extension's dialogs no longer look like password fields to Chrome, so Chrome stops offering to save what you type into them. They stay masked, and copying from a masked box is blocked.
+
+### Security
+
+* **Kept apart from the vault.** The browser runs in its own process with its own WebView storage, so wiping it never touches the vault, and it has no access to your vault data.
+* **Outside apps can only open search.** The Search shortcut opens the search box. Web addresses are only accepted from Valid Vault itself.
+* **Browser files stay out of backups.** Browser storage and settings are left out of Android backups and device transfers.
+* **Web addresses only.** Mail, phone, text, and map links open their app only after a tap, and every other kind of link is refused.
+
+### Notes
+
+* The browser needs Android 9 or newer. On older phones the widgets and shortcut are hidden and bookmarks open as before.
+* The extension changes go to the Chrome Web Store as 0.8.3.
+* Downloads are not supported yet.
+* Valid Vault autofill inside the browser is planned for v0.8.4.
+* Verified with unit tests of the tracker and link rules, the Android code compiled against the platform interfaces, and in Chromium: the phone's browser settings, bookmark opening and fallbacks, every widget button from a locked and an unlocked app with one unlock each, key imports keeping or resetting the name, and regression runs of the phone, autofill, share, key, and extension suites. The first browser build was confirmed on a Samsung phone; the new layout and widgets are being tested on phones now.
+
 ## [0.8.2] - 2026-10-12
  
 Android Autofill and Share to Bookmarks for the phone app, with a matching update to the extension so linked apps survive syncing.

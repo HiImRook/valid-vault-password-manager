@@ -1,4 +1,21 @@
 const OPEN_DIALOGS = new Set()
+const MASK_WITH_STYLE = (() => {
+  try { return location.protocol === 'chrome-extension:' } catch (e) { return false }
+})()
+
+function setMasked(input, masked) {
+  if (MASK_WITH_STYLE) {
+    input.type = 'text'
+    input.style.webkitTextSecurity = masked ? 'disc' : 'none'
+    input.dataset.masked = masked ? 'yes' : 'no'
+  } else {
+    input.type = masked ? 'password' : 'text'
+  }
+}
+
+function isMasked(input) {
+  return MASK_WITH_STYLE ? input.dataset.masked === 'yes' : input.type === 'password'
+}
 
 function el(tag, className, text) {
   const node = document.createElement(tag)
@@ -41,8 +58,15 @@ function buildField(field, index) {
   }
   const input = el('input', 'vv-field-input')
   input.id = 'vv-field-' + index
-  input.type = field.secret ? 'password' : 'text'
+  setMasked(input, !!field.secret)
   input.autocomplete = 'off'
+  if (field.secret) {
+    for (const name of ['copy', 'cut', 'dragstart']) input.addEventListener(name, (e) => { if (isMasked(input)) e.preventDefault() })
+    input.setAttribute('data-1p-ignore', 'true')
+    input.setAttribute('data-lpignore', 'true')
+    input.setAttribute('data-bwignore', 'true')
+    input.setAttribute('autocorrect', 'off')
+  }
   input.spellcheck = false
   input.setAttribute('autocapitalize', 'off')
   if (field.placeholder) input.placeholder = field.placeholder
@@ -59,8 +83,8 @@ function buildField(field, index) {
   }
   if (field.secret) {
     const eye = actionButton('Show', 'secondary vv-eye', () => {
-      const hidden = input.type === 'password'
-      input.type = hidden ? 'text' : 'password'
+      const hidden = isMasked(input)
+      setMasked(input, !hidden)
       eye.textContent = hidden ? 'Hide' : 'Show'
       input.focus()
     })

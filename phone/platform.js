@@ -180,6 +180,23 @@ async function returnToSender() {
   try { await st.returnToSender() } catch (e) {}
 }
 
+async function takeLaunch() {
+  const lt = plugin('LaunchTarget')
+  if (!lt) return null
+  try {
+    const r = await lt.takePending()
+    return r && r.found && typeof r.tab === 'string' ? r.tab : null
+  } catch (e) {
+    return null
+  }
+}
+
+function onLaunch(callback) {
+  const lt = plugin('LaunchTarget')
+  if (!lt || typeof lt.addListener !== 'function') return
+  try { lt.addListener('launchTab', () => { callback() }) } catch (e) {}
+}
+
 async function autofillRequest() {
   const ab = plugin('AutofillBridge')
   if (!ab) return null
@@ -224,6 +241,52 @@ function openExternal(url) {
   try { window.open(url, '_blank') } catch (e) {}
 }
 
+const BROWSER_ENGINES = ['startpage', 'duckduckgo', 'brave']
+
+async function browserSettings() {
+  const bb = plugin('BrowserBridge')
+  if (!bb) return { supported: false, engine: 'startpage', allowedSites: [] }
+  try {
+    const r = await bb.getSettings()
+    return {
+      supported: !!(r && r.supported),
+      engine: r && BROWSER_ENGINES.includes(r.engine) ? r.engine : 'startpage',
+      allowedSites: r && Array.isArray(r.allowedSites) ? r.allowedSites.filter((s) => typeof s === 'string') : []
+    }
+  } catch (e) {
+    return { supported: false, engine: 'startpage', allowedSites: [] }
+  }
+}
+
+async function setBrowserEngine(engine) {
+  const bb = plugin('BrowserBridge')
+  if (!bb) throw new Error('The browser is not available')
+  await bb.setEngine({ engine })
+}
+
+async function removeBrowserSite(site) {
+  const bb = plugin('BrowserBridge')
+  if (!bb) throw new Error('The browser is not available')
+  await bb.removeAllowedSite({ site })
+}
+
+async function openBrowserSearch() {
+  const bb = plugin('BrowserBridge')
+  if (!bb) throw new Error('The browser is not available on this device')
+  await bb.openSearch()
+}
+
+async function openInBrowser(url) {
+  const bb = plugin('BrowserBridge')
+  if (bb && /^https?:\/\//i.test(url)) {
+    try {
+      await bb.open({ url })
+      return
+    } catch (e) {}
+  }
+  openExternal(url)
+}
+
 export {
   isNative,
   biometricAvailable,
@@ -237,10 +300,17 @@ export {
   takeShared,
   onShared,
   returnToSender,
+  takeLaunch,
+  onLaunch,
   autofillRequest,
   autofillComplete,
   autofillClose,
   autofillStatus,
   openAutofillSettings,
-  openExternal
+  openExternal,
+  browserSettings,
+  setBrowserEngine,
+  removeBrowserSite,
+  openBrowserSearch,
+  openInBrowser
 }
