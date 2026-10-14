@@ -71,6 +71,7 @@ function buildField(field, index) {
   input.setAttribute('autocapitalize', 'off')
   if (field.placeholder) input.placeholder = field.placeholder
   if (field.value) input.value = field.value
+  if (field.readonly) input.readOnly = true
   row.appendChild(input)
   const actions = field.actions || (field.action ? [field.action] : [])
   for (const action of actions) {
@@ -111,7 +112,7 @@ function formDialog(options) {
     box.appendChild(error)
     const row = el('div', 'wv-dialog-actions')
     let busy = false
-    const entry = { overlay, onKey: null }
+    const entry = { overlay, onKey: null, cancel: null }
     const detach = () => {
       overlay.remove()
       document.removeEventListener('keydown', entry.onKey, true)
@@ -151,6 +152,7 @@ function formDialog(options) {
       if (e.key === 'Enter' && !busy) { e.preventDefault(); submit() }
     }
     entry.onKey = onKey
+    entry.cancel = () => finish(null)
     OPEN_DIALOGS.add(entry)
     row.appendChild(actionButton(options.cancelLabel || 'Cancel', 'secondary', () => { if (!busy) finish(null) }))
     const okButton = actionButton(options.okLabel || 'Continue', options.danger ? 'danger' : '', submit)
@@ -164,8 +166,57 @@ function formDialog(options) {
   })
 }
 
+function choiceDialog(options) {
+  return new Promise((resolve) => {
+    const overlay = el('div', 'wv-dialog-overlay')
+    const box = el('div', 'wv-dialog vv-form')
+    box.appendChild(el('div', 'wv-dialog-title', options.title))
+    if (options.text) {
+      for (const paragraph of String(options.text).split('\n\n')) box.appendChild(el('p', 'wv-dialog-text', paragraph))
+    }
+    (options.fields || []).forEach((field, i) => {
+      box.appendChild(buildField(Object.assign({ readonly: true }, field), 'c' + i).wrap)
+    })
+    const row = el('div', 'wv-dialog-actions')
+    const entry = { overlay, onKey: null, cancel: null }
+    let done = false
+    const finish = (value) => {
+      if (done) return
+      done = true
+      overlay.remove()
+      document.removeEventListener('keydown', entry.onKey, true)
+      OPEN_DIALOGS.delete(entry)
+      resolve(value)
+    }
+    entry.onKey = (e) => {
+      if (!overlay.isConnected) { finish(null); return }
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        if (options.escape !== false) finish(null)
+      }
+    }
+    entry.cancel = () => finish(null)
+    OPEN_DIALOGS.add(entry)
+    if (options.cancelLabel) row.appendChild(actionButton(options.cancelLabel, 'secondary', () => finish(null)))
+    const buttons = (options.choices || []).map((choice) => {
+      const b = actionButton(choice.label, choice.className || '', () => finish(choice.value))
+      row.appendChild(b)
+      return b
+    })
+    box.appendChild(row)
+    overlay.appendChild(box)
+    document.body.appendChild(overlay)
+    document.addEventListener('keydown', entry.onKey, true)
+    if (options.neutralFocus) {
+      box.tabIndex = -1
+      box.focus()
+    } else if (buttons.length) buttons[buttons.length - 1].focus()
+  })
+}
+
 function closeAllDialogs() {
   for (const entry of Array.from(OPEN_DIALOGS)) {
+    if (entry.cancel) { entry.cancel(); continue }
     entry.overlay.remove()
     document.removeEventListener('keydown', entry.onKey, true)
     OPEN_DIALOGS.delete(entry)
@@ -183,4 +234,4 @@ async function askSecret(title, label, text) {
   return values[0]
 }
 
-export { formDialog, confirmDialog, askSecret, closeAllDialogs }
+export { formDialog, confirmDialog, askSecret, choiceDialog, closeAllDialogs }

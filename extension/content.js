@@ -1267,7 +1267,7 @@
     if (withPrevious.length > 0) {
       addPickerSection(itemsContainer, 'Previous passwords')
       for (const cred of withPrevious) {
-        addPickerItem(itemsContainer, '↩ ' + cred.username + ' (replaced ' + shortDate(cred.previousSetAt) + ')', () => {
+        addPickerItem(itemsContainer, '↩ ' + cred.username + ' (replaced ' + shortDate(cred.previousSetAt) + (cred.previousUntil ? ', kept until ' + shortDate(cred.previousUntil) : '') + ')', () => {
           fillCredentials({ username: cred.username, password: cred.previousPassword, extraFields: [], isPrevious: true }, formFields)
           setTimeout(() => offerRestore(field, cred), 0)
         })
@@ -1323,7 +1323,7 @@
     if (withPrevious.length > 0) {
       addPickerSection(itemsContainer, 'Previous passwords')
       for (const cred of withPrevious) {
-        addPickerItem(itemsContainer, '↩ ' + cred.username + ' (replaced ' + shortDate(cred.previousSetAt) + ')', () => {
+        addPickerItem(itemsContainer, '↩ ' + cred.username + ' (replaced ' + shortDate(cred.previousSetAt) + (cred.previousUntil ? ', kept until ' + shortDate(cred.previousUntil) : '') + ')', () => {
           record.accountUsername = cred.username
           fillFieldValue(field, cred.previousPassword)
           setTimeout(() => offerRestore(field, cred), 0)

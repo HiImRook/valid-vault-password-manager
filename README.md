@@ -32,6 +32,10 @@ A local, encrypted, QR code portable password manager. No cloud, accounts, or sy
 >
 > The phone app now includes a private browser, a modified Chromium built on the Android System WebView. Known trackers and ad scripts are blocked, tracking tags are stripped from links, redirect wrappers are skipped, third-party cookies are off, and cookies, site data, cache, and history are wiped when you close it. The address bar and a bottom toolbar slide away as you scroll, and Home opens a new tab page with the logo front and center. Search with Startpage by default, or DuckDuckGo or Brave Search. The app icon is now the globe V logo. Two home screen widgets put Search privately, Bookmarks, Logins, Wallet, and Personal one tap and one fingerprint away. Key files with the default name no longer overwrite the name you set, on the extension and the phone. Needs Android 9 or newer for the browser. See [CHANGELOG.md](CHANGELOG.md) for full details.
 
+> ✅ **Import From Another App - v0.8.4**
+>
+> Bring your logins over from another password manager's CSV export, and your bookmarks from a browser's bookmarks HTML file, on the extension and the phone. The extension can also pull in the bookmarks of the browser it runs in with one click. Exports from Chrome, Edge, Brave, Firefox, Bitwarden, LastPass, Proton Pass, Dashlane, Apple Passwords, 1Password, KeePassXC, and NordPass are recognized, and any other CSV can be matched by column. When the file and your vault have different passwords for a login, you see both with their dates and pick the current one, and the other is kept as the previous password for 30 days. Stopping an import changes nothing, and Valid Vault still has no unencrypted export. Previous passwords are now kept for 30 days everywhere, and each login shows when it was last used. See [CHANGELOG.md](CHANGELOG.md) for full details.
+
 ---
 
 ## What is Valid Vault?
@@ -79,7 +83,7 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 * Login email/username and password fields get a V tag listing saved logins for the current site (and saved emails on email fields); injection only, no password reveal - that's the site's own UI if it has one
 * New password and change password fields get an inverted V that generates a random password and fills both the new and confirm boxes; the current password field on a change form keeps the normal V and fills the saved login
 * Generated passwords always include upper, lower, digit, and symbol, follow any `maxlength`, `minlength`, `pattern`, or `passwordrules` the site declares, and land in the length range chosen in Settings (minimum to 24, 25 to 32, 33 to 48, or 49 to 64)
-* Changing a password keeps the old one as a previous password, shown as a labeled second choice in the login picker with one-click restore; it is dropped only after the new password has been used 3 times and 14 days have passed
+* Changing a password keeps the old one as a previous password, shown as a labeled second choice in the login picker with one-click restore; it is kept for 30 days from the day it was replaced, and the picker shows until when
 * A save prompt shown while the vault is locked offers Unlock and Save, which opens the Valid Vault unlock window and saves once unlocked
 * A visible field tag marks anything Valid Vault has matched
 * Passwords are never copied to the clipboard; autofill places them directly into the field you clicked
@@ -127,6 +131,8 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 * Bookmarks and Crypto Wallets travel inside the encrypted vault file (Export Vault / Import Vault) with the same tombstoned-delete merge; seed phrases are kept out of the live QR share, and a bookmarks QR share is planned with the v0.8.x QR transport work
 * Every import is checked in full before anything is written: a file made with a different key, a damaged section, or a file from a newer version is refused and nothing changes, the same login is never saved twice, deletes stay deleted, and importing the same file again changes nothing
 * Syncing requires both devices to share the same master key; a mismatched key fails with a clear error
+* Import From Another App - logins from another password manager's CSV export and bookmarks from a browser's HTML export or, on the extension, straight from the browser it runs in, read on the device and encrypted straight into the vault; Valid Vault never exports passwords unencrypted
+* A login in the file with a different password shows both, masked, with when each was last changed and when yours was last used; the one you don't pick is kept as the previous password for 30 days, stopping an import saves nothing, and deleted logins and bookmarks stay deleted
 * Importing a master key onto a browser whose vault uses a different key warns first, clears that vault on confirmation, and saves the imported key under that device's unlock methods, on the extension and the phone
 * Key import offers fingerprint or device PIN first, with a master password as the fallback; a password on that browser becomes an optional backup
 * Key QR codes must use the protected format, and the phone and the extension both send and accept it
@@ -148,7 +154,7 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 * Android via Capacitor, with native plugins for biometric auth, file saving, autofill, sharing, and the private browser
 * Vendored, self-contained code only, no Google SDKs in the scan path
 
-## Current Status: v0.8.3 - Active Testing
+## Current Status: v0.8.4 - Active Testing
 
 **Completed:**
 
@@ -193,10 +199,12 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 * ✅ Share to Bookmarks on the phone: share a link from any app to save it as an encrypted bookmark
 * ✅ Private browser on the phone: modified Chromium with tracker blocking, clean links, and a wipe on close
 * ✅ Home screen widgets for search, bookmarks, logins, wallets, and personal info, each one fingerprint away
+* ✅ Import passwords from another password manager's CSV export and bookmarks from a browser's HTML export, on the extension and the phone
 
 **In Development:**
 
-* 📋 Valid Vault autofill inside the private browser (v0.8.4)
+* 📋 Private browser additions (v0.8.5): a bundled tracker list, empty ad space removed, Global Privacy Control, downloads, and a Tor mode through Orbot
+* 📋 Tabs in the private browser, then Valid Vault autofill inside it
 * 📋 QR transport (v0.8.x): confirming the vault QR on phone cameras, scanner reliability across devices, and a bookmarks QR share
 * 📋 Continued field testing of sync, backup, and native file saving across Android versions
 

@@ -208,6 +208,47 @@ async function importRow(incomingRow, key) {
   return true
 }
 
+function planBookmarkImport(tree, entries) {
+  const live = new Set(tree.items.filter((item) => !item.deleted).map((item) => item.url))
+  const deleted = new Set(tree.items.filter((item) => item.deleted).map((item) => item.url))
+  const seen = new Set()
+  const plan = { fresh: [], existing: 0, duplicates: 0, deleted: 0 }
+  for (const entry of entries) {
+    if (!isBookmarkable(entry.url)) continue
+    const url = normalizeUrl(entry.url)
+    if (seen.has(url)) { plan.duplicates++; continue }
+    seen.add(url)
+    if (live.has(url)) { plan.existing++; continue }
+    if (deleted.has(url)) { plan.deleted++; continue }
+    plan.fresh.push({ url, title: String(entry.title || '').trim() || url })
+  }
+  return plan
+}
+
+async function previewBookmarkImport(entries, key) {
+  return planBookmarkImport(await readTree(key), entries)
+}
+
+async function importBookmarkList(entries, key) {
+  const tree = await readTree(key)
+  const plan = planBookmarkImport(tree, entries)
+  if (plan.fresh.length === 0) return Object.assign({ added: 0 }, plan)
+  const now = Date.now()
+  const placed = tree.items.filter((item) => !item.deleted && hasPos(item))
+  let pos = placed.length > 0 ? Math.max(...placed.map((item) => item.pos)) : 0
+  const unplaced = tree.items.some((item) => !item.deleted && !hasPos(item))
+  for (const entry of plan.fresh) {
+    const item = { id: generateId(), url: entry.url, title: entry.title, createdAt: now, updatedAt: now }
+    if (placed.length > 0 || !unplaced) {
+      pos += POS_STEP
+      item.pos = pos
+    }
+    tree.items.push(item)
+  }
+  await writeTree(tree, key)
+  return Object.assign({ added: plan.fresh.length }, plan)
+}
+
 export {
   normalizeUrl,
   isBookmarkable,
@@ -224,5 +265,8 @@ export {
   sameTrees,
   writeTree,
   readTree,
-  importRow
+  importRow,
+  planBookmarkImport,
+  previewBookmarkImport,
+  importBookmarkList
 }

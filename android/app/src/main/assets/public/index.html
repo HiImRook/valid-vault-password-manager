@@ -351,6 +351,12 @@
           <button id="btn-import-key" class="secondary">Import Key</button>
         </div>
         <button id="btn-change-key-protection" class="secondary block" style="margin-top:8px;">Change Key Passphrase</button>
+        <h2>Import From Another App</h2>
+        <p class="lead">Bring your logins over from another password manager's CSV export, and your bookmarks from a browser's bookmarks HTML file. Everything is encrypted into your vault as it comes in. Valid Vault never exports passwords unencrypted.</p>
+        <div class="btn-row">
+          <button id="btn-import-passwords" class="secondary">Import Passwords</button>
+          <button id="btn-import-bookmarks" class="secondary">Import Bookmarks</button>
+        </div>
         <h2>Scan a Device</h2>
         <p class="lead">Read a key or vault streamed from another device. Do this somewhere private.</p>
         <div id="qr-scan-box" class="scan-box">Tap to open scanner</div>
@@ -493,6 +499,17 @@
           <div class="body">
             <p>Export Vault saves an encrypted file to Downloads, or sends it with any app you choose. Copy it to a USB drive or another computer for a cold backup. It is useless without your master key.</p>
             <p>Export Key saves your master key wrapped under your passphrase and three answers. Keep it separate from the vault file if you can.</p>
+          </div>
+        </details>
+        <details>
+          <summary>Importing from another app</summary>
+          <div class="body">
+            <p>Sync, Import From Another App brings in logins from another password manager and bookmarks from a browser. The file is read on this phone and encrypted straight into your vault. Valid Vault never exports passwords unencrypted.</p>
+            <p>For passwords, export a CSV file from your old password manager, tap Import Passwords, choose the file, and confirm with your fingerprint or device PIN. Most password managers and browsers are recognized. For any other CSV, you pick which columns hold the website, username, and password. Check the preview, then tap Import.</p>
+            <p>When the file has a different password for a login you already have, you see both, masked, with when each was last changed and when yours was last used. Pick the one that is current. The other is kept as the previous password for 30 days, so you can switch back if you picked wrong. If the file has the same login twice with different passwords, you pick which one to import.</p>
+            <p>Stop import leaves your vault exactly as it was. Logins you deleted stay deleted, unless the file shows the password was changed after you deleted it.</p>
+            <p>When the import is done, delete the CSV file. It holds your passwords unencrypted, and Valid Vault can't delete it for you.</p>
+            <p>For bookmarks, export them from your browser as an HTML file and tap Import Bookmarks. Folders are combined into one list, links you already have are skipped, and bookmarks you deleted stay deleted.</p>
           </div>
         </details>
         <details>
@@ -10666,7 +10683,7 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
 <script>
 (function () {
 'use strict'
-const VALID_VAULT_VERSION = "0.8.3"
+const VALID_VAULT_VERSION = "0.8.4"
 const __modules = Object.create(null)
 __modules["extension/crypto.js"] = (function () {
 const SALT_LENGTH = 16
@@ -11624,15 +11641,16 @@ return Object.freeze({ "initAuth": initAuth, "startFingerprintEnrollment": start
 __modules["extension/passwords.js"] = (function () {
 const { encrypt, decrypt } = __modules["extension/crypto.js"]
 const { getPasswordVault, setPasswordVault, getVaultMigrationJournal, setVaultMigrationJournal, clearVaultMigrationJournal } = __modules["extension/store.js"]
-const PREVIOUS_KEEP_MS = 14 * 24 * 60 * 60 * 1000
-const PREVIOUS_KEEP_USES = 3
+const PREVIOUS_KEEP_MS = 30 * 24 * 60 * 60 * 1000
+const NOTES_LABEL = 'Notes'
+const USE_WRITE_INTERVAL_MS = 10 * 60 * 1000
 const APP_PACKAGE_PATTERN = /^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+$/
 
 function retirePassword(cred, oldPassword, now) {
   if (!oldPassword || oldPassword === cred.password) return
   cred.previousPassword = oldPassword
   cred.previousSetAt = now
-  cred.newPasswordUses = 0
+  delete cred.newPasswordUses
 }
 
 function clearPrevious(cred) {
@@ -11642,7 +11660,15 @@ function clearPrevious(cred) {
 }
 
 function previousExpired(cred, now) {
-  return (cred.newPasswordUses || 0) >= PREVIOUS_KEEP_USES && now - (cred.previousSetAt || 0) >= PREVIOUS_KEEP_MS
+  return !!cred.previousPassword && now - (cred.previousSetAt || 0) >= PREVIOUS_KEEP_MS
+}
+
+function previousExpiresAt(setAt) {
+  return (typeof setAt === 'number' && isFinite(setAt) ? setAt : 0) + PREVIOUS_KEEP_MS
+}
+
+function lastUsed(record) {
+  return record && typeof record.lastUsedAt === 'number' && isFinite(record.lastUsedAt) ? record.lastUsedAt : 0
 }
 
 function generateId() {
@@ -11952,11 +11978,11 @@ async function saveCredential(domain, username, password, masterKey, extraFields
   }
   if (existingCred && existingCred.password !== password) {
     retirePassword(saved, existingCred.password, now)
-  } else if (existingCred && existingCred.previousPassword) {
+  } else if (existingCred && existingCred.previousPassword && !previousExpired(existingCred, now)) {
     saved.previousPassword = existingCred.previousPassword
     saved.previousSetAt = existingCred.previousSetAt
-    saved.newPasswordUses = existingCred.newPasswordUses || 0
   }
+  if (existingCred && lastUsed(existingCred)) saved.lastUsedAt = lastUsed(existingCred)
   existing.push(saved)
 
   tree.credentials[domain] = existing
@@ -11980,16 +12006,20 @@ async function getCredentials(domain, masterKey) {
   }
 
   const result = []
+  const now = Date.now()
   for (const cred of domainCreds) {
     if (cred.deleted) continue
+    const keepPrevious = !!cred.previousPassword && !previousExpired(cred, now)
     result.push({
       id: cred.id,
       username: cred.username,
       password: cred.password,
       extraFields: cred.extraFields || [],
       loginType: cred.loginType || inferLoginType(cred.username),
-      previousPassword: cred.previousPassword || null,
-      previousSetAt: cred.previousSetAt || null,
+      previousPassword: keepPrevious ? cred.previousPassword : null,
+      previousSetAt: keepPrevious ? cred.previousSetAt || null : null,
+      previousUntil: keepPrevious ? previousExpiresAt(cred.previousSetAt) : null,
+      lastUsedAt: lastUsed(cred) || null,
       createdAt: cred.createdAt,
       updatedAt: cred.updatedAt
     })
@@ -12035,8 +12065,9 @@ async function updateCredential(credentialId, updates, masterKey) {
       if (creds[index].deleted) return { success: false, error: 'Credential deleted' }
       if (updates.username) creds[index].username = updates.username
       if (updates.password && updates.password !== creds[index].password) {
-        retirePassword(creds[index], creds[index].password, Date.now())
+        const oldPassword = creds[index].password
         creds[index].password = updates.password
+        retirePassword(creds[index], oldPassword, Date.now())
       }
       if (updates.extraFields) creds[index].extraFields = updates.extraFields
       if (updates.loginType) creds[index].loginType = updates.loginType
@@ -12059,9 +12090,14 @@ function findLiveCredential(tree, domain, username) {
 async function noteCredentialUse(domain, username, masterKey) {
   const tree = await readVaultTree(masterKey)
   const cred = findLiveCredential(tree, domain, username)
-  if (!cred || !cred.previousPassword) return { success: true, changed: false }
-  cred.newPasswordUses = (cred.newPasswordUses || 0) + 1
-  if (previousExpired(cred, Date.now())) clearPrevious(cred)
+  if (!cred) return { success: true, changed: false }
+  const now = Date.now()
+  const expired = previousExpired(cred, now)
+  const recent = typeof cred.lastUsedAt === 'number' && now - cred.lastUsedAt < USE_WRITE_INTERVAL_MS && now >= cred.lastUsedAt
+  if (recent && !expired && cred.newPasswordUses === undefined) return { success: true, changed: false }
+  cred.lastUsedAt = now
+  delete cred.newPasswordUses
+  if (expired) clearPrevious(cred)
   await writeVaultTree(tree, masterKey)
   return { success: true, changed: true }
 }
@@ -12071,6 +12107,11 @@ async function restorePreviousPassword(domain, username, masterKey) {
   const cred = findLiveCredential(tree, domain, username)
   if (!cred || !cred.previousPassword) return { success: false, error: 'No previous password saved' }
   const now = Date.now()
+  if (previousExpired(cred, now)) {
+    clearPrevious(cred)
+    await writeVaultTree(tree, masterKey)
+    return { success: false, error: 'The previous password has expired' }
+  }
   const current = cred.password
   cred.password = cred.previousPassword
   retirePassword(cred, current, now)
@@ -12143,12 +12184,21 @@ function laterRecord(a, b) {
   return JSON.stringify(a) >= JSON.stringify(b) ? a : b
 }
 
+function withLatestUse(chosen, a, b, identities) {
+  if (chosen.deleted) return chosen
+  const latest = Math.max(lastUsed(a), lastUsed(b))
+  if (!latest || lastUsed(chosen) === latest) return chosen
+  const copy = Object.assign({}, chosen, { lastUsedAt: latest })
+  identities.set(copy, identities.get(chosen))
+  return copy
+}
+
 function mergeRecordLists(localList, incomingList, identities) {
   const all = [...localList, ...incomingList]
   const byId = new Map()
   for (const record of all) {
     const current = byId.get(record.id)
-    byId.set(record.id, current ? laterRecord(current, record) : record)
+    byId.set(record.id, current ? withLatestUse(laterRecord(current, record), current, record, identities) : record)
   }
   const winners = Array.from(byId.values())
   const byIdentity = new Map()
@@ -12296,7 +12346,169 @@ function canonicalCredentials(tree) {
 function sameCredentials(a, b) {
   return canonicalCredentials(a) === canonicalCredentials(b)
 }
-return Object.freeze({ "ensureVault": ensureVault, "saveCredential": saveCredential, "getCredentials": getCredentials, "getAllDomains": getAllDomains, "updateCredential": updateCredential, "deleteCredential": deleteCredential, "noteCredentialUse": noteCredentialUse, "restorePreviousPassword": restorePreviousPassword, "autofill": autofill, "getAppLink": getAppLink, "setAppLink": setAppLink, "removeAppLink": removeAppLink, "listAppLinks": listAppLinks, "mergeVaults": mergeVaults, "mergeRecordLists": mergeRecordLists, "laterRecord": laterRecord, "sameCredentials": sameCredentials, "migrateLegacyVault": migrateLegacyVault, "readVaultTree": readVaultTree, "writeVaultTree": writeVaultTree, "decryptAnyRowToTree": decryptAnyRowToTree })
+
+function liveCredential(list, username) {
+  return list.find((cred) => !cred.deleted && cred.username === username) || null
+}
+
+function deletedCredential(list, username) {
+  let newest = null
+  for (const cred of list) {
+    if (!cred.deleted || cred.username !== username) continue
+    if (!newest || stamp(cred) > stamp(newest)) newest = cred
+  }
+  return newest
+}
+
+function blocksImport(tombstone, entry) {
+  if (!tombstone) return false
+  return !(entry.changedAt && entry.changedAt > stamp(tombstone))
+}
+
+function entryKey(entry) {
+  return entry.site + '\n' + entry.username
+}
+
+function groupEntries(entries) {
+  const groups = new Map()
+  for (const entry of entries) {
+    const key = entryKey(entry)
+    if (!groups.has(key)) groups.set(key, [])
+    groups.get(key).push(entry)
+  }
+  return groups
+}
+
+function previewLoginImport(tree, entries) {
+  const counts = { fresh: 0, same: 0, conflicts: 0, deleted: 0, fileDuplicates: 0 }
+  for (const group of groupEntries(entries).values()) {
+    const distinct = Array.from(new Set(group.map((entry) => entry.password)))
+    const first = group[0]
+    const list = tree.credentials[first.site] || []
+    const live = liveCredential(list, first.username)
+    if (live) {
+      counts.fileDuplicates += distinct.length - 1
+      if (distinct.length === 1 && distinct[0] === live.password) counts.same++
+      else counts.conflicts++
+      continue
+    }
+    if (group.every((entry) => blocksImport(deletedCredential(list, entry.username), entry))) { counts.deleted++; continue }
+    counts.fileDuplicates += distinct.length - 1
+    counts.fresh++
+  }
+  return counts
+}
+
+async function previewLoginImportFor(entries, masterKey) {
+  return previewLoginImport(await readVaultTree(masterKey), entries)
+}
+
+function importedCredential(entry, now) {
+  const extraFields = entry.note ? [{ label: NOTES_LABEL, value: entry.note }] : []
+  return {
+    id: generateId(),
+    username: entry.username,
+    password: entry.password,
+    extraFields,
+    loginType: inferLoginType(entry.username),
+    createdAt: now,
+    updatedAt: now
+  }
+}
+
+async function settleFileDuplicates(entries, decide) {
+  const settled = []
+  let dropped = 0
+  for (const group of groupEntries(entries).values()) {
+    let winner = group[0]
+    for (const entry of group.slice(1)) {
+      if (entry.password === winner.password) {
+        if (!winner.changedAt && entry.changedAt) winner = Object.assign({}, winner, { changedAt: entry.changedAt })
+        continue
+      }
+      const choice = await decide({
+        kind: 'file',
+        site: entry.site,
+        username: entry.username,
+        current: { password: winner.password, changedAt: winner.changedAt || null },
+        incoming: { password: entry.password, changedAt: entry.changedAt || null }
+      })
+      if (choice !== 'current' && choice !== 'incoming') return null
+      if (choice === 'incoming') winner = entry
+      dropped++
+    }
+    settled.push(winner)
+  }
+  return { settled, dropped }
+}
+
+function applyImport(tree, entries, choiceFor, now) {
+  const stats = { added: 0, same: 0, kept: 0, replaced: 0, deleted: 0, changed: false }
+  entries.forEach((entry, index) => {
+    const list = tree.credentials[entry.site] || []
+    const live = liveCredential(list, entry.username)
+    if (live) {
+      if (live.password === entry.password) { stats.same++; return }
+      const choice = choiceFor(index, live)
+      if (choice === 'incoming') {
+        const oldPassword = live.password
+        live.password = entry.password
+        retirePassword(live, oldPassword, now)
+        stats.replaced++
+      } else {
+        live.previousPassword = entry.password
+        live.previousSetAt = now
+        delete live.newPasswordUses
+        stats.kept++
+      }
+      live.updatedAt = now
+      stats.changed = true
+      return
+    }
+    if (blocksImport(deletedCredential(list, entry.username), entry)) { stats.deleted++; return }
+    if (!tree.credentials[entry.site]) tree.credentials[entry.site] = list
+    list.push(importedCredential(entry, now))
+    stats.added++
+    stats.changed = true
+  })
+  return stats
+}
+
+async function importLogins(entries, masterKey, decide) {
+  const now = Date.now()
+  const previousUntil = now + PREVIOUS_KEEP_MS
+  const dedup = await settleFileDuplicates(entries, decide)
+  if (!dedup) return { cancelled: true, changed: false }
+  const snapshot = await readVaultTree(masterKey)
+  const decisions = new Map()
+  for (let index = 0; index < dedup.settled.length; index++) {
+    const entry = dedup.settled[index]
+    const live = liveCredential(snapshot.credentials[entry.site] || [], entry.username)
+    if (!live || live.password === entry.password) continue
+    const choice = await decide({
+      kind: 'vault',
+      site: entry.site,
+      username: entry.username,
+      current: { password: live.password, changedAt: stamp(live) || null, lastUsedAt: lastUsed(live) || null },
+      incoming: { password: entry.password, changedAt: entry.changedAt || null },
+      previousUntil
+    })
+    if (choice !== 'current' && choice !== 'incoming') return { cancelled: true, changed: false }
+    decisions.set(index, { choice, password: live.password })
+  }
+  const tree = await readVaultTree(masterKey)
+  const stats = applyImport(tree, dedup.settled, (index, live) => {
+    const decided = decisions.get(index)
+    if (decided && decided.password === live.password) return decided.choice
+    return 'current'
+  }, now)
+  if (stats.changed) {
+    tree.meta.lastAccess = now
+    await writeVaultTree(tree, masterKey)
+  }
+  return Object.assign({ cancelled: false, fileDuplicates: dedup.dropped, previousUntil }, stats)
+}
+return Object.freeze({ "ensureVault": ensureVault, "saveCredential": saveCredential, "getCredentials": getCredentials, "getAllDomains": getAllDomains, "updateCredential": updateCredential, "deleteCredential": deleteCredential, "noteCredentialUse": noteCredentialUse, "restorePreviousPassword": restorePreviousPassword, "previewLoginImport": previewLoginImport, "previewLoginImportFor": previewLoginImportFor, "importLogins": importLogins, "previousExpiresAt": previousExpiresAt, "PREVIOUS_KEEP_MS": PREVIOUS_KEEP_MS, "autofill": autofill, "getAppLink": getAppLink, "setAppLink": setAppLink, "removeAppLink": removeAppLink, "listAppLinks": listAppLinks, "mergeVaults": mergeVaults, "mergeRecordLists": mergeRecordLists, "laterRecord": laterRecord, "sameCredentials": sameCredentials, "migrateLegacyVault": migrateLegacyVault, "readVaultTree": readVaultTree, "writeVaultTree": writeVaultTree, "decryptAnyRowToTree": decryptAnyRowToTree })
 })()
 
 __modules["extension/webcreds.js"] = (function () {
@@ -12862,7 +13074,48 @@ async function importRow(incomingRow, key) {
   await writeTree(merged, key)
   return true
 }
-return Object.freeze({ "normalizeUrl": normalizeUrl, "isBookmarkable": isBookmarkable, "decryptRow": decryptRow, "rowOpensWith": rowOpensWith, "listBookmarks": listBookmarks, "findByUrl": findByUrl, "saveBookmark": saveBookmark, "renameBookmark": renameBookmark, "moveBookmark": moveBookmark, "removeBookmark": removeBookmark, "orderItems": orderItems, "mergeTrees": mergeTrees, "sameTrees": sameTrees, "writeTree": writeTree, "readTree": readTree, "importRow": importRow })
+
+function planBookmarkImport(tree, entries) {
+  const live = new Set(tree.items.filter((item) => !item.deleted).map((item) => item.url))
+  const deleted = new Set(tree.items.filter((item) => item.deleted).map((item) => item.url))
+  const seen = new Set()
+  const plan = { fresh: [], existing: 0, duplicates: 0, deleted: 0 }
+  for (const entry of entries) {
+    if (!isBookmarkable(entry.url)) continue
+    const url = normalizeUrl(entry.url)
+    if (seen.has(url)) { plan.duplicates++; continue }
+    seen.add(url)
+    if (live.has(url)) { plan.existing++; continue }
+    if (deleted.has(url)) { plan.deleted++; continue }
+    plan.fresh.push({ url, title: String(entry.title || '').trim() || url })
+  }
+  return plan
+}
+
+async function previewBookmarkImport(entries, key) {
+  return planBookmarkImport(await readTree(key), entries)
+}
+
+async function importBookmarkList(entries, key) {
+  const tree = await readTree(key)
+  const plan = planBookmarkImport(tree, entries)
+  if (plan.fresh.length === 0) return Object.assign({ added: 0 }, plan)
+  const now = Date.now()
+  const placed = tree.items.filter((item) => !item.deleted && hasPos(item))
+  let pos = placed.length > 0 ? Math.max(...placed.map((item) => item.pos)) : 0
+  const unplaced = tree.items.some((item) => !item.deleted && !hasPos(item))
+  for (const entry of plan.fresh) {
+    const item = { id: generateId(), url: entry.url, title: entry.title, createdAt: now, updatedAt: now }
+    if (placed.length > 0 || !unplaced) {
+      pos += POS_STEP
+      item.pos = pos
+    }
+    tree.items.push(item)
+  }
+  await writeTree(tree, key)
+  return Object.assign({ added: plan.fresh.length }, plan)
+}
+return Object.freeze({ "normalizeUrl": normalizeUrl, "isBookmarkable": isBookmarkable, "decryptRow": decryptRow, "rowOpensWith": rowOpensWith, "listBookmarks": listBookmarks, "findByUrl": findByUrl, "saveBookmark": saveBookmark, "renameBookmark": renameBookmark, "moveBookmark": moveBookmark, "removeBookmark": removeBookmark, "orderItems": orderItems, "mergeTrees": mergeTrees, "sameTrees": sameTrees, "writeTree": writeTree, "readTree": readTree, "importRow": importRow, "planBookmarkImport": planBookmarkImport, "previewBookmarkImport": previewBookmarkImport, "importBookmarkList": importBookmarkList })
 })()
 
 __modules["extension/bip39-words.js"] = (function () {
@@ -15773,6 +16026,7 @@ function buildField(field, index) {
   input.setAttribute('autocapitalize', 'off')
   if (field.placeholder) input.placeholder = field.placeholder
   if (field.value) input.value = field.value
+  if (field.readonly) input.readOnly = true
   row.appendChild(input)
   const actions = field.actions || (field.action ? [field.action] : [])
   for (const action of actions) {
@@ -15813,7 +16067,7 @@ function formDialog(options) {
     box.appendChild(error)
     const row = el('div', 'wv-dialog-actions')
     let busy = false
-    const entry = { overlay, onKey: null }
+    const entry = { overlay, onKey: null, cancel: null }
     const detach = () => {
       overlay.remove()
       document.removeEventListener('keydown', entry.onKey, true)
@@ -15853,6 +16107,7 @@ function formDialog(options) {
       if (e.key === 'Enter' && !busy) { e.preventDefault(); submit() }
     }
     entry.onKey = onKey
+    entry.cancel = () => finish(null)
     OPEN_DIALOGS.add(entry)
     row.appendChild(actionButton(options.cancelLabel || 'Cancel', 'secondary', () => { if (!busy) finish(null) }))
     const okButton = actionButton(options.okLabel || 'Continue', options.danger ? 'danger' : '', submit)
@@ -15866,8 +16121,57 @@ function formDialog(options) {
   })
 }
 
+function choiceDialog(options) {
+  return new Promise((resolve) => {
+    const overlay = el('div', 'wv-dialog-overlay')
+    const box = el('div', 'wv-dialog vv-form')
+    box.appendChild(el('div', 'wv-dialog-title', options.title))
+    if (options.text) {
+      for (const paragraph of String(options.text).split('\n\n')) box.appendChild(el('p', 'wv-dialog-text', paragraph))
+    }
+    (options.fields || []).forEach((field, i) => {
+      box.appendChild(buildField(Object.assign({ readonly: true }, field), 'c' + i).wrap)
+    })
+    const row = el('div', 'wv-dialog-actions')
+    const entry = { overlay, onKey: null, cancel: null }
+    let done = false
+    const finish = (value) => {
+      if (done) return
+      done = true
+      overlay.remove()
+      document.removeEventListener('keydown', entry.onKey, true)
+      OPEN_DIALOGS.delete(entry)
+      resolve(value)
+    }
+    entry.onKey = (e) => {
+      if (!overlay.isConnected) { finish(null); return }
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        if (options.escape !== false) finish(null)
+      }
+    }
+    entry.cancel = () => finish(null)
+    OPEN_DIALOGS.add(entry)
+    if (options.cancelLabel) row.appendChild(actionButton(options.cancelLabel, 'secondary', () => finish(null)))
+    const buttons = (options.choices || []).map((choice) => {
+      const b = actionButton(choice.label, choice.className || '', () => finish(choice.value))
+      row.appendChild(b)
+      return b
+    })
+    box.appendChild(row)
+    overlay.appendChild(box)
+    document.body.appendChild(overlay)
+    document.addEventListener('keydown', entry.onKey, true)
+    if (options.neutralFocus) {
+      box.tabIndex = -1
+      box.focus()
+    } else if (buttons.length) buttons[buttons.length - 1].focus()
+  })
+}
+
 function closeAllDialogs() {
   for (const entry of Array.from(OPEN_DIALOGS)) {
+    if (entry.cancel) { entry.cancel(); continue }
     entry.overlay.remove()
     document.removeEventListener('keydown', entry.onKey, true)
     OPEN_DIALOGS.delete(entry)
@@ -15884,7 +16188,7 @@ async function askSecret(title, label, text) {
   if (!values || !values[0]) return null
   return values[0]
 }
-return Object.freeze({ "formDialog": formDialog, "confirmDialog": confirmDialog, "askSecret": askSecret, "closeAllDialogs": closeAllDialogs })
+return Object.freeze({ "formDialog": formDialog, "confirmDialog": confirmDialog, "askSecret": askSecret, "choiceDialog": choiceDialog, "closeAllDialogs": closeAllDialogs })
 })()
 
 __modules["phone/platform.js"] = (function () {
@@ -16178,6 +16482,500 @@ async function openInBrowser(url) {
 return Object.freeze({ "isNative": isNative, "biometricAvailable": biometricAvailable, "biometricEnroll": biometricEnroll, "biometricUnlock": biometricUnlock, "biometricRemove": biometricRemove, "saveToDownloads": saveToDownloads, "canShareFiles": canShareFiles, "shareFile": shareFile, "pickTextFile": pickTextFile, "takeShared": takeShared, "onShared": onShared, "returnToSender": returnToSender, "takeLaunch": takeLaunch, "onLaunch": onLaunch, "autofillRequest": autofillRequest, "autofillComplete": autofillComplete, "autofillClose": autofillClose, "autofillStatus": autofillStatus, "openAutofillSettings": openAutofillSettings, "openExternal": openExternal, "browserSettings": browserSettings, "setBrowserEngine": setBrowserEngine, "removeBrowserSite": removeBrowserSite, "openBrowserSearch": openBrowserSearch, "openInBrowser": openInBrowser })
 })()
 
+__modules["extension/fileimport.js"] = (function () {
+const MAX_IMPORT_CHARS = 20 * 1024 * 1024
+const DELIMITERS = [',', ';', '\t']
+const URL_HEADERS = ['url', 'login_uri', 'login url', 'loginurl', 'login_url', 'website', 'web site', 'website url', 'web address', 'uri', 'origin', 'hostname', 'site']
+const USER_HEADERS = ['username', 'login_username', 'user name', 'login', 'login name', 'user', 'userid', 'user id', 'email', 'e-mail', 'email address']
+const EMAIL_HEADERS = ['email', 'e-mail', 'email address']
+const PASS_HEADERS = ['password', 'login_password', 'pass', 'pwd']
+const NOTE_HEADERS = ['note', 'notes', 'extra', 'comments', 'comment']
+const TYPE_HEADERS = ['type', 'item type']
+const LOGIN_TYPES = ['', 'login', 'password', 'logins', 'passwords', 'website', 'web login']
+const DATE_HEADERS = ['timepasswordchanged', 'modifytime', 'last modified', 'last_modified', 'lastmodified', 'modified', 'modified at', 'revisiondate', 'password changed', 'last modification time']
+const EPOCH_MS_THRESHOLD = 100000000000
+const EPOCH_S_THRESHOLD = 100000000
+const EARLIEST_DATE = Date.UTC(1995, 0, 1)
+const FORMATS = [
+  { name: 'Firefox', has: ['httprealm', 'formactionorigin'] },
+  { name: 'Bitwarden', has: ['login_uri', 'login_password'] },
+  { name: 'LastPass', has: ['grouping', 'extra'] },
+  { name: 'Proton Pass', has: ['vault', 'createtime'] },
+  { name: 'Dashlane', has: ['username2', 'title'] },
+  { name: 'Apple Passwords', has: ['otpauth', 'title'] },
+  { name: '1Password', has: ['title', 'archived'] },
+  { name: 'KeePassXC', has: ['group', 'title', 'last modified'] },
+  { name: 'NordPass', has: ['cardholdername'] },
+  { name: 'Chrome, Edge, Brave, or Google Password Manager', has: ['name', 'url', 'username', 'password'] }
+]
+
+function tooLarge(text) {
+  return typeof text !== 'string' || text.length > MAX_IMPORT_CHARS
+}
+
+function stripBom(text) {
+  return text.charCodeAt(0) === 0xFEFF ? text.slice(1) : text
+}
+
+function pickDelimiter(text) {
+  let best = ','
+  let bestCount = -1
+  const firstLine = text.split(/\r?\n/, 1)[0] || ''
+  for (const delimiter of DELIMITERS) {
+    let count = 0
+    let quoted = false
+    for (const ch of firstLine) {
+      if (ch === '"') quoted = !quoted
+      else if (!quoted && ch === delimiter) count++
+    }
+    if (count > bestCount) { best = delimiter; bestCount = count }
+  }
+  return best
+}
+
+function readSepHint(text) {
+  const match = /^sep=(.)\r?\n/i.exec(text)
+  return match ? { delimiter: match[1], rest: text.slice(match[0].length) } : null
+}
+
+function parseCsv(input) {
+  const raw = stripBom(String(input || ''))
+  const hint = readSepHint(raw)
+  const text = hint ? hint.rest : raw
+  const delimiter = hint ? hint.delimiter : pickDelimiter(text)
+  const rows = []
+  let row = []
+  let field = ''
+  let quoted = false
+  let i = 0
+  while (i < text.length) {
+    const ch = text[i]
+    if (quoted) {
+      if (ch === '"') {
+        if (text[i + 1] === '"') { field += '"'; i += 2; continue }
+        quoted = false
+        i++
+        while (text[i] === ' ' || (text[i] === '\t' && delimiter !== '\t')) i++
+        continue
+      }
+      field += ch
+      i++
+      continue
+    }
+    if (ch === '"' && field === '') { quoted = true; i++; continue }
+    if (ch === delimiter) { row.push(field); field = ''; i++; continue }
+    if (ch === '\r' || ch === '\n') {
+      row.push(field)
+      field = ''
+      if (row.some((value) => value !== '')) rows.push(row)
+      row = []
+      if (ch === '\r' && text[i + 1] === '\n') i++
+      i++
+      continue
+    }
+    field += ch
+    i++
+  }
+  row.push(field)
+  if (row.some((value) => value !== '')) rows.push(row)
+  return rows
+}
+
+function cleanHeader(value) {
+  return String(value || '').trim().toLowerCase().replace(/\s+/g, ' ')
+}
+
+function findColumn(headers, names) {
+  for (const name of names) {
+    const index = headers.indexOf(name)
+    if (index !== -1) return index
+  }
+  return -1
+}
+
+function detectFormat(headers) {
+  for (const format of FORMATS) {
+    if (format.has.every((name) => headers.includes(name))) return format.name
+  }
+  return null
+}
+
+function guessMapping(headers) {
+  const user = findColumn(headers, USER_HEADERS)
+  const email = findColumn(headers, EMAIL_HEADERS)
+  return {
+    site: findColumn(headers, URL_HEADERS),
+    username: user,
+    email: email !== user ? email : -1,
+    password: findColumn(headers, PASS_HEADERS),
+    note: findColumn(headers, NOTE_HEADERS),
+    type: findColumn(headers, TYPE_HEADERS),
+    date: findColumn(headers, DATE_HEADERS)
+  }
+}
+
+function siteFromAddress(raw) {
+  const value = String(raw || '').trim().split(/[\s,]+(?=[a-z][a-z0-9+.-]*:\/\/)/i)[0].trim()
+  if (!value) return { site: null, reason: 'site' }
+  if (/^android(app)?:\/\//i.test(value)) return { site: null, reason: 'app' }
+  const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(value) ? value : 'https://' + value
+  let url
+  try { url = new URL(withScheme) } catch (e) { return { site: null, reason: 'site' } }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return { site: null, reason: 'site' }
+  const host = url.hostname.toLowerCase().replace(/\.$/, '')
+  if (!host || (!host.includes('.') && host !== 'localhost')) return { site: null, reason: 'site' }
+  return { site: host, reason: null }
+}
+
+function parseDate(raw) {
+  const value = String(raw || '').trim()
+  if (!value) return null
+  let ms = null
+  if (/^\d+(\.\d+)?$/.test(value)) {
+    const n = Number(value)
+    if (n >= EPOCH_MS_THRESHOLD) ms = n
+    else if (n >= EPOCH_S_THRESHOLD) ms = n * 1000
+  } else {
+    const parsed = Date.parse(value)
+    if (!isNaN(parsed)) ms = parsed
+  }
+  if (ms === null || ms < EARLIEST_DATE || ms > Date.now() + 86400000) return null
+  return Math.round(ms)
+}
+
+function cell(row, index) {
+  return index >= 0 && index < row.length ? String(row[index]) : ''
+}
+
+function readLoginCsv(text, mapping) {
+  if (tooLarge(text)) throw new Error('That file is too large to import.')
+  const rows = parseCsv(text)
+  if (rows.length < 2) throw new Error('That file has no rows to import.')
+  const headers = rows[0].map(cleanHeader)
+  const map = mapping || guessMapping(headers)
+  const result = {
+    format: detectFormat(headers),
+    headers: rows[0].map((value) => String(value || '').trim()),
+    mapping: map,
+    needsMapping: map.site < 0 || map.password < 0,
+    entries: [],
+    skipped: { notLogin: 0, app: 0, missing: 0 }
+  }
+  if (result.needsMapping) return result
+  for (const row of rows.slice(1)) {
+    if (map.type >= 0 && !LOGIN_TYPES.includes(cleanHeader(cell(row, map.type)))) { result.skipped.notLogin++; continue }
+    const password = cell(row, map.password)
+    const where = siteFromAddress(cell(row, map.site))
+    if (where.reason === 'app') { result.skipped.app++; continue }
+    if (!where.site || !password) { result.skipped.missing++; continue }
+    let username = cell(row, map.username).trim()
+    if (!username && map.email >= 0) username = cell(row, map.email).trim()
+    const entry = { site: where.site, username, password }
+    const note = cell(row, map.note).trim()
+    if (note) entry.note = note
+    const changedAt = map.date >= 0 ? parseDate(cell(row, map.date)) : null
+    if (changedAt) entry.changedAt = changedAt
+    result.entries.push(entry)
+  }
+  return result
+}
+
+function bookmarkEntry(href, title) {
+  let url
+  try { url = new URL(String(href || '').trim()) } catch (e) { return null }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return null
+  return { url: url.href, title: String(title || '').replace(/\s+/g, ' ').trim() }
+}
+
+function readBookmarkHtml(text) {
+  if (tooLarge(text)) throw new Error('That file is too large to import.')
+  const doc = new DOMParser().parseFromString(String(text || ''), 'text/html')
+  const links = Array.from(doc.querySelectorAll('a[href]'))
+  const result = { found: links.length, entries: [], skipped: 0 }
+  for (const link of links) {
+    const entry = bookmarkEntry(link.getAttribute('href'), link.textContent)
+    if (entry) result.entries.push(entry)
+    else result.skipped++
+  }
+  return result
+}
+
+function readBookmarkTree(nodes) {
+  const result = { found: 0, entries: [], skipped: 0 }
+  const stack = Array.isArray(nodes) ? nodes.slice().reverse() : []
+  while (stack.length) {
+    const node = stack.pop()
+    if (!node || typeof node !== 'object') continue
+    if (typeof node.url === 'string') {
+      result.found++
+      const entry = bookmarkEntry(node.url, node.title)
+      if (entry) result.entries.push(entry)
+      else result.skipped++
+    }
+    if (Array.isArray(node.children)) {
+      for (let i = node.children.length - 1; i >= 0; i--) stack.push(node.children[i])
+    }
+  }
+  return result
+}
+return Object.freeze({ "MAX_IMPORT_CHARS": MAX_IMPORT_CHARS, "parseCsv": parseCsv, "guessMapping": guessMapping, "detectFormat": detectFormat, "siteFromAddress": siteFromAddress, "parseDate": parseDate, "readLoginCsv": readLoginCsv, "readBookmarkHtml": readBookmarkHtml, "readBookmarkTree": readBookmarkTree })
+})()
+
+__modules["extension/importflow.js"] = (function () {
+const { readLoginCsv, readBookmarkHtml, readBookmarkTree } = __modules["extension/fileimport.js"]
+const passwords = __modules["extension/passwords.js"]
+const bookmarks = __modules["extension/bookmarks.js"]
+const { formDialog, confirmDialog, choiceDialog } = __modules["extension/dialogs.js"]
+const CSV_ACCEPT = '.csv,text/csv,text/comma-separated-values,application/vnd.ms-excel,text/plain'
+const HTML_ACCEPT = '.html,.htm,text/html'
+const HEADER_PREVIEW_CHARS = 28
+
+function pickFile(accept) {
+  return new Promise((resolve) => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = accept
+    input.style.display = 'none'
+    let settled = false
+    const done = (value) => {
+      if (settled) return
+      settled = true
+      input.remove()
+      resolve(value)
+    }
+    input.onchange = () => {
+      const f = input.files && input.files[0]
+      if (!f) { done(null); return }
+      const reader = new FileReader()
+      reader.onload = () => done(typeof reader.result === 'string' ? { text: reader.result, name: f.name || '' } : null)
+      reader.onerror = () => done(null)
+      reader.readAsText(f)
+    }
+    input.addEventListener('cancel', () => done(null))
+    document.body.appendChild(input)
+    input.click()
+  })
+}
+
+function when(ms) {
+  return new Date(ms).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+}
+
+function day(ms) {
+  return new Date(ms).toLocaleDateString(undefined, { dateStyle: 'medium' })
+}
+
+function count(n, one, many) {
+  return n + ' ' + (n === 1 ? one : many)
+}
+
+function fileLabel(file) {
+  return file && file.name ? file.name : 'the file you imported'
+}
+
+function deleteReminder(file) {
+  return 'Delete ' + fileLabel(file) + ' now. It holds your passwords unencrypted, and Valid Vault can\'t delete it for you.'
+}
+
+async function askMapping(headers, guess) {
+  const options = headers.map((header, i) => ({
+    label: 'Column ' + (i + 1) + (header ? ': ' + (header.length > HEADER_PREVIEW_CHARS ? header.slice(0, HEADER_PREVIEW_CHARS) + '...' : header) : ''),
+    value: i
+  }))
+  const values = await formDialog({
+    title: 'Which columns are which?',
+    text: 'Valid Vault did not recognize this file\'s columns. Pick the column that holds each part of a login.',
+    fields: [
+      { label: 'Website address', options, value: guess.site >= 0 ? guess.site : 0 },
+      { label: 'Username', options: [{ label: 'No username column', value: -1 }].concat(options), value: guess.username },
+      { label: 'Password', options, value: guess.password >= 0 ? guess.password : Math.min(1, options.length - 1) }
+    ],
+    okLabel: 'Continue',
+    validate: (v) => {
+      const site = Number(v[0])
+      const username = Number(v[1])
+      const password = Number(v[2])
+      if (site === password) return { error: 'The website and password must be different columns.', focus: 2 }
+      if (username === site || username === password) return { error: 'The username must be its own column.', focus: 1 }
+      const chosen = [site, username, password]
+      const mapping = Object.assign({}, guess, { site, username, password })
+      for (const name of ['email', 'note', 'type', 'date']) {
+        if (typeof mapping[name] !== 'number' || chosen.includes(mapping[name])) mapping[name] = -1
+      }
+      return { value: mapping }
+    }
+  })
+  return values || null
+}
+
+function changedText(ms, missing) {
+  return 'last changed ' + (ms ? when(ms) : missing)
+}
+
+function newerSide(a, b) {
+  return a && b && a !== b ? (a > b ? 'current' : 'incoming') : null
+}
+
+function fileConflictDialog(conflict) {
+  const a = conflict.current.changedAt
+  const b = conflict.incoming.changedAt
+  const newer = newerSide(a, b)
+  return choiceDialog({
+    title: conflict.site + (conflict.username ? ' · ' + conflict.username : ''),
+    text: 'This login is in the file twice with different passwords. Pick the one that is current. The other one won\'t be imported.',
+    fields: [
+      { label: 'Earlier in the file' + (newer === 'current' ? ' (newer)' : '') + ', ' + changedText(a, 'not in this file'), secret: true, value: conflict.current.password },
+      { label: 'Later in the file' + (newer === 'incoming' ? ' (newer)' : '') + ', ' + changedText(b, 'not in this file'), secret: true, value: conflict.incoming.password }
+    ],
+    cancelLabel: 'Stop import',
+    escape: false,
+    neutralFocus: true,
+    choices: [
+      { label: 'Keep earlier', value: 'current', className: 'secondary' },
+      { label: 'Use later', value: 'incoming' }
+    ]
+  })
+}
+
+function vaultConflictDialog(conflict) {
+  const a = conflict.current.changedAt
+  const b = conflict.incoming.changedAt
+  const newer = newerSide(a, b)
+  const used = conflict.current.lastUsedAt ? when(conflict.current.lastUsedAt) : 'not recorded yet'
+  return choiceDialog({
+    title: conflict.site + (conflict.username ? ' · ' + conflict.username : ''),
+    text: 'This login is in your vault and in the file with different passwords. Pick the one that is current.\n\nThe other is kept as the previous password for 30 days, until ' + day(conflict.previousUntil) + ', so you can switch back if you pick wrong.',
+    fields: [
+      { label: 'In your vault' + (newer === 'current' ? ' (newer)' : '') + ', ' + changedText(a, 'unknown') + ' · last used ' + used, secret: true, value: conflict.current.password },
+      { label: 'From the file' + (newer === 'incoming' ? ' (newer)' : '') + ', ' + changedText(b, 'not in this file'), secret: true, value: conflict.incoming.password }
+    ],
+    cancelLabel: 'Stop import',
+    escape: false,
+    neutralFocus: true,
+    choices: [
+      { label: 'Keep vault\'s', value: 'current', className: 'secondary' },
+      { label: 'Use the file\'s', value: 'incoming' }
+    ]
+  })
+}
+
+function conflictDialog(conflict) {
+  return conflict.kind === 'file' ? fileConflictDialog(conflict) : vaultConflictDialog(conflict)
+}
+
+function skippedText(skipped, deleted) {
+  const parts = []
+  if (skipped.notLogin) parts.push(count(skipped.notLogin, 'item that isn\'t a login', 'items that aren\'t logins'))
+  if (skipped.app) parts.push(count(skipped.app, 'app entry', 'app entries'))
+  if (skipped.missing) parts.push(count(skipped.missing, 'row missing a website or password', 'rows missing a website or password'))
+  if (deleted) parts.push(count(deleted, 'login you deleted from your vault', 'logins you deleted from your vault'))
+  return parts.length ? 'Skipped: ' + parts.join(', ') + '.' : ''
+}
+
+async function finishDialog(title, text) {
+  await choiceDialog({ title, text, choices: [{ label: 'Done', value: true }] })
+}
+
+async function runPasswordImport({ masterKey, authorize, notify }) {
+  if (!masterKey) { notify('Unlock first', 'error'); return null }
+  const file = await pickFile(CSV_ACCEPT)
+  if (!file) { notify('No file selected', 'error'); return null }
+  let parsed
+  try { parsed = readLoginCsv(file.text) } catch (e) { notify(e && e.message ? e.message : 'That file could not be read.', 'error'); return null }
+  if (parsed.needsMapping) {
+    const mapping = await askMapping(parsed.headers, parsed.mapping)
+    if (!mapping) { notify('Import cancelled. Nothing changed. ' + deleteReminder(file), 'info'); return null }
+    parsed = readLoginCsv(file.text, mapping)
+  }
+  if (parsed.entries.length === 0) {
+    notify('No logins found in ' + fileLabel(file) + '. ' + deleteReminder(file), 'error')
+    return null
+  }
+  if (!(await authorize())) return null
+  const preview = await passwords.previewLoginImportFor(parsed.entries, masterKey)
+  const lines = []
+  if (parsed.format) lines.push('This looks like a ' + parsed.format + ' export.')
+  lines.push(count(preview.fresh, 'new login', 'new logins') + ', ' + count(preview.same, 'already saved', 'already saved') + ', ' + count(preview.conflicts, 'with a different password', 'with a different password') + '.')
+  const skipped = skippedText(parsed.skipped, preview.deleted)
+  if (skipped) lines.push(skipped)
+  if (preview.fileDuplicates) lines.push(count(preview.fileDuplicates, 'login appears', 'logins appear') + ' in the file more than once with different passwords.')
+  if (preview.conflicts || preview.fileDuplicates) lines.push('For each login with a different password, you\'ll see both and pick the current one.')
+  if (preview.fresh === 0 && preview.conflicts === 0) {
+    await finishDialog('Nothing new to import', lines.join(' ') + '\n\n' + deleteReminder(file))
+    notify('Nothing new to import. ' + deleteReminder(file), 'info')
+    return null
+  }
+  const go = await confirmDialog({ title: 'Import passwords?', text: lines.join(' '), okLabel: 'Import' })
+  if (!go) { notify('Import cancelled. Nothing changed. ' + deleteReminder(file), 'info'); return null }
+  const result = await passwords.importLogins(parsed.entries, masterKey, conflictDialog)
+  if (result.cancelled) {
+    notify('Import stopped. Nothing was saved. ' + deleteReminder(file), 'info')
+    return result
+  }
+  const summary = []
+  if (result.added) summary.push('Added ' + count(result.added, 'new login', 'new logins') + '.')
+  if (result.replaced) summary.push('Switched ' + count(result.replaced, 'login', 'logins') + ' to the file\'s password.')
+  if (result.kept) summary.push('Kept your password for ' + count(result.kept, 'login', 'logins') + '.')
+  if (result.replaced || result.kept) summary.push('The passwords you didn\'t pick are kept as previous passwords until ' + day(result.previousUntil) + '.')
+  if (result.fileDuplicates) summary.push('Left out ' + count(result.fileDuplicates, 'repeated entry', 'repeated entries') + ' from the file that you didn\'t pick.')
+  if (result.same) summary.push(count(result.same, 'login was', 'logins were') + ' already saved.')
+  const skippedAfter = skippedText(parsed.skipped, result.deleted)
+  if (skippedAfter) summary.push(skippedAfter)
+  await finishDialog('Import complete', summary.join(' ') + '\n\n' + deleteReminder(file))
+  notify((summary[0] || 'Import complete.') + ' ' + deleteReminder(file), 'success')
+  return result
+}
+
+async function importBookmarkEntries({ masterKey, authorize, notify, parsed, source, emptyText }) {
+  if (parsed.entries.length === 0) {
+    notify(emptyText, 'error')
+    return null
+  }
+  if (!(await authorize())) return null
+  const plan = await bookmarks.previewBookmarkImport(parsed.entries, masterKey)
+  const parts = [count(plan.fresh.length, 'new bookmark', 'new bookmarks'), count(plan.existing, 'already saved', 'already saved')]
+  if (plan.duplicates) parts.push(count(plan.duplicates, 'repeated', 'repeated'))
+  if (plan.deleted) parts.push(count(plan.deleted, 'you deleted before', 'you deleted before'))
+  if (parsed.skipped) parts.push(count(parsed.skipped, 'that isn\'t a web link', 'that aren\'t web links'))
+  const text = 'Found ' + count(parsed.found, 'link', 'links') + ' in ' + source + ': ' + parts.join(', ') + '. Folders are combined into one list.'
+  if (plan.fresh.length === 0) { notify('Nothing new to import. ' + text, 'info'); return null }
+  const go = await confirmDialog({ title: 'Import bookmarks?', text, okLabel: 'Import' })
+  if (!go) { notify('Import cancelled. Nothing changed.', 'info'); return null }
+  const result = await bookmarks.importBookmarkList(parsed.entries, masterKey)
+  notify('Imported ' + count(result.added, 'bookmark', 'bookmarks') + '.', 'success')
+  return result
+}
+
+async function runBookmarkImport({ masterKey, authorize, notify }) {
+  if (!masterKey) { notify('Unlock first', 'error'); return null }
+  const file = await pickFile(HTML_ACCEPT)
+  if (!file) { notify('No file selected', 'error'); return null }
+  let parsed
+  try { parsed = readBookmarkHtml(file.text) } catch (e) { notify(e && e.message ? e.message : 'That file could not be read.', 'error'); return null }
+  return importBookmarkEntries({
+    masterKey,
+    authorize,
+    notify,
+    parsed,
+    source: fileLabel(file),
+    emptyText: 'No bookmarks found in ' + fileLabel(file) + '. Export your bookmarks from your browser as an HTML file, then import that file.'
+  })
+}
+
+async function runBrowserBookmarkImport({ masterKey, authorize, notify, tree }) {
+  if (!masterKey) { notify('Unlock first', 'error'); return null }
+  return importBookmarkEntries({
+    masterKey,
+    authorize,
+    notify,
+    parsed: readBookmarkTree(tree),
+    source: 'this browser',
+    emptyText: 'This browser has no bookmarks to import.'
+  })
+}
+return Object.freeze({ "runPasswordImport": runPasswordImport, "runBookmarkImport": runBookmarkImport, "runBrowserBookmarkImport": runBrowserBookmarkImport, "pickFile": pickFile })
+})()
+
 __modules["phone/app.js"] = (function () {
 const auth = __modules["extension/auth.js"]
 const passwords = __modules["extension/passwords.js"]
@@ -16195,6 +16993,7 @@ const { qrSvg, openCamera, readCode } = __modules["extension/qrtools.js"]
 const { generateMasterKey, masterKeyToCryptoKey } = __modules["extension/crypto.js"]
 const { formDialog, confirmDialog, askSecret, closeAllDialogs } = __modules["extension/dialogs.js"]
 const platform = __modules["phone/platform.js"]
+const importFlow = __modules["extension/importflow.js"]
 const APP_VERSION = typeof VALID_VAULT_VERSION === 'string' ? VALID_VAULT_VERSION : ''
 const LEGACY_BIOMETRIC_ALIAS = 'valid_vault_biometric_key'
 const AUTOLOCK_MIN_SEC = 10
@@ -17281,7 +18080,7 @@ function renderLoginExtras(container, domain, credential) {
   container.textContent = ''
   if (credential.previousPassword) {
     const prev = el('div', 'extra-row')
-    prev.appendChild(el('span', 'extra-label', 'Previous password' + (credential.previousSetAt ? ', changed ' + new Date(credential.previousSetAt).toLocaleDateString() : '')))
+    prev.appendChild(el('span', 'extra-label', 'Previous password' + (credential.previousSetAt ? ', replaced ' + new Date(credential.previousSetAt).toLocaleDateString() : '') + (credential.previousUntil ? ', kept until ' + new Date(credential.previousUntil).toLocaleDateString() : '')))
     const value = el('span', 'extra-value', MASK)
     let visible = false
     prev.appendChild(value)
@@ -17291,13 +18090,14 @@ function renderLoginExtras(container, domain, credential) {
       e.target.textContent = visible ? 'Hide' : 'Show'
     }))
     prev.appendChild(btn('Restore', 'small secondary', async () => {
-      if (!(await confirmDialog({ title: 'Restore previous password?', text: 'The current password becomes the previous one, so you can switch back.', okLabel: 'Restore' }))) return
+      if (!(await confirmDialog({ title: 'Restore previous password?', text: 'The current password becomes the previous one for 30 days, so you can switch back.', okLabel: 'Restore' }))) return
       const r = await passwords.restorePreviousPassword(domain, credential.username, key())
       if (r.success) { showMsg('msg-manage', 'Previous password restored', 'success'); loadCredentials() }
-      else showMsg('msg-manage', r.error, 'error')
+      else { showMsg('msg-manage', r.error, 'error'); loadCredentials() }
     }))
     container.appendChild(prev)
   }
+  container.appendChild(el('div', 'note', credential.lastUsedAt ? 'Last used ' + new Date(credential.lastUsedAt).toLocaleString() : 'Last used: not recorded yet'))
   const fields = credential.extraFields || []
   if (fields.length === 0) container.appendChild(el('div', 'note', 'No additional fields saved'))
   fields.forEach((field, idx) => {
@@ -18069,6 +18869,16 @@ async function importVaultFile(skipAuth) {
   }
 }
 
+async function importPasswordsFile() {
+  const result = await importFlow.runPasswordImport({ masterKey: key(), authorize: () => requireTransferAuth('msg-sync'), notify: (text, kind) => showMsg('msg-sync', text, kind) })
+  if (result && result.changed) refreshAfterSync()
+}
+
+async function importBookmarksFile() {
+  const result = await importFlow.runBookmarkImport({ masterKey: key(), authorize: () => requireTransferAuth('msg-sync'), notify: (text, kind) => showMsg('msg-sync', text, kind) })
+  if (result && result.added && state.tab === 'bookmarks') loadBookmarks()
+}
+
 async function exportKey() {
   if (!key()) { showMsg('msg-sync', 'Unlock first', 'error'); return }
   if (!(await requireTransferAuth('msg-sync'))) return
@@ -18224,6 +19034,8 @@ function wire() {
   $('btn-stop-share').onclick = stopShare
   $('btn-export-vault').onclick = exportVault
   $('btn-import-vault').onclick = () => importVaultFile(false)
+  $('btn-import-passwords').onclick = importPasswordsFile
+  $('btn-import-bookmarks').onclick = importBookmarksFile
   $('btn-export-key').onclick = exportKey
   $('btn-import-key').onclick = importKey
   $('btn-change-key-protection').onclick = changeKeyProtection

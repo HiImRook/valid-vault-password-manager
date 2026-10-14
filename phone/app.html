@@ -351,6 +351,12 @@
           <button id="btn-import-key" class="secondary">Import Key</button>
         </div>
         <button id="btn-change-key-protection" class="secondary block" style="margin-top:8px;">Change Key Passphrase</button>
+        <h2>Import From Another App</h2>
+        <p class="lead">Bring your logins over from another password manager's CSV export, and your bookmarks from a browser's bookmarks HTML file. Everything is encrypted into your vault as it comes in. Valid Vault never exports passwords unencrypted.</p>
+        <div class="btn-row">
+          <button id="btn-import-passwords" class="secondary">Import Passwords</button>
+          <button id="btn-import-bookmarks" class="secondary">Import Bookmarks</button>
+        </div>
         <h2>Scan a Device</h2>
         <p class="lead">Read a key or vault streamed from another device. Do this somewhere private.</p>
         <div id="qr-scan-box" class="scan-box">Tap to open scanner</div>
@@ -493,6 +499,17 @@
           <div class="body">
             <p>Export Vault saves an encrypted file to Downloads, or sends it with any app you choose. Copy it to a USB drive or another computer for a cold backup. It is useless without your master key.</p>
             <p>Export Key saves your master key wrapped under your passphrase and three answers. Keep it separate from the vault file if you can.</p>
+          </div>
+        </details>
+        <details>
+          <summary>Importing from another app</summary>
+          <div class="body">
+            <p>Sync, Import From Another App brings in logins from another password manager and bookmarks from a browser. The file is read on this phone and encrypted straight into your vault. Valid Vault never exports passwords unencrypted.</p>
+            <p>For passwords, export a CSV file from your old password manager, tap Import Passwords, choose the file, and confirm with your fingerprint or device PIN. Most password managers and browsers are recognized. For any other CSV, you pick which columns hold the website, username, and password. Check the preview, then tap Import.</p>
+            <p>When the file has a different password for a login you already have, you see both, masked, with when each was last changed and when yours was last used. Pick the one that is current. The other is kept as the previous password for 30 days, so you can switch back if you picked wrong. If the file has the same login twice with different passwords, you pick which one to import.</p>
+            <p>Stop import leaves your vault exactly as it was. Logins you deleted stay deleted, unless the file shows the password was changed after you deleted it.</p>
+            <p>When the import is done, delete the CSV file. It holds your passwords unencrypted, and Valid Vault can't delete it for you.</p>
+            <p>For bookmarks, export them from your browser as an HTML file and tap Import Bookmarks. Folders are combined into one list, links you already have are skipped, and bookmarks you deleted stay deleted.</p>
           </div>
         </details>
         <details>

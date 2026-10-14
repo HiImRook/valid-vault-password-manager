@@ -150,6 +150,7 @@
       <a href="#keys">Your Master Key</a>
       <a href="#univault">Uni-Vault on One Computer</a>
       <a href="#transport">Browsers and Devices</a>
+      <a href="#import">Importing From Another App</a>
       <a href="#backups">Backups and Cold Storage</a>
       <a href="#profiles">Setups for Different Users</a>
       <a href="#trouble">Troubleshooting</a>
@@ -290,7 +291,7 @@
 
       <h3>Previous password safety net</h3>
       <p>Sometimes a site shows success but never actually saves the new password. To protect you, Valid Vault keeps the old password as a labeled <strong>Previous passwords</strong> choice in the login picker, with the date it was replaced. Picking it restores it.</p>
-      <p>The old password is removed only after the new one has been used <strong>3 times and 14 days</strong> have passed. Both must happen, so a password you use once and then forget about is never dropped too early.</p>
+      <p>The old password is kept for <strong>30 days</strong> from the day it was replaced, then removed. The picker shows the date it will be removed. Changing a password in Manage, or picking one while importing from another app, keeps the old one the same way.</p>
     </section>
 
     <section id="generator">
@@ -448,6 +449,27 @@
         <li><strong>Merging is safe to repeat.</strong> For each item, the newest edit wins, and deleted items stay deleted on every browser. Importing the same file twice changes nothing.</li>
         <li><strong>Importing a key on a browser that already has a different vault</strong> warns you first: that browser's old vault becomes unreadable and is cleared. This is how you prepare a browser to receive your real vault.</li>
       </ul>
+    </section>
+
+    <section id="import">
+      <h2>Importing From Another App</h2>
+      <p>Valid Vault can bring in logins from another password manager and bookmarks from another browser. Both are in Sync, under <strong>Import From Another App</strong>. The file is read on this computer and encrypted straight into your vault. Valid Vault has no way to export passwords unencrypted, and never will, since that would undo the point of an encrypted vault.</p>
+
+      <h3>Passwords</h3>
+      <ol>
+        <li>In your old password manager, export your passwords as a CSV file. Exports from Chrome, Edge, Brave, Firefox, Bitwarden, LastPass, Proton Pass, Dashlane, Apple Passwords, 1Password, KeePassXC, and NordPass are recognized. For any other CSV, Valid Vault asks which columns hold the website, username, and password.</li>
+        <li>Click <strong>Import Passwords</strong>, choose the file, and confirm with fingerprint, device PIN, or password.</li>
+        <li>Check the preview of what is new and what is already saved, then click <strong>Import</strong>.</li>
+        <li><strong>Delete the CSV file.</strong> It holds your passwords unencrypted, and Valid Vault can't delete it for you.</li>
+      </ol>
+
+      <h3>When a password is different</h3>
+      <p>A login matches when the website and username are the same. When the file has a different password for a login you already have, Valid Vault shows both, masked, with when each was last changed and when yours was last used, and marks the newer one when the file has dates. Pick the one that is current. The other is kept as the previous password for 30 days, so you can switch back from the login picker if you picked wrong.</p>
+      <p>When the file has the same login twice with different passwords, you pick which one to import, and the other is left out.</p>
+      <p><strong>Stop import</strong> leaves your vault exactly as it was. Logins you deleted from Valid Vault stay deleted, unless the file shows the password was changed after you deleted it. Notes come along as a Notes field on the login. App entries, and items that aren't logins such as cards and secure notes, are skipped.</p>
+
+      <h3>Bookmarks</h3>
+      <p>Click <strong>Import This Browser's Bookmarks</strong> to bring in the bookmarks of the browser Valid Vault is running in. The browser asks once for permission to read them, and Valid Vault gives that permission back as soon as they are read. For another browser's bookmarks, export them from that browser as an HTML file and click <strong>Import Bookmarks File</strong>. Either way, folders are combined into one list, links you already have are skipped, and bookmarks you deleted stay deleted.</p>
     </section>
 
     <section id="backups">

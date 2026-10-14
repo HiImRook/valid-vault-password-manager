@@ -14,6 +14,7 @@ import { qrSvg, openCamera, readCode } from '../extension/qrtools.js'
 import { generateMasterKey, masterKeyToCryptoKey } from '../extension/crypto.js'
 import { formDialog, confirmDialog, askSecret, closeAllDialogs } from '../extension/dialogs.js'
 import * as platform from './platform.js'
+import * as importFlow from '../extension/importflow.js'
 
 const APP_VERSION = typeof VALID_VAULT_VERSION === 'string' ? VALID_VAULT_VERSION : ''
 const LEGACY_BIOMETRIC_ALIAS = 'valid_vault_biometric_key'
@@ -1101,7 +1102,7 @@ function renderLoginExtras(container, domain, credential) {
   container.textContent = ''
   if (credential.previousPassword) {
     const prev = el('div', 'extra-row')
-    prev.appendChild(el('span', 'extra-label', 'Previous password' + (credential.previousSetAt ? ', changed ' + new Date(credential.previousSetAt).toLocaleDateString() : '')))
+    prev.appendChild(el('span', 'extra-label', 'Previous password' + (credential.previousSetAt ? ', replaced ' + new Date(credential.previousSetAt).toLocaleDateString() : '') + (credential.previousUntil ? ', kept until ' + new Date(credential.previousUntil).toLocaleDateString() : '')))
     const value = el('span', 'extra-value', MASK)
     let visible = false
     prev.appendChild(value)
@@ -1111,13 +1112,14 @@ function renderLoginExtras(container, domain, credential) {
       e.target.textContent = visible ? 'Hide' : 'Show'
     }))
     prev.appendChild(btn('Restore', 'small secondary', async () => {
-      if (!(await confirmDialog({ title: 'Restore previous password?', text: 'The current password becomes the previous one, so you can switch back.', okLabel: 'Restore' }))) return
+      if (!(await confirmDialog({ title: 'Restore previous password?', text: 'The current password becomes the previous one for 30 days, so you can switch back.', okLabel: 'Restore' }))) return
       const r = await passwords.restorePreviousPassword(domain, credential.username, key())
       if (r.success) { showMsg('msg-manage', 'Previous password restored', 'success'); loadCredentials() }
-      else showMsg('msg-manage', r.error, 'error')
+      else { showMsg('msg-manage', r.error, 'error'); loadCredentials() }
     }))
     container.appendChild(prev)
   }
+  container.appendChild(el('div', 'note', credential.lastUsedAt ? 'Last used ' + new Date(credential.lastUsedAt).toLocaleString() : 'Last used: not recorded yet'))
   const fields = credential.extraFields || []
   if (fields.length === 0) container.appendChild(el('div', 'note', 'No additional fields saved'))
   fields.forEach((field, idx) => {
@@ -1889,6 +1891,16 @@ async function importVaultFile(skipAuth) {
   }
 }
 
+async function importPasswordsFile() {
+  const result = await importFlow.runPasswordImport({ masterKey: key(), authorize: () => requireTransferAuth('msg-sync'), notify: (text, kind) => showMsg('msg-sync', text, kind) })
+  if (result && result.changed) refreshAfterSync()
+}
+
+async function importBookmarksFile() {
+  const result = await importFlow.runBookmarkImport({ masterKey: key(), authorize: () => requireTransferAuth('msg-sync'), notify: (text, kind) => showMsg('msg-sync', text, kind) })
+  if (result && result.added && state.tab === 'bookmarks') loadBookmarks()
+}
+
 async function exportKey() {
   if (!key()) { showMsg('msg-sync', 'Unlock first', 'error'); return }
   if (!(await requireTransferAuth('msg-sync'))) return
@@ -2044,6 +2056,8 @@ function wire() {
   $('btn-stop-share').onclick = stopShare
   $('btn-export-vault').onclick = exportVault
   $('btn-import-vault').onclick = () => importVaultFile(false)
+  $('btn-import-passwords').onclick = importPasswordsFile
+  $('btn-import-bookmarks').onclick = importBookmarksFile
   $('btn-export-key').onclick = exportKey
   $('btn-import-key').onclick = importKey
   $('btn-change-key-protection').onclick = changeKeyProtection

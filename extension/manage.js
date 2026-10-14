@@ -12,10 +12,11 @@ import { splitIntoFrames, createFrameCollector } from './frames.js'
 import { createEncoder, createDecoder, QR_FRAME_MS } from './fountain.js'
 import { qrSvg, openCamera, readCode } from './qrtools.js'
 import { masterKeyToCryptoKey, decrypt } from './crypto.js'
-import { formDialog, askSecret } from './dialogs.js'
+import { formDialog, askSecret, closeAllDialogs } from './dialogs.js'
 import * as keypackage from './keypackage.js'
 import * as uniVault from './linkedvault.js'
 import * as vaultFile from './vaultfile.js'
+import * as importFlow from './importflow.js'
 
 
 async function restoreMasterKeyFromSession() {
@@ -39,7 +40,11 @@ const btnManageUnlockPw = document.getElementById('btn-manage-unlock-pw')
 const inputManagePassword = document.getElementById('input-manage-password')
 const msgManageLock = document.getElementById('msg-manage-lock')
 
-function showLockOverlay() { if (lockOverlay) lockOverlay.classList.remove('hidden') }
+function showLockOverlay() {
+  if (!lockOverlay) return
+  if (lockOverlay.classList.contains('hidden')) closeAllDialogs()
+  lockOverlay.classList.remove('hidden')
+}
 function hideLockOverlay() { if (lockOverlay) lockOverlay.classList.add('hidden') }
 
 async function unlockManagePage() {
@@ -416,6 +421,11 @@ function renderExtraFields(container, credential, masterKey) {
   container.style.display = 'block'
   container.innerHTML = ''
   const fields = credential.extraFields || []
+
+  const used = document.createElement('div')
+  used.style.cssText = 'color:#666;font-size:12px;padding:4px 0;'
+  used.textContent = credential.lastUsedAt ? 'Last used ' + new Date(credential.lastUsedAt).toLocaleString() : 'Last used: not recorded yet'
+  container.appendChild(used)
 
   if (fields.length === 0) {
     const none = document.createElement('div')
@@ -1251,6 +1261,34 @@ async function importVaultText(text) {
     syncMsg(vaultFile.describeMerge(result), 'success')
     if (result.changed) refreshAfterSync()
   } catch (e) { syncMsg('Import failed: ' + (e && e.message ? e.message : e), 'error') }
+}
+
+const _btnImportPasswords = document.getElementById('btn-import-passwords'); if (_btnImportPasswords) _btnImportPasswords.onclick = async function () {
+  const result = await importFlow.runPasswordImport({ masterKey: session.getMasterKey(), authorize: requireTransferAuth, notify: syncMsg })
+  if (result && result.changed) refreshAfterSync()
+}
+
+const _btnImportBookmarks = document.getElementById('btn-import-bookmarks'); if (_btnImportBookmarks) _btnImportBookmarks.onclick = async function () {
+  await importFlow.runBookmarkImport({ masterKey: session.getMasterKey(), authorize: requireTransferAuth, notify: syncMsg })
+}
+
+const BOOKMARK_PERMISSION = { permissions: ['bookmarks'] }
+
+async function readThisBrowserBookmarks() {
+  let granted = false
+  try { granted = await chrome.permissions.request(BOOKMARK_PERMISSION) } catch (e) { granted = false }
+  if (!granted) return null
+  try { return await chrome.bookmarks.getTree() } finally {
+    try { await chrome.permissions.remove(BOOKMARK_PERMISSION) } catch (e) {}
+  }
+}
+
+const _btnImportBrowserBookmarks = document.getElementById('btn-import-browser-bookmarks'); if (_btnImportBrowserBookmarks) _btnImportBrowserBookmarks.onclick = async function () {
+  if (!session.getMasterKey()) { syncMsg('Unlock first', 'error'); return }
+  let tree = null
+  try { tree = await readThisBrowserBookmarks() } catch (e) { syncMsg('This browser\'s bookmarks could not be read.', 'error'); return }
+  if (!tree) { syncMsg('Import cancelled. Valid Vault needs your permission to read this browser\'s bookmarks. Nothing changed.', 'info'); return }
+  await importFlow.runBrowserBookmarkImport({ masterKey: session.getMasterKey(), authorize: requireTransferAuth, notify: syncMsg, tree })
 }
 
 const _btnImportVault = document.getElementById('btn-import-vault'); if (_btnImportVault) _btnImportVault.onclick = async function () {

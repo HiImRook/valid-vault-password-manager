@@ -5,6 +5,42 @@ All notable changes to Valid Vault will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.4] - 2026-10-14
+
+Import your logins from another password manager and your bookmarks from another browser, on the extension and the phone. Previous passwords are now kept for 30 days, and each login shows when it was last used.
+
+### Added
+
+* **Import passwords.** Sync, Import From Another App, Import Passwords reads a CSV file exported from another password manager and encrypts each login straight into your vault. Exports from Chrome, Edge, Brave, Firefox, Bitwarden, LastPass, Proton Pass, Dashlane, Apple Passwords, 1Password, KeePassXC, and NordPass are recognized. For any other CSV, you pick which columns hold the website, username, and password. Notes come along as a Notes field on the login. App entries, and items that aren't logins such as cards and secure notes, are skipped. A preview shows what is new and what is already saved before anything changes. Extension and phone.
+* **A clear choice when passwords differ.** A login matches when the website and username are the same. When the file has a different password for a login you already have, a popup shows both, masked and read-only, with when each was last changed and when yours was last used, and marks the newer one when the file has dates. Pick the one that is current. The other is kept as the previous password for 30 days, and the popup and the summary say until when. When the same login is in the file twice with different passwords, you pick which one to import and the other is left out.
+* **Import bookmarks.** On the extension, Import This Browser's Bookmarks brings in the bookmarks of the browser it runs in, with no file. The browser asks for permission when you click it, and Valid Vault gives the permission back as soon as the bookmarks are read, so the extension never keeps access to them. Import Bookmarks File reads the bookmarks HTML file any browser exports, on the extension and the phone. Folders are combined into one list, and links already saved are skipped.
+* **Last used.** Each login records when it was last filled, and Manage and the phone show it. It travels with the vault and merges without counting as an edit.
+* **User Guide.** The extension User Guide, the website guide, and the phone User Guide have an Importing From Another App section.
+
+### Changed
+
+* **Previous passwords are kept for 30 days.** A replaced password stays available as the previous password for 30 days from the day it was replaced, then it is removed. Before, it was removed after the new password had been used 3 times and 14 days had passed. The login picker and Manage show the date it will be removed. Extension and phone.
+
+### Fixed
+
+* **Editing a password in Manage keeps the old one.** Changing a password from Manage now keeps the old password as the previous password, the same as a save prompt does.
+* **An expired previous password can't be restored.** Restoring a previous password older than 30 days is refused and the old password is removed.
+
+### Security
+
+* **No unencrypted export.** Importing is one way. Valid Vault still has no way to export passwords unencrypted, since that would undo the point of an encrypted vault.
+* **Nothing saved until the end.** An import writes once, after every choice is made. Stop import, or the vault locking, leaves your vault exactly as it was, and any choice popup still open closes when the vault locks.
+* **Changes made during an import are kept.** If a login changes while a choice popup is open, for example from a save prompt in another tab, the import keeps that change and stores the file's password as the previous password.
+* **Deleted stays deleted.** Logins and bookmarks you deleted are not brought back by an import. A deleted login returns only when the file shows its password was changed after you deleted it.
+* **The file stays yours to delete.** The summary reminds you to delete the CSV file, since it holds your passwords unencrypted and Valid Vault can't delete it for you. Files over 20 MB are refused.
+
+### Notes
+
+* Fewer vault writes: filling the same login again within 10 minutes no longer rewrites the vault.
+* Samsung Pass has no export Valid Vault can read.
+* The extension changes go to the Chrome Web Store as 0.8.4.
+* Verified with unit tests of the CSV reader, format detection, conflict handling, deleted logins, the 30-day previous password, and merging last used dates, and in Chromium: the full import flow on the extension and the phone, stopping an import, the vault locking mid-import, and regression runs of the phone, autofill, share, browser, key, merge, and extension suites.
+
 ## [0.8.3] - 2026-10-13
 
 A private browser and home screen widgets for the phone app, plus a key name fix and clearer key import prompts for the extension and the phone.

@@ -1,15 +1,16 @@
 import { encrypt, decrypt } from './crypto.js'
 import { getPasswordVault, setPasswordVault, getVaultMigrationJournal, setVaultMigrationJournal, clearVaultMigrationJournal } from './store.js'
 
-const PREVIOUS_KEEP_MS = 14 * 24 * 60 * 60 * 1000
-const PREVIOUS_KEEP_USES = 3
+const PREVIOUS_KEEP_MS = 30 * 24 * 60 * 60 * 1000
+const NOTES_LABEL = 'Notes'
+const USE_WRITE_INTERVAL_MS = 10 * 60 * 1000
 const APP_PACKAGE_PATTERN = /^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+$/
 
 function retirePassword(cred, oldPassword, now) {
   if (!oldPassword || oldPassword === cred.password) return
   cred.previousPassword = oldPassword
   cred.previousSetAt = now
-  cred.newPasswordUses = 0
+  delete cred.newPasswordUses
 }
 
 function clearPrevious(cred) {
@@ -19,7 +20,15 @@ function clearPrevious(cred) {
 }
 
 function previousExpired(cred, now) {
-  return (cred.newPasswordUses || 0) >= PREVIOUS_KEEP_USES && now - (cred.previousSetAt || 0) >= PREVIOUS_KEEP_MS
+  return !!cred.previousPassword && now - (cred.previousSetAt || 0) >= PREVIOUS_KEEP_MS
+}
+
+function previousExpiresAt(setAt) {
+  return (typeof setAt === 'number' && isFinite(setAt) ? setAt : 0) + PREVIOUS_KEEP_MS
+}
+
+function lastUsed(record) {
+  return record && typeof record.lastUsedAt === 'number' && isFinite(record.lastUsedAt) ? record.lastUsedAt : 0
 }
 
 function generateId() {
@@ -329,11 +338,11 @@ async function saveCredential(domain, username, password, masterKey, extraFields
   }
   if (existingCred && existingCred.password !== password) {
     retirePassword(saved, existingCred.password, now)
-  } else if (existingCred && existingCred.previousPassword) {
+  } else if (existingCred && existingCred.previousPassword && !previousExpired(existingCred, now)) {
     saved.previousPassword = existingCred.previousPassword
     saved.previousSetAt = existingCred.previousSetAt
-    saved.newPasswordUses = existingCred.newPasswordUses || 0
   }
+  if (existingCred && lastUsed(existingCred)) saved.lastUsedAt = lastUsed(existingCred)
   existing.push(saved)
 
   tree.credentials[domain] = existing
@@ -357,16 +366,20 @@ async function getCredentials(domain, masterKey) {
   }
 
   const result = []
+  const now = Date.now()
   for (const cred of domainCreds) {
     if (cred.deleted) continue
+    const keepPrevious = !!cred.previousPassword && !previousExpired(cred, now)
     result.push({
       id: cred.id,
       username: cred.username,
       password: cred.password,
       extraFields: cred.extraFields || [],
       loginType: cred.loginType || inferLoginType(cred.username),
-      previousPassword: cred.previousPassword || null,
-      previousSetAt: cred.previousSetAt || null,
+      previousPassword: keepPrevious ? cred.previousPassword : null,
+      previousSetAt: keepPrevious ? cred.previousSetAt || null : null,
+      previousUntil: keepPrevious ? previousExpiresAt(cred.previousSetAt) : null,
+      lastUsedAt: lastUsed(cred) || null,
       createdAt: cred.createdAt,
       updatedAt: cred.updatedAt
     })
@@ -412,8 +425,9 @@ async function updateCredential(credentialId, updates, masterKey) {
       if (creds[index].deleted) return { success: false, error: 'Credential deleted' }
       if (updates.username) creds[index].username = updates.username
       if (updates.password && updates.password !== creds[index].password) {
-        retirePassword(creds[index], creds[index].password, Date.now())
+        const oldPassword = creds[index].password
         creds[index].password = updates.password
+        retirePassword(creds[index], oldPassword, Date.now())
       }
       if (updates.extraFields) creds[index].extraFields = updates.extraFields
       if (updates.loginType) creds[index].loginType = updates.loginType
@@ -436,9 +450,14 @@ function findLiveCredential(tree, domain, username) {
 async function noteCredentialUse(domain, username, masterKey) {
   const tree = await readVaultTree(masterKey)
   const cred = findLiveCredential(tree, domain, username)
-  if (!cred || !cred.previousPassword) return { success: true, changed: false }
-  cred.newPasswordUses = (cred.newPasswordUses || 0) + 1
-  if (previousExpired(cred, Date.now())) clearPrevious(cred)
+  if (!cred) return { success: true, changed: false }
+  const now = Date.now()
+  const expired = previousExpired(cred, now)
+  const recent = typeof cred.lastUsedAt === 'number' && now - cred.lastUsedAt < USE_WRITE_INTERVAL_MS && now >= cred.lastUsedAt
+  if (recent && !expired && cred.newPasswordUses === undefined) return { success: true, changed: false }
+  cred.lastUsedAt = now
+  delete cred.newPasswordUses
+  if (expired) clearPrevious(cred)
   await writeVaultTree(tree, masterKey)
   return { success: true, changed: true }
 }
@@ -448,6 +467,11 @@ async function restorePreviousPassword(domain, username, masterKey) {
   const cred = findLiveCredential(tree, domain, username)
   if (!cred || !cred.previousPassword) return { success: false, error: 'No previous password saved' }
   const now = Date.now()
+  if (previousExpired(cred, now)) {
+    clearPrevious(cred)
+    await writeVaultTree(tree, masterKey)
+    return { success: false, error: 'The previous password has expired' }
+  }
   const current = cred.password
   cred.password = cred.previousPassword
   retirePassword(cred, current, now)
@@ -520,12 +544,21 @@ function laterRecord(a, b) {
   return JSON.stringify(a) >= JSON.stringify(b) ? a : b
 }
 
+function withLatestUse(chosen, a, b, identities) {
+  if (chosen.deleted) return chosen
+  const latest = Math.max(lastUsed(a), lastUsed(b))
+  if (!latest || lastUsed(chosen) === latest) return chosen
+  const copy = Object.assign({}, chosen, { lastUsedAt: latest })
+  identities.set(copy, identities.get(chosen))
+  return copy
+}
+
 function mergeRecordLists(localList, incomingList, identities) {
   const all = [...localList, ...incomingList]
   const byId = new Map()
   for (const record of all) {
     const current = byId.get(record.id)
-    byId.set(record.id, current ? laterRecord(current, record) : record)
+    byId.set(record.id, current ? withLatestUse(laterRecord(current, record), current, record, identities) : record)
   }
   const winners = Array.from(byId.values())
   const byIdentity = new Map()
@@ -674,6 +707,168 @@ function sameCredentials(a, b) {
   return canonicalCredentials(a) === canonicalCredentials(b)
 }
 
+function liveCredential(list, username) {
+  return list.find((cred) => !cred.deleted && cred.username === username) || null
+}
+
+function deletedCredential(list, username) {
+  let newest = null
+  for (const cred of list) {
+    if (!cred.deleted || cred.username !== username) continue
+    if (!newest || stamp(cred) > stamp(newest)) newest = cred
+  }
+  return newest
+}
+
+function blocksImport(tombstone, entry) {
+  if (!tombstone) return false
+  return !(entry.changedAt && entry.changedAt > stamp(tombstone))
+}
+
+function entryKey(entry) {
+  return entry.site + '\n' + entry.username
+}
+
+function groupEntries(entries) {
+  const groups = new Map()
+  for (const entry of entries) {
+    const key = entryKey(entry)
+    if (!groups.has(key)) groups.set(key, [])
+    groups.get(key).push(entry)
+  }
+  return groups
+}
+
+function previewLoginImport(tree, entries) {
+  const counts = { fresh: 0, same: 0, conflicts: 0, deleted: 0, fileDuplicates: 0 }
+  for (const group of groupEntries(entries).values()) {
+    const distinct = Array.from(new Set(group.map((entry) => entry.password)))
+    const first = group[0]
+    const list = tree.credentials[first.site] || []
+    const live = liveCredential(list, first.username)
+    if (live) {
+      counts.fileDuplicates += distinct.length - 1
+      if (distinct.length === 1 && distinct[0] === live.password) counts.same++
+      else counts.conflicts++
+      continue
+    }
+    if (group.every((entry) => blocksImport(deletedCredential(list, entry.username), entry))) { counts.deleted++; continue }
+    counts.fileDuplicates += distinct.length - 1
+    counts.fresh++
+  }
+  return counts
+}
+
+async function previewLoginImportFor(entries, masterKey) {
+  return previewLoginImport(await readVaultTree(masterKey), entries)
+}
+
+function importedCredential(entry, now) {
+  const extraFields = entry.note ? [{ label: NOTES_LABEL, value: entry.note }] : []
+  return {
+    id: generateId(),
+    username: entry.username,
+    password: entry.password,
+    extraFields,
+    loginType: inferLoginType(entry.username),
+    createdAt: now,
+    updatedAt: now
+  }
+}
+
+async function settleFileDuplicates(entries, decide) {
+  const settled = []
+  let dropped = 0
+  for (const group of groupEntries(entries).values()) {
+    let winner = group[0]
+    for (const entry of group.slice(1)) {
+      if (entry.password === winner.password) {
+        if (!winner.changedAt && entry.changedAt) winner = Object.assign({}, winner, { changedAt: entry.changedAt })
+        continue
+      }
+      const choice = await decide({
+        kind: 'file',
+        site: entry.site,
+        username: entry.username,
+        current: { password: winner.password, changedAt: winner.changedAt || null },
+        incoming: { password: entry.password, changedAt: entry.changedAt || null }
+      })
+      if (choice !== 'current' && choice !== 'incoming') return null
+      if (choice === 'incoming') winner = entry
+      dropped++
+    }
+    settled.push(winner)
+  }
+  return { settled, dropped }
+}
+
+function applyImport(tree, entries, choiceFor, now) {
+  const stats = { added: 0, same: 0, kept: 0, replaced: 0, deleted: 0, changed: false }
+  entries.forEach((entry, index) => {
+    const list = tree.credentials[entry.site] || []
+    const live = liveCredential(list, entry.username)
+    if (live) {
+      if (live.password === entry.password) { stats.same++; return }
+      const choice = choiceFor(index, live)
+      if (choice === 'incoming') {
+        const oldPassword = live.password
+        live.password = entry.password
+        retirePassword(live, oldPassword, now)
+        stats.replaced++
+      } else {
+        live.previousPassword = entry.password
+        live.previousSetAt = now
+        delete live.newPasswordUses
+        stats.kept++
+      }
+      live.updatedAt = now
+      stats.changed = true
+      return
+    }
+    if (blocksImport(deletedCredential(list, entry.username), entry)) { stats.deleted++; return }
+    if (!tree.credentials[entry.site]) tree.credentials[entry.site] = list
+    list.push(importedCredential(entry, now))
+    stats.added++
+    stats.changed = true
+  })
+  return stats
+}
+
+async function importLogins(entries, masterKey, decide) {
+  const now = Date.now()
+  const previousUntil = now + PREVIOUS_KEEP_MS
+  const dedup = await settleFileDuplicates(entries, decide)
+  if (!dedup) return { cancelled: true, changed: false }
+  const snapshot = await readVaultTree(masterKey)
+  const decisions = new Map()
+  for (let index = 0; index < dedup.settled.length; index++) {
+    const entry = dedup.settled[index]
+    const live = liveCredential(snapshot.credentials[entry.site] || [], entry.username)
+    if (!live || live.password === entry.password) continue
+    const choice = await decide({
+      kind: 'vault',
+      site: entry.site,
+      username: entry.username,
+      current: { password: live.password, changedAt: stamp(live) || null, lastUsedAt: lastUsed(live) || null },
+      incoming: { password: entry.password, changedAt: entry.changedAt || null },
+      previousUntil
+    })
+    if (choice !== 'current' && choice !== 'incoming') return { cancelled: true, changed: false }
+    decisions.set(index, { choice, password: live.password })
+  }
+  const tree = await readVaultTree(masterKey)
+  const stats = applyImport(tree, dedup.settled, (index, live) => {
+    const decided = decisions.get(index)
+    if (decided && decided.password === live.password) return decided.choice
+    return 'current'
+  }, now)
+  if (stats.changed) {
+    tree.meta.lastAccess = now
+    await writeVaultTree(tree, masterKey)
+  }
+  return Object.assign({ cancelled: false, fileDuplicates: dedup.dropped, previousUntil }, stats)
+}
+
 export {
   ensureVault,
   saveCredential,
@@ -683,6 +878,11 @@ export {
   deleteCredential,
   noteCredentialUse,
   restorePreviousPassword,
+  previewLoginImport,
+  previewLoginImportFor,
+  importLogins,
+  previousExpiresAt,
+  PREVIOUS_KEEP_MS,
   autofill,
   getAppLink,
   setAppLink,

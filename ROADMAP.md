@@ -1,10 +1,23 @@
 # Valid Vault - Development Roadmap
 
-**Current Version:** v0.8.3 - **Status: Active Testing**
+**Current Version:** v0.8.4 - **Status: Active Testing**
 
 ---
 
 ## Version History (Completed)
+
+### v0.8.4 - Import From Another App (Oct 2026)
+
+* ✅ Import passwords from another password manager's CSV export, on the extension and the phone, read on the device and encrypted straight into the vault; no unencrypted export, ever
+* ✅ Exports from Chrome, Edge, Brave, Firefox, Bitwarden, LastPass, Proton Pass, Dashlane, Apple Passwords, 1Password, KeePassXC, and NordPass recognized, and any other CSV matched by column
+* ✅ A different password for a saved login shows both, masked, with last changed and last used dates and the newer one marked; the one not picked is kept as the previous password for 30 days
+* ✅ The same login twice in one file with different passwords asks which one to import
+* ✅ Stopping an import saves nothing, deleted logins stay deleted unless the file's password is newer, and changes made while a choice is open are never overwritten
+* ✅ Import bookmarks straight from the browser the extension runs in, with bookmark access asked for on the click and given back right after, or from any browser's HTML export, into one list, skipping links already saved and bookmarks you deleted
+* ✅ Previous passwords kept a flat 30 days everywhere, with the date shown in the picker and in Manage
+* ✅ Each login records when it was last filled, shown in Manage and on the phone, and synced without counting as an edit
+* ✅ Editing a password in Manage keeps the old one as the previous password
+* ✅ Import sections in the extension User Guide, the website guide, and the phone User Guide
 
 ### v0.8.3 - Private Browser and Widgets (Oct 2026)
 
@@ -209,11 +222,11 @@
 
 ---
 
-## Upcoming After v0.8.3
+## Upcoming After v0.8.4
 
 ### v0.8.x - The Phone App
 
-Built in this order, each step shipping as its own v0.8 release. The phone de-drift shipped in v0.8.0, the vault QR rebuild in v0.8.1, Android Autofill with Share to Bookmarks in v0.8.2, and the private browser core in v0.8.3.
+Built in this order, each step shipping as its own v0.8 release. The phone de-drift shipped in v0.8.0, the vault QR rebuild in v0.8.1, Android Autofill with Share to Bookmarks in v0.8.2, the private browser core in v0.8.3, and importing from other managers in v0.8.4.
 
 **1. Android Autofill** - shipped in v0.8.2
 
@@ -221,7 +234,9 @@ Built in this order, each step shipping as its own v0.8 release. The phone de-dr
 
 **2. Modified Chromium browser** - core shipped in v0.8.3
 
-* Valid Vault autofill built in, with the same V tags and pickers as the extension (next, v0.8.4)
+* Next, v0.8.5: the tracker list moved to a bundled data file, empty ad space removed, Global Privacy Control, downloads from the menu, and a Tor mode through Orbot with a full wipe when switching
+* Tabs
+* Valid Vault autofill built in, with the same V tags and pickers as the extension
 * Reorder or choose the widget buttons
 * Confirm the browser on phones, and grow the tracker list from what testing shows
 
@@ -238,9 +253,9 @@ Until the vault QR is confirmed on devices, encrypted files on a USB drive are t
 
 * Filling apps that Android Autofill can't reach
 
-**5. Importing from other managers**
+**5. Importing from other managers** - shipped in v0.8.4
 
-* Import passwords exported from other password managers and bookmarks exported from other browsers, read on the device and encrypted straight into the vault
+* Confirm imports from more password managers on phones and computers, and add formats from what testing shows
 
 ### v0.9.x - Hardening and Polish
 
@@ -285,6 +300,8 @@ Until the vault QR is confirmed on devices, encrypted files on a USB drive are t
 
 ⚠️ **The private browser and widgets are new** - the first browser build runs on a Samsung phone, and the v0.8.3 layout and widgets are being tested on phones now. The browser needs Android 9 or newer, opens one page at a time, and does not download files yet
 
+⚠️ **Imports read CSV and bookmark HTML files only** - Samsung Pass has no export Valid Vault can read. Delete the CSV file after importing, since it holds your passwords unencrypted
+
 ⚠️ **Phones upgraded from an older version may need fingerprint re-enrolled once** - unlock with your password, which removes the old fingerprint setting, and re-enroll in Manage, or use Can't unlock? on the lock screen with your key file
 
 ⚠️ **Uni-Vault needs a browser setting in Brave** - Brave ships the File System Access API switched off; Chrome and Edge work out of the box, and Brave users can switch it on or keep using Export and Import
@@ -309,4 +326,4 @@ MIT License - See LICENSE file for details
 
 ---
 
-**Last Updated:** Oct 13, 2026
+**Last Updated:** Oct 14, 2026
