@@ -5,6 +5,18 @@ All notable changes to Valid Vault will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.4.1] - 2026-10-15
+
+Logins saved on one part of a site now fill on its other parts, such as a separate sign-in page.
+
+### Fixed
+
+* **Sign-in pages on a different part of a site.** Many sites sign you in on their own sign-in address, such as login.example.com or auth.example.com, while the login was saved or imported under www.example.com. The V tag now lists those logins in a section named Saved on other parts of this site, with the address each one was saved under, and fills the one you pick. Logging in with one of them doesn't offer to save it again.
+
+### Security
+
+* **Same site only.** Only logins saved under the same site are offered. On shared hosting addresses where every subdomain belongs to someone different, such as github.io pages, logins never cross from one subdomain to another.
+
 ## [0.8.4] - 2026-10-14
 
 Import your logins from another password manager and your bookmarks from another browser, on the extension and the phone. Previous passwords are now kept for 30 days, and each login shows when it was last used.

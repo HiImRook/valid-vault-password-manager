@@ -1,10 +1,15 @@
 # Valid Vault - Development Roadmap
 
-**Current Version:** v0.8.4 - **Status: Active Testing**
+**Current Version:** v0.8.4.1 - **Status: Active Testing**
 
 ---
 
 ## Version History (Completed)
+
+### v0.8.4.1 - Sign-In Pages Across a Site (Oct 2026)
+
+* ✅ Logins saved on one part of a site fill on its other parts, such as a separate sign-in page, listed in their own labeled section
+* ✅ Shared hosting addresses keep each subdomain's logins apart
 
 ### v0.8.4 - Import From Another App (Oct 2026)
 
@@ -222,7 +227,7 @@
 
 ---
 
-## Upcoming After v0.8.4
+## Upcoming After v0.8.4.1
 
 ### v0.8.x - The Phone App
 
@@ -326,4 +331,4 @@ MIT License - See LICENSE file for details
 
 ---
 
-**Last Updated:** Oct 14, 2026
+**Last Updated:** Oct 15, 2026

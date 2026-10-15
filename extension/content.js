@@ -365,7 +365,7 @@
       setNativeValue(password, cred.password)
       password.dispatchEvent(new Event('input', { bubbles: true, composed: true }))
       password.dispatchEvent(new Event('change', { bubbles: true, composed: true }))
-      if (!cred.isPrevious) noteCredentialUse(cred.username)
+      if (!cred.isPrevious) noteCredentialUse(cred.username, cred.domain)
     }
     if (cred.extraFields && cred.extraFields.length) {
       const form = (password && composedForm(password)) || document
@@ -560,13 +560,40 @@
       if (pendingId) { try { chrome.runtime.sendMessage({ action: 'resolvePendingSave', id: pendingId }) } catch (e) {} }
       return
     }
+    if (!existing && !locked) {
+      const related = await fetchRelatedLogins()
+      if (related.some((cred) => cred.username === u && cred.password === p)) {
+        if (pendingId) { try { chrome.runtime.sendMessage({ action: 'resolvePendingSave', id: pendingId }) } catch (e) {} }
+        return
+      }
+    }
     showSavePrompt(domain, u, p, !!existing, extras, pendingId, loginType, locked)
   }
 
   const captureInFlight = new WeakSet()
 
-  function noteCredentialUse(username) {
-    try { chrome.runtime.sendMessage({ action: 'noteCredentialUse', domain: currentDomain, username }).catch(() => {}) } catch (e) {}
+  function noteCredentialUse(username, domain) {
+    try { chrome.runtime.sendMessage({ action: 'noteCredentialUse', domain: domain || currentDomain, username }).catch(() => {}) } catch (e) {}
+  }
+
+  async function fetchRelatedLogins() {
+    let result = null
+    try { result = await chrome.runtime.sendMessage({ action: 'getRelatedCredentials', domain: currentDomain }) } catch (e) {}
+    const groups = (result && result.success && result.groups) || []
+    const logins = []
+    for (const group of groups) {
+      for (const cred of group.credentials) logins.push(Object.assign({}, cred, { domain: group.domain }))
+    }
+    return logins
+  }
+
+  function addRelatedSection(itemsContainer, related, onPick) {
+    if (related.length === 0) return
+    addPickerSection(itemsContainer, 'Saved on other parts of this site')
+    for (const cred of related) {
+      const icon = LOGIN_TYPE_ICON[cred.loginType || 'username'] || LOGIN_TYPE_ICON.username
+      addPickerItem(itemsContainer, icon + ' ' + cred.username + ' · ' + cred.domain, () => onPick(cred))
+    }
   }
 
   function resolveChangeUsername(record, fallback) {
@@ -1232,9 +1259,11 @@
     const creds = await chrome.runtime.sendMessage({ action: 'getCredentialsForDomain', domain: currentDomain })
     let emails = { success: true, emails: [] }
     if (classifyLoginType(field) === 'email') emails = await chrome.runtime.sendMessage({ action: 'getPersonalInfoAllEmails' })
+    const locked = !!((creds && creds.locked) || (emails && emails.locked))
     return {
-      locked: !!((creds && creds.locked) || (emails && emails.locked)),
+      locked,
       credentials: (creds && creds.success && creds.credentials) || [],
+      related: locked ? [] : await fetchRelatedLogins(),
       emails: (emails && emails.emails) || []
     }
   }
@@ -1273,11 +1302,12 @@
         })
       }
     }
+    addRelatedSection(itemsContainer, data.related, (cred) => fillCredentials(cred, formFields))
     if (data.emails.length > 0) {
       addPickerSection(itemsContainer, 'Your emails')
       for (const email of data.emails) addPickerItem(itemsContainer, email, () => fillFieldValue(field, email))
     }
-    if (ranked.length === 0 && data.emails.length === 0) {
+    if (ranked.length === 0 && data.related.length === 0 && data.emails.length === 0) {
       addPickerEmpty(itemsContainer, data.locked ? 'Vault is locked' : 'No saved logins for this site yet. Log in or sign up and Valid Vault will offer to save it.')
     }
   }
@@ -1306,6 +1336,15 @@
     itemsContainer.innerHTML = ''
     const creds = (result && result.success && result.credentials) || []
     record.cachedCreds = creds
+    const related = result && result.success ? await fetchRelatedLogins() : []
+    if (creds.length === 0 && related.length > 0) {
+      addRelatedSection(itemsContainer, related, (cred) => {
+        record.accountUsername = cred.username
+        fillFieldValue(field, cred.password)
+        noteCredentialUse(cred.username, cred.domain)
+      })
+      return
+    }
     if (creds.length === 0) {
       addPickerEmpty(itemsContainer, result && result.locked ? 'Vault is locked' : 'No saved login for this site yet.')
       return

@@ -1,6 +1,6 @@
 import * as uniVault from './linkedvault.js'
 import { masterKeyToCryptoKey } from './crypto.js'
-import { saveCredential as passwordsSaveCredential, getCredentials as passwordsGetCredentials, noteCredentialUse as passwordsNoteUse, restorePreviousPassword as passwordsRestorePrevious } from './passwords.js'
+import { saveCredential as passwordsSaveCredential, getCredentials as passwordsGetCredentials, getRelatedCredentials as passwordsGetRelated, noteCredentialUse as passwordsNoteUse, restorePreviousPassword as passwordsRestorePrevious } from './passwords.js'
 
 function readRawRecord(storeName, key) {
   return new Promise(function (resolve) {
@@ -95,6 +95,15 @@ async function credentialsForDomainViaShared(domain) {
   return result
 }
 
+async function relatedCredentialsViaShared(domain) {
+  const bytes = await getSessionKeyBytes()
+  if (!bytes) return { success: false, groups: [], locked: true }
+  const key = await crypto.subtle.importKey('raw', new Uint8Array(bytes), { name: 'AES-GCM', length: 256 }, false, ['decrypt'])
+  const result = await passwordsGetRelated(domain, key)
+  if (!result.success) return { success: false, groups: [], locked: true }
+  return result
+}
+
 async function saveCredentialViaShared(domain, username, password, extraFields, loginType) {
   const bytes = await getSessionKeyBytes()
   if (!bytes) return { success: false, locked: true }
@@ -131,6 +140,10 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
   }
   if (request.action === 'saveCredential') {
     saveCredentialViaShared(request.domain, request.username, request.password, request.extraFields, request.loginType).then(sendResponse)
+    return true
+  }
+  if (request.action === 'getRelatedCredentials') {
+    relatedCredentialsViaShared(request.domain).then(sendResponse)
     return true
   }
   if (request.action === 'getCredentialsForDomain') {

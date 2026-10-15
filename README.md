@@ -86,6 +86,7 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 * Changing a password keeps the old one as a previous password, shown as a labeled second choice in the login picker with one-click restore; it is kept for 30 days from the day it was replaced, and the picker shows until when
 * A save prompt shown while the vault is locked offers Unlock and Save, which opens the Valid Vault unlock window and saves once unlocked
 * A visible field tag marks anything Valid Vault has matched
+* Logins saved on one part of a site, such as www.example.com, are offered on its other parts, such as a separate sign-in page at login.example.com, in their own labeled section; shared hosting addresses where each subdomain has a different owner are kept apart
 * Passwords are never copied to the clipboard; autofill places them directly into the field you clicked
 * Website Credentials reliably saves new logins from real signup flows, including submit-triggered navigation, cross-domain SSO/MFA redirects, and multi-form pages
 * Each saved login now classifies its `loginType` (username, email, or phone) for more reliable matching

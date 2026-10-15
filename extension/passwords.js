@@ -4,6 +4,9 @@ import { getPasswordVault, setPasswordVault, getVaultMigrationJournal, setVaultM
 const PREVIOUS_KEEP_MS = 30 * 24 * 60 * 60 * 1000
 const NOTES_LABEL = 'Notes'
 const USE_WRITE_INTERVAL_MS = 10 * 60 * 1000
+const MULTI_PART_SUFFIXES = new Set(['co.uk', 'org.uk', 'ac.uk', 'gov.uk', 'me.uk', 'ltd.uk', 'plc.uk', 'net.uk', 'com.au', 'net.au', 'org.au', 'edu.au', 'gov.au', 'co.nz', 'org.nz', 'net.nz', 'co.jp', 'ne.jp', 'or.jp', 'ac.jp', 'co.kr', 'or.kr', 'com.br', 'net.br', 'org.br', 'com.mx', 'org.mx', 'co.in', 'net.in', 'org.in', 'firm.in', 'co.za', 'org.za', 'com.ar', 'com.tr', 'com.cn', 'net.cn', 'org.cn', 'com.tw', 'org.tw', 'com.hk', 'org.hk', 'com.sg', 'org.sg', 'com.my', 'com.ph', 'com.vn', 'co.id', 'co.th', 'co.il', 'com.sa', 'com.eg', 'com.pk', 'com.ng', 'co.ke', 'com.co', 'com.pe', 'com.ve', 'com.ua', 'co.at', 'or.at', 'com.pl', 'com.es', 'com.pt', 'com.gr', 'com.ru'])
+const SHARED_HOST_SUFFIXES = new Set(['github.io', 'gitlab.io', 'herokuapp.com', 'vercel.app', 'netlify.app', 'pages.dev', 'workers.dev', 'web.app', 'firebaseapp.com', 'appspot.com', 'blogspot.com', 'wordpress.com', 'azurewebsites.net', 'cloudfront.net', 'cloudapp.net', 'amazonaws.com', 'glitch.me', 'onrender.com', 'fly.dev', 'replit.app', 'repl.co', 'ngrok.io', 'ngrok-free.app', 'myshopify.com', 'wixsite.com', 'squarespace.com', 'substack.com', 'tumblr.com', 'neocities.org', 'carrd.co', 'duckdns.org', 'translate.goog', 'webflow.io', 'framer.website', 'notion.site', 'surge.sh', 'bitbucket.io', 'readthedocs.io', 'deno.dev', 'railway.app'])
+const IPV4_PATTERN = /^\d{1,3}(\.\d{1,3}){3}$/
 const APP_PACKAGE_PATTERN = /^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+$/
 
 function retirePassword(cred, oldPassword, now) {
@@ -352,6 +355,58 @@ async function saveCredential(domain, username, password, masterKey, extraFields
   return { success: true, id }
 }
 
+function siteOf(host) {
+  const value = String(host || '').toLowerCase().replace(/\.$/, '')
+  if (!value || IPV4_PATTERN.test(value) || value.includes(':')) return value
+  const labels = value.split('.')
+  if (labels.length < 2) return value
+  const lastTwo = labels.slice(-2).join('.')
+  if (SHARED_HOST_SUFFIXES.has(lastTwo)) return labels.length >= 3 ? labels.slice(-3).join('.') : value
+  if (MULTI_PART_SUFFIXES.has(lastTwo)) return labels.length >= 3 ? labels.slice(-3).join('.') : value
+  return lastTwo
+}
+
+function visibleCredential(cred, now) {
+  const keepPrevious = !!cred.previousPassword && !previousExpired(cred, now)
+  return {
+    id: cred.id,
+    username: cred.username,
+    password: cred.password,
+    extraFields: cred.extraFields || [],
+    loginType: cred.loginType || inferLoginType(cred.username),
+    previousPassword: keepPrevious ? cred.previousPassword : null,
+    previousSetAt: keepPrevious ? cred.previousSetAt || null : null,
+    previousUntil: keepPrevious ? previousExpiresAt(cred.previousSetAt) : null,
+    lastUsedAt: lastUsed(cred) || null,
+    createdAt: cred.createdAt,
+    updatedAt: cred.updatedAt
+  }
+}
+
+function relatedCredentials(tree, domain) {
+  const site = siteOf(domain)
+  const exact = String(domain || '').toLowerCase()
+  const now = Date.now()
+  const groups = []
+  if (!site) return groups
+  for (const other of Object.keys(tree.credentials || {}).sort()) {
+    if (other === exact || siteOf(other) !== site) continue
+    const credentials = (tree.credentials[other] || []).filter((cred) => !cred.deleted).map((cred) => visibleCredential(cred, now))
+    if (credentials.length) groups.push({ domain: other, credentials })
+  }
+  return groups
+}
+
+async function getRelatedCredentials(domain, masterKey) {
+  let tree
+  try {
+    tree = await readVaultTree(masterKey)
+  } catch (error) {
+    return { success: false, error: 'Decryption failed', groups: [] }
+  }
+  return { success: true, groups: relatedCredentials(tree, domain) }
+}
+
 async function getCredentials(domain, masterKey) {
   let tree
   try {
@@ -365,26 +420,8 @@ async function getCredentials(domain, masterKey) {
     return { success: true, credentials: [] }
   }
 
-  const result = []
   const now = Date.now()
-  for (const cred of domainCreds) {
-    if (cred.deleted) continue
-    const keepPrevious = !!cred.previousPassword && !previousExpired(cred, now)
-    result.push({
-      id: cred.id,
-      username: cred.username,
-      password: cred.password,
-      extraFields: cred.extraFields || [],
-      loginType: cred.loginType || inferLoginType(cred.username),
-      previousPassword: keepPrevious ? cred.previousPassword : null,
-      previousSetAt: keepPrevious ? cred.previousSetAt || null : null,
-      previousUntil: keepPrevious ? previousExpiresAt(cred.previousSetAt) : null,
-      lastUsedAt: lastUsed(cred) || null,
-      createdAt: cred.createdAt,
-      updatedAt: cred.updatedAt
-    })
-  }
-
+  const result = domainCreds.filter((cred) => !cred.deleted).map((cred) => visibleCredential(cred, now))
   return { success: true, credentials: result }
 }
 
@@ -873,6 +910,9 @@ export {
   ensureVault,
   saveCredential,
   getCredentials,
+  getRelatedCredentials,
+  relatedCredentials,
+  siteOf,
   getAllDomains,
   updateCredential,
   deleteCredential,
