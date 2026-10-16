@@ -36,6 +36,10 @@ A local, encrypted, QR code portable password manager. No cloud, accounts, or sy
 >
 > Bring your logins over from another password manager's CSV export, and your bookmarks from a browser's bookmarks HTML file, on the extension and the phone. The extension can also pull in the bookmarks of the browser it runs in with one click. Exports from Chrome, Edge, Brave, Firefox, Bitwarden, LastPass, Proton Pass, Dashlane, Apple Passwords, 1Password, KeePassXC, and NordPass are recognized, and any other CSV can be matched by column. When the file and your vault have different passwords for a login, you see both with their dates and pick the current one, and the other is kept as the previous password for 30 days. Stopping an import changes nothing, and Valid Vault still has no unencrypted export. Previous passwords are now kept for 30 days everywhere, and each login shows when it was last used. See [CHANGELOG.md](CHANGELOG.md) for full details.
 
+> ✅ **Private Browser Tor Mode and Downloads - v0.8.5**
+>
+> The phone's private browser now blocks tens of thousands of known tracker and ad domains from the EasyPrivacy and EasyList lists alongside its own, and removes the empty space left where an ad was blocked. Every page receives the Global Privacy Control signal. Files download to your Downloads folder after you confirm them. Tor mode, in the menu, sends every page through Orbot with no direct connection as a fallback, turns the bars purple, removes WebRTC, and offers Safer with JavaScript off. Switching in or out of Tor mode and New identity wipe the whole session. The browser also finishes its startup wipe before loading anything. See [CHANGELOG.md](CHANGELOG.md) for full details.
+
 ---
 
 ## What is Valid Vault?
@@ -105,6 +109,10 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 
 * Modified Chromium, through the Android System WebView, built into the phone app
 * Known trackers and ad scripts blocked, with a count in the address bar and a per-site switch for sites that break
+* Valid Vault's own tracker list plus the EasyPrivacy and EasyList domain lists, applied when a page loads them from another site
+* Empty space left by blocked ads removed from the page
+* Global Privacy Control sent to every site
+* Downloads saved to the Downloads folder after a confirm, with the file name and size shown first
 * Tracking tags stripped from links (utm, fbclid, gclid, YouTube and Spotify si, and more), and redirect wrappers from Google, Facebook, Instagram, YouTube, Steam, and Reddit skipped
 * Third-party cookies blocked, and the app identity header hidden from sites
 * Private by default: cookies, site data, cache, and history wiped when you close it
@@ -114,7 +122,9 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 * 4x1 Search privately widget with a Bookmarks button, a 4x2 widget with Bookmarks, Logins, Wallet, and Personal, and a Search shortcut on the app icon; every button asks for fingerprint or device PIN once
 * Bookmarks open in the browser, and the browser's Bookmarks button opens them in Valid Vault
 * Runs in its own process with its own storage, so it never touches the vault
-* Works with Tor or a VPN through an app such as Orbot in VPN mode
+* Tor mode in the menu: every page goes through Orbot with no direct fallback, so pages stop loading if Orbot stops, and the bars turn purple while it is on
+* In Tor mode WebRTC is removed, downloads are off, Safer turns JavaScript off, and New identity clears the session; switching in or out wipes everything
+* Also works with a VPN, or Orbot in VPN mode
 
 **Sync and Backup:**
 
@@ -155,7 +165,7 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 * Android via Capacitor, with native plugins for biometric auth, file saving, autofill, sharing, and the private browser
 * Vendored, self-contained code only, no Google SDKs in the scan path
 
-## Current Status: v0.8.4 - Active Testing
+## Current Status: v0.8.5 - Active Testing
 
 **Completed:**
 
@@ -201,11 +211,11 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 * ✅ Private browser on the phone: modified Chromium with tracker blocking, clean links, and a wipe on close
 * ✅ Home screen widgets for search, bookmarks, logins, wallets, and personal info, each one fingerprint away
 * ✅ Import passwords from another password manager's CSV export and bookmarks from a browser's HTML export, on the extension and the phone
+* ✅ Private browser Tor mode through Orbot, the EasyPrivacy and EasyList domain lists, empty ad space removed, Global Privacy Control, and downloads
 
 **In Development:**
 
-* 📋 Private browser additions (v0.8.5): a bundled tracker list, empty ad space removed, Global Privacy Control, downloads, and a Tor mode through Orbot
-* 📋 Tabs in the private browser, then Valid Vault autofill inside it
+* 📋 Tabs in the private browser, with a start page for pinned sites, then Valid Vault autofill inside it
 * 📋 QR transport (v0.8.x): confirming the vault QR on phone cameras, scanner reliability across devices, and a bookmarks QR share
 * 📋 Continued field testing of sync, backup, and native file saving across Android versions
 
@@ -350,7 +360,9 @@ A custom Capacitor plugin writes exported files directly to the Downloads folder
 A native autofill service reads only which fields a form has, never their contents, and offers one Valid Vault entry that requires authentication. Tapping it opens a separate Valid Vault screen running the same bundled code in its own session, so the unlocked key never crosses from the main app. After fingerprint, device PIN, or password, that screen decrypts the vault, matches the site, and hands Android exactly one username and password for that form. Saving works the same way in reverse: a typed password waits in memory for at most two minutes until you confirm.
 
 **Private Browser:**
-The browser is its own Android activity running in a separate process, with the WebView's data directory split off from the vault's. Every page request is checked against a bundled tracker list and blocked requests get an empty response. Main-frame navigations are cleaned of tracking tags and unwrapped from known redirect links before loading. Closing the browser deletes its cookies, storage, cache, and history, and opening it clears anything left from a session Android ended early. Browser files are left out of Android backups.
+The browser is its own Android activity running in a separate process, with the WebView's data directory split off from the vault's. Every page request is checked against Valid Vault's own tracker list and against domains taken from EasyPrivacy and EasyList, which ship as a separate data file under their own license; list domains are blocked only when the page belongs to a different site. Blocked requests get an empty response, and the elements that requested them are hidden along with standard ad slots. Main-frame navigations are cleaned of tracking tags and unwrapped from known redirect links before loading. A script at the start of every frame sets Global Privacy Control, and pages opened from the address bar also carry the Sec-GPC header. Closing the browser deletes its cookies, storage, cache, and history, and opening it clears anything left from a session Android ended early before the first page loads. Browser files are left out of Android backups.
+
+Tor mode uses the WebView proxy override to send every request, including hostname lookups, to Orbot's SOCKS port with no direct rule, so a stopped Orbot means failed requests. Turning it on first checks that Orbot answers as a SOCKS proxy. The page view is destroyed before the proxy changes and a new one is created after the wipe, so nothing from one mode carries into the other. A script at the start of every frame removes WebRTC, downloads are refused, and the proxy only applies to the browser's own process, never the vault's.
 
 **Sovereign QR Scanner:**
 Scanning uses the web camera through getUserMedia, drawing the square shown in the scan box to a canvas that a vendored jsQR decoder reads. No native scanning plugin, no Google SDK. The stream itself is a fountain code: the payload is compressed, split into small pieces shown once in order, then followed by mixes of pieces, and the receiver solves for any pieces it missed.
@@ -415,6 +427,8 @@ Pre-1.0, under active testing. Community review welcome. auth.js, crypto.js, ses
 ## License
 
 MIT License - See LICENSE file
+
+The browser's EasyPrivacy and EasyList domain file, android/app/src/main/assets/browser/easylist-domains.txt, comes from the EasyList authors (https://easylist.to/) and keeps its own GPLv3 or CC BY-SA 3.0 license, described in EASYLIST-NOTICE.txt beside it.
 
 Copyright (c) 2025-2026 by Rook
 

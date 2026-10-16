@@ -5,6 +5,39 @@ All notable changes to Valid Vault will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.5] - 2026-10-16
+
+The phone's private browser gets a Tor mode through Orbot, downloads, a much larger tracker list, Global Privacy Control, and removal of the empty space blocked ads leave behind.
+
+### Added
+
+* **Tor mode.** Turn Tor mode on from the browser's ⋮ menu. Every page then goes through Orbot, the Tor Project's app, and the address bar and toolbar turn purple so you always know which mode you're in. If Orbot isn't running, the browser says so and offers to open or install it. A note each time Tor mode turns on explains what it covers and how to use it after signing in to a site. Each launch of the browser starts in normal mode.
+* **New identity.** In Tor mode, New identity clears cookies, logins, site data, cache, and history from the session and starts fresh.
+* **Safer.** In Tor mode, Safer turns JavaScript off. Pages load with fewer moving parts, and some sites lose menus, logins, or video while it is on.
+* **Downloads.** Files open a confirm box with their name and size, then save to your Downloads folder with a notification when done. On Android 9, the first download asks for storage access.
+* **A larger tracker list.** The EasyPrivacy and EasyList domain lists now ship with the browser alongside Valid Vault's own list. Their domains are blocked when a page loads them from a different site, and the per-site switch still turns blocking off for a site that breaks.
+* **Global Privacy Control.** Every page and frame receives the Global Privacy Control signal, which asks sites not to sell or share your data. Pages opened from the address bar, links, and bookmarks also send the Sec-GPC header.
+
+### Changed
+
+* **Empty ad space removed.** Where an ad request was blocked, the empty box it leaves on the page is hidden, along with standard ad slots. Turning tracker blocking off for a site turns this off as well.
+
+### Security
+
+* **No direct fallback in Tor mode.** Every request, including looking up site names, goes to Orbot. If Orbot stops, pages stop loading until it is running again. Turning Tor mode on first checks that Orbot is answering.
+* **A clean switch.** Switching into or out of Tor mode destroys the page, wipes cookies, site data, cache, and history, and starts a new page, so nothing from one mode carries into the other.
+* **WebRTC removed in Tor mode.** Pages can't use WebRTC to reach the internet outside Orbot.
+* **Downloads off in Tor mode.** Android's download manager doesn't go through Orbot, so downloads are refused while Tor mode is on.
+* **The vault stays separate.** Tor mode applies only to the browser's own process. The vault never goes through it.
+* **Startup wipe finishes first.** Opening the browser now waits until anything left from a session Android ended early is wiped before loading the first page.
+
+### Notes
+
+* The EasyPrivacy and EasyList domain file comes from the EasyList authors (https://easylist.to/) and keeps its own GPLv3 or CC BY-SA 3.0 license, described in EASYLIST-NOTICE.txt beside it. blocklist.js rebuilds it from the EasyList repository.
+* Tor mode needs the Orbot app and a recent Android System WebView.
+* No extension changes. The extension stays at 0.8.4.1.
+* Verified with unit tests of tracker matching and site grouping, and in Chromium: the Global Privacy Control, WebRTC removal, and ad space scripts, including frames added after the page loads.
+
 ## [0.8.4.1] - 2026-10-15
 
 Logins saved on one part of a site now fill on its other parts, such as a separate sign-in page.

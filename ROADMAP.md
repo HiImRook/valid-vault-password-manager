@@ -1,10 +1,21 @@
 # Valid Vault - Development Roadmap
 
-**Current Version:** v0.8.4.1 - **Status: Active Testing**
+**Current Version:** v0.8.5 - **Status: Active Testing**
 
 ---
 
 ## Version History (Completed)
+
+### v0.8.5 - Private Browser Tor Mode and Downloads (Oct 2026)
+
+* ✅ EasyPrivacy and EasyList domain lists added beside Valid Vault's own tracker list, as a separate data file under their own license, applied when a page loads them from another site
+* ✅ Empty space left by blocked ads removed from the page
+* ✅ Global Privacy Control on every page
+* ✅ Downloads to the Downloads folder after a confirm
+* ✅ Tor mode in the menu through Orbot, with no direct fallback, an Orbot check before it turns on, and purple bars while it is on
+* ✅ WebRTC removed, downloads off, and Safer with JavaScript off in Tor mode
+* ✅ New identity, and a full wipe when switching in or out of Tor mode
+* ✅ The startup wipe finishes before the first page loads
 
 ### v0.8.4.1 - Sign-In Pages Across a Site (Oct 2026)
 
@@ -227,11 +238,11 @@
 
 ---
 
-## Upcoming After v0.8.4.1
+## Upcoming After v0.8.5
 
 ### v0.8.x - The Phone App
 
-Built in this order, each step shipping as its own v0.8 release. The phone de-drift shipped in v0.8.0, the vault QR rebuild in v0.8.1, Android Autofill with Share to Bookmarks in v0.8.2, the private browser core in v0.8.3, and importing from other managers in v0.8.4.
+Built in this order, each step shipping as its own v0.8 release. The phone de-drift shipped in v0.8.0, the vault QR rebuild in v0.8.1, Android Autofill with Share to Bookmarks in v0.8.2, the private browser core in v0.8.3, importing from other managers in v0.8.4, and the browser's Tor mode and downloads in v0.8.5.
 
 **1. Android Autofill** - shipped in v0.8.2
 
@@ -239,8 +250,8 @@ Built in this order, each step shipping as its own v0.8 release. The phone de-dr
 
 **2. Modified Chromium browser** - core shipped in v0.8.3
 
-* Next, v0.8.5: the tracker list moved to a bundled data file, empty ad space removed, Global Privacy Control, downloads from the menu, and a Tor mode through Orbot with a full wipe when switching
-* Tabs
+* Tor mode, downloads, the EasyPrivacy and EasyList lists, empty ad space removed, and Global Privacy Control shipped in v0.8.5
+* Next: tabs, with a start page for pinned sites and backgrounds in place of the home page
 * Valid Vault autofill built in, with the same V tags and pickers as the extension
 * Reorder or choose the widget buttons
 * Confirm the browser on phones, and grow the tracker list from what testing shows
@@ -303,7 +314,7 @@ Until the vault QR is confirmed on devices, encrypted files on a USB drive are t
 
 ⚠️ **Android Autofill is new and not yet confirmed on a phone** - it is verified in Chromium with Android's autofill calls simulated. Chrome needs its Autofill using another service setting turned on, and browsers without support for third-party autofill do not ask Valid Vault at all
 
-⚠️ **The private browser and widgets are new** - the first browser build runs on a Samsung phone, and the v0.8.3 layout and widgets are being tested on phones now. The browser needs Android 9 or newer, opens one page at a time, and does not download files yet
+⚠️ **The private browser and widgets are new** - the first browser build runs on a Samsung phone, and the v0.8.3 layout and widgets are being tested on phones now. The browser needs Android 9 or newer and opens one page at a time
 
 ⚠️ **Imports read CSV and bookmark HTML files only** - Samsung Pass has no export Valid Vault can read. Delete the CSV file after importing, since it holds your passwords unencrypted
 
@@ -331,4 +342,4 @@ MIT License - See LICENSE file for details
 
 ---
 
-**Last Updated:** Oct 15, 2026
+**Last Updated:** Oct 16, 2026
