@@ -1,17 +1,44 @@
 package com.valid.vault;
 
+import android.content.Context;
+
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 final class BrowserPrivacy {
 
     private static final int MAX_UNWRAP = 3;
+    private static final String LIST_ASSET = "browser/easylist-domains.txt";
+    private static final String LIST_EXCEPTION = "@@";
+    private static final AtomicBoolean LIST_STARTED = new AtomicBoolean(false);
+    private static volatile Set<String> listBlocked = Collections.emptySet();
+    private static volatile Set<String> listAllowed = Collections.emptySet();
+
+    private static final Set<String> MULTI_PART_SUFFIXES = new HashSet<>(Arrays.asList(
+        "co.uk", "org.uk", "ac.uk", "gov.uk", "me.uk", "ltd.uk", "plc.uk", "net.uk", "com.au", "net.au", "org.au", "edu.au", "gov.au",
+        "co.nz", "org.nz", "net.nz", "co.jp", "ne.jp", "or.jp", "ac.jp", "co.kr", "or.kr", "com.br", "net.br", "org.br", "com.mx", "org.mx",
+        "co.in", "net.in", "org.in", "firm.in", "co.za", "org.za", "com.ar", "com.tr", "com.cn", "net.cn", "org.cn", "com.tw", "org.tw",
+        "com.hk", "org.hk", "com.sg", "org.sg", "com.my", "com.ph", "com.vn", "co.id", "co.th", "co.il", "com.sa", "com.eg", "com.pk",
+        "com.ng", "co.ke", "com.co", "com.pe", "com.ve", "com.ua", "co.at", "or.at", "com.pl", "com.es", "com.pt", "com.gr", "com.ru"
+    ));
+
+    private static final Set<String> SHARED_HOST_SUFFIXES = new HashSet<>(Arrays.asList(
+        "github.io", "gitlab.io", "herokuapp.com", "vercel.app", "netlify.app", "pages.dev", "workers.dev", "web.app", "firebaseapp.com",
+        "appspot.com", "blogspot.com", "wordpress.com", "azurewebsites.net", "cloudfront.net", "cloudapp.net", "amazonaws.com", "glitch.me",
+        "onrender.com", "fly.dev", "replit.app", "repl.co", "ngrok.io", "ngrok-free.app", "myshopify.com", "wixsite.com", "squarespace.com",
+        "substack.com", "tumblr.com", "neocities.org", "carrd.co", "duckdns.org", "translate.goog", "webflow.io", "framer.website",
+        "notion.site", "surge.sh", "bitbucket.io", "readthedocs.io", "deno.dev", "railway.app"
+    ));
 
     private static final Set<String> TRACKER_DOMAINS = new HashSet<>(Arrays.asList(
         "google-analytics.com",
@@ -249,9 +276,63 @@ final class BrowserPrivacy {
         return stripParams(current);
     }
 
-    private static String trackerDomainOf(String host) {
-        for (String domain : TRACKER_DOMAINS) if (hostIs(host, domain)) return domain;
-        return null;
+    static void loadList(Context context) {
+        if (!LIST_STARTED.compareAndSet(false, true)) return;
+        Context app = context.getApplicationContext();
+        Thread loader = new Thread(() -> {
+            Set<String> blocked = new HashSet<>();
+            Set<String> allowed = new HashSet<>();
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(app.getAssets().open(LIST_ASSET), StandardCharsets.UTF_8))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    String entry = line.trim().toLowerCase(Locale.ROOT);
+                    if (entry.isEmpty()) continue;
+                    if (entry.startsWith(LIST_EXCEPTION)) allowed.add(entry.substring(LIST_EXCEPTION.length()));
+                    else blocked.add(entry);
+                }
+            } catch (Exception e) {
+                LIST_STARTED.set(false);
+                return;
+            }
+            listAllowed = Collections.unmodifiableSet(allowed);
+            listBlocked = Collections.unmodifiableSet(blocked);
+        });
+        loader.setPriority(Thread.MIN_PRIORITY);
+        loader.start();
+    }
+
+    private static String matchIn(String host, Set<String> domains) {
+        if (host == null || host.isEmpty() || domains.isEmpty()) return null;
+        String current = host;
+        while (true) {
+            if (domains.contains(current)) return current;
+            int dot = current.indexOf('.');
+            if (dot < 0) return null;
+            current = current.substring(dot + 1);
+        }
+    }
+
+    private static boolean ipLiteral(String host) {
+        if (host.startsWith("[")) return true;
+        for (int i = 0; i < host.length(); i++) {
+            char c = host.charAt(i);
+            if ((c < '0' || c > '9') && c != '.') return false;
+        }
+        return true;
+    }
+
+    static String siteOf(String host) {
+        if (host == null) return "";
+        String value = host.toLowerCase(Locale.ROOT);
+        if (value.endsWith(".")) value = value.substring(0, value.length() - 1);
+        if (value.isEmpty() || ipLiteral(value)) return value;
+        String[] labels = value.split("\\.");
+        if (labels.length < 2) return value;
+        String lastTwo = labels[labels.length - 2] + "." + labels[labels.length - 1];
+        if (SHARED_HOST_SUFFIXES.contains(lastTwo) || MULTI_PART_SUFFIXES.contains(lastTwo)) {
+            return labels.length >= 3 ? labels[labels.length - 3] + "." + lastTwo : value;
+        }
+        return lastTwo;
     }
 
     private static boolean bundledAllowed(String pageHost, String requestHost) {
@@ -273,13 +354,16 @@ final class BrowserPrivacy {
         if (host.isEmpty()) return false;
         if (siteAllowed(pageHost, allowedSites)) return false;
         if (bundledAllowed(pageHost, host)) return false;
-        String domain = trackerDomainOf(host);
+        String domain = matchIn(host, TRACKER_DOMAINS);
         if (domain != null) return !hostIs(pageHost, domain);
         String[] parts = split(requestUrl);
         String path = parts == null ? "" : parts[1];
         for (String[] rule : TRACKER_PATHS) {
             if (hostIs(host, rule[0]) && path.startsWith(rule[1]) && !hostIs(pageHost, rule[0])) return true;
         }
-        return false;
+        String pageSite = siteOf(pageHost);
+        if (!pageSite.isEmpty() && pageSite.equals(siteOf(host))) return false;
+        if (matchIn(host, listAllowed) != null) return false;
+        return matchIn(host, listBlocked) != null;
     }
 }

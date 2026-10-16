@@ -1,0 +1,15 @@
+easylist-domains.txt
+
+Domain entries extracted from EasyList and EasyPrivacy.
+Source: The EasyList authors (https://easylist.to/)
+Repository: https://github.com/easylist/easylist
+Commit: 43ec79aa85cfcd984711796bf0a2e8a8ae0ddb2c
+Files: easyprivacy/easyprivacy_trackingservers.txt, easyprivacy/easyprivacy_trackingservers_admiral.txt, easyprivacy/easyprivacy_trackingservers_general.txt, easyprivacy/easyprivacy_trackingservers_international.txt, easyprivacy/easyprivacy_trackingservers_mining.txt, easyprivacy/easyprivacy_trackingservers_notifications.txt, easyprivacy/easyprivacy_trackingservers_thirdparty.txt, easylist/easylist_adservers.txt, easyprivacy/easyprivacy_allowlist.txt, easylist/easylist_allowlist.txt
+
+This file is licensed separately from Valid Vault, under the same terms as its source:
+GNU General Public License version 3 or later, or
+Creative Commons Attribution-ShareAlike 3.0 Unported or later.
+https://easylist.to/pages/licence.html
+
+Changes: only plain domain rules were kept, other rule types were dropped, and the entries were sorted.
+Lines starting with @@ are exceptions taken from the allowlists.

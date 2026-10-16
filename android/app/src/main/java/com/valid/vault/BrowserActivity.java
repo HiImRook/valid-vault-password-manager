@@ -1,12 +1,15 @@
 package com.valid.vault;
 
+import android.Manifest;
 import android.animation.ValueAnimator;
 import android.app.Activity;
 import android.app.ActivityManager;
+import android.app.AlertDialog;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.graphics.Typeface;
@@ -17,6 +20,7 @@ import android.os.Bundle;
 import android.os.SystemClock;
 import android.content.res.Configuration;
 import android.text.InputType;
+import android.text.format.Formatter;
 import android.util.DisplayMetrics;
 import android.util.TypedValue;
 import android.view.Gravity;
@@ -51,14 +55,21 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.RequiresApi;
+import androidx.webkit.ProxyController;
 import androidx.webkit.WebSettingsCompat;
+import androidx.webkit.WebViewCompat;
 import androidx.webkit.WebViewFeature;
 
 import java.io.ByteArrayInputStream;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Pattern;
 
@@ -77,6 +88,9 @@ public class BrowserActivity extends Activity {
     private static final int COLOR_BORDER = Color.parseColor("#1F9E40");
     private static final int COLOR_TEXT = Color.parseColor("#B8F0C4");
     private static final int COLOR_OFF = Color.parseColor("#FF5555");
+    private static final int COLOR_TOR_BAR = Color.parseColor("#1C1030");
+    private static final int COLOR_TOR_ACCENT = Color.parseColor("#C29BFF");
+    private static final int COLOR_TOR_BORDER = Color.parseColor("#7A4FD0");
     private static final int TOP_ROW_DP = 60;
     private static final int PROGRESS_DP = 3;
     private static final int BOTTOM_BAR_DP = 56;
@@ -95,6 +109,15 @@ public class BrowserActivity extends Activity {
     private static final int MENU_TRACKERS = 3;
     private static final int MENU_OPEN_OUTSIDE = 4;
     private static final int MENU_CLOSE = 5;
+    private static final int MENU_TOR = 6;
+    private static final int MENU_NEW_IDENTITY = 7;
+    private static final int MENU_SAFER = 8;
+    private static final int REQUEST_STORAGE = 41;
+    private static final int MAX_COLLAPSE_URLS = 200;
+    private static final long COLLAPSE_DELAY_MS = 400;
+    private static final Map<String, String> GPC_HEADERS = Collections.singletonMap("Sec-GPC", "1");
+    private static final String HINT_NORMAL = "Search or enter address";
+    private static final String HINT_TOR = "Search with Tor";
     private static final Pattern SCHEME = Pattern.compile("^[a-zA-Z][a-zA-Z0-9+.-]*:.*");
     private static final Pattern HOSTLIKE = Pattern.compile("^[^\\s/?#]+\\.[a-zA-Z]{2,}([/:?#].*)?$");
     private static final String BLANK_REASON = "No Content";
@@ -129,15 +152,33 @@ public class BrowserActivity extends Activity {
     private final AtomicInteger blockedCount = new AtomicInteger(0);
     private final AtomicInteger sessionBlocked = new AtomicInteger(0);
     private String engine = BrowserSettings.ENGINE_STARTPAGE;
+    private final ConcurrentLinkedQueue<String> blockedUrls = new ConcurrentLinkedQueue<>();
+    private final AtomicInteger blockedQueued = new AtomicInteger(0);
+    private final AtomicBoolean collapseScheduled = new AtomicBoolean(false);
+    private final Runnable collapseRunnable = this::collapseAds;
+    private boolean ready = false;
+    private Intent pendingIntent = null;
+    private boolean torMode = false;
+    private boolean safer = false;
+    private boolean switching = false;
+    private Runnable pendingDownload = null;
 
     private int dp(int value) {
         return (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, value, getResources().getDisplayMetrics());
     }
 
+    private int barColor() {
+        return torMode ? COLOR_TOR_BAR : COLOR_BAR;
+    }
+
+    private int accentColor() {
+        return torMode ? COLOR_TOR_ACCENT : COLOR_GREEN;
+    }
+
     private GradientDrawable box(int fill, int radiusDp) {
         GradientDrawable shape = new GradientDrawable();
         shape.setColor(fill);
-        shape.setStroke(dp(1), COLOR_BORDER);
+        shape.setStroke(dp(1), torMode ? COLOR_TOR_BORDER : COLOR_BORDER);
         shape.setCornerRadius(dp(radiusDp));
         return shape;
     }
@@ -196,15 +237,10 @@ public class BrowserActivity extends Activity {
         setTaskDescription(new ActivityManager.TaskDescription(TASK_LABEL, R.drawable.vv_logo, COLOR_BAR));
         goEdgeToEdge();
         loadSettings();
+        BrowserPrivacy.loadList(this);
 
         root = new FrameLayout(this);
         root.setBackgroundColor(COLOR_BG);
-
-        web = new WebView(this);
-        web.setBackgroundColor(COLOR_BG);
-        wipe(web);
-        configure(web);
-        root.addView(web, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
         home = buildHome();
         root.addView(home, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
@@ -231,9 +267,72 @@ public class BrowserActivity extends Activity {
         });
 
         setContentView(root);
+        createWeb();
         root.requestApplyInsets();
         updateBar();
-        handleIntent(getIntent());
+        pendingIntent = getIntent();
+        Runnable start = () -> {
+            if (isDestroyed()) return;
+            wipe(web, this::becomeReady);
+        };
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.PROXY_OVERRIDE)) {
+            try {
+                ProxyController.getInstance().clearProxyOverride(getMainExecutor(), start);
+            } catch (Exception e) {
+                start.run();
+            }
+        } else {
+            start.run();
+        }
+    }
+
+    private void becomeReady() {
+        if (isDestroyed() || web == null) return;
+        ready = true;
+        Intent intent = pendingIntent;
+        pendingIntent = null;
+        if (intent == null) showHome();
+        else handleIntent(intent);
+    }
+
+    private void endSwitch() {
+        switching = false;
+        Intent intent = pendingIntent;
+        pendingIntent = null;
+        if (intent != null) handleIntent(intent);
+    }
+
+    private void createWeb() {
+        web = new WebView(this);
+        web.setBackgroundColor(COLOR_BG);
+        configure(web);
+        root.addView(web, 0, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        web.clearCache(true);
+        web.clearFormData();
+        web.clearSslPreferences();
+        layoutChrome();
+    }
+
+    private void destroyWeb() {
+        if (web == null) return;
+        WebView old = web;
+        web = null;
+        old.stopLoading();
+        ViewGroup parent = (ViewGroup) old.getParent();
+        if (parent != null) parent.removeView(old);
+        old.destroy();
+        blockedUrls.clear();
+        blockedQueued.set(0);
+        blockedCount.set(0);
+        pageHost = "";
+    }
+
+    private void wipeAndCreate(Runnable after) {
+        wipe(null, () -> {
+            if (isDestroyed()) return;
+            createWeb();
+            if (after != null) after.run();
+        });
     }
 
     @SuppressWarnings("deprecation")
@@ -359,7 +458,7 @@ public class BrowserActivity extends Activity {
         row.setPadding(dp(8), dp(7), dp(2), dp(7));
 
         shield = new TextView(this);
-        shield.setTextColor(COLOR_GREEN);
+        shield.setTextColor(accentColor());
         shield.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
         shield.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
         shield.setGravity(Gravity.CENTER);
@@ -372,7 +471,7 @@ public class BrowserActivity extends Activity {
 
         address = new EditText(this);
         address.setSingleLine(true);
-        address.setHint("Search or enter address");
+        address.setHint(HINT_NORMAL);
         address.setHintTextColor(COLOR_DIM);
         address.setTextColor(COLOR_TEXT);
         address.setTypeface(Typeface.MONOSPACE);
@@ -394,7 +493,7 @@ public class BrowserActivity extends Activity {
         });
         address.setOnFocusChangeListener((v, hasFocus) -> {
             if (hasFocus) showBars();
-            else if (!homeShown && web != null && web.getUrl() != null) address.setText(web.getUrl());
+            else if (!homeShown && hasPage()) address.setText(web.getUrl());
         });
         row.addView(address, new LinearLayout.LayoutParams(0, dp(BOX_HEIGHT_DP), 1f));
 
@@ -488,7 +587,8 @@ public class BrowserActivity extends Activity {
     private void updateHomeInfo() {
         if (homeInfo == null) return;
         int count = sessionBlocked.get();
-        homeInfo.setText(engineName(engine) + "  ·  " + count + (count == 1 ? " tracker" : " trackers") + " blocked this session");
+        String mode = torMode ? (safer ? "Tor, Safer  ·  " : "Tor  ·  ") : "";
+        homeInfo.setText(mode + engineName(engine) + "  ·  " + count + (count == 1 ? " tracker" : " trackers") + " blocked this session");
     }
 
     private void showHome() {
@@ -516,9 +616,15 @@ public class BrowserActivity extends Activity {
         updateBar();
     }
 
+    private boolean hasPage() {
+        if (web == null) return false;
+        String url = web.getUrl();
+        return url != null && isWebUrl(url);
+    }
+
     private void goBack() {
         if (web == null) return;
-        if (homeShown && web.getUrl() != null) {
+        if (homeShown && hasPage()) {
             hideHome();
             address.setText(web.getUrl());
             return;
@@ -535,7 +641,7 @@ public class BrowserActivity extends Activity {
     @RequiresApi(api = Build.VERSION_CODES.P)
     private void configure(WebView view) {
         WebSettings s = view.getSettings();
-        s.setJavaScriptEnabled(true);
+        s.setJavaScriptEnabled(!(torMode && safer));
         s.setDomStorageEnabled(true);
         s.setAllowFileAccess(false);
         s.setAllowContentAccess(false);
@@ -551,8 +657,11 @@ public class BrowserActivity extends Activity {
         CookieManager cookies = CookieManager.getInstance();
         cookies.setAcceptCookie(true);
         cookies.setAcceptThirdPartyCookies(view, false);
-        view.setDownloadListener((url, userAgent, contentDisposition, mimetype, contentLength) ->
-            Toast.makeText(this, "Downloads are not supported in this browser yet", Toast.LENGTH_SHORT).show());
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
+            WebViewCompat.addDocumentStartJavaScript(view, BrowserScripts.GPC, BrowserScripts.ALL_ORIGINS);
+            if (torMode) WebViewCompat.addDocumentStartJavaScript(view, BrowserScripts.NO_WEBRTC, BrowserScripts.ALL_ORIGINS);
+        }
+        view.setDownloadListener(this::onDownload);
         int slop = dp(SCROLL_SLOP_DP);
         view.setOnScrollChangeListener((v, x, y, oldX, oldY) -> {
             if (barsMoving() || homeShown || SystemClock.uptimeMillis() < settleUntil) return;
@@ -570,7 +679,7 @@ public class BrowserActivity extends Activity {
                     if (!request.isForMainFrame()) return false;
                     String cleaned = BrowserPrivacy.clean(url);
                     if (!cleaned.equals(url)) {
-                        v.loadUrl(cleaned);
+                        v.loadUrl(cleaned, GPC_HEADERS);
                         return true;
                     }
                     return false;
@@ -584,17 +693,25 @@ public class BrowserActivity extends Activity {
             @Override
             public WebResourceResponse shouldInterceptRequest(WebView v, WebResourceRequest request) {
                 if (request.isForMainFrame()) return null;
-                if (!BrowserPrivacy.shouldBlock(request.getUrl().toString(), pageHost, allowedSnapshot)) return null;
+                String url = request.getUrl().toString();
+                if (!BrowserPrivacy.shouldBlock(url, pageHost, allowedSnapshot)) return null;
                 blockedCount.incrementAndGet();
                 sessionBlocked.incrementAndGet();
-                runOnUiThread(BrowserActivity.this::updateShield);
+                if (blockedQueued.incrementAndGet() <= MAX_COLLAPSE_URLS) blockedUrls.add(url);
+                runOnUiThread(() -> {
+                    updateShield();
+                    scheduleCollapse();
+                });
                 return new WebResourceResponse("text/plain", "utf-8", 204, BLANK_REASON, Collections.emptyMap(), new ByteArrayInputStream(new byte[0]));
             }
 
             @Override
             public void onPageStarted(WebView v, String url, android.graphics.Bitmap favicon) {
+                if (v != web || !isWebUrl(url)) return;
                 pageHost = BrowserPrivacy.hostOf(url);
                 blockedCount.set(0);
+                blockedUrls.clear();
+                blockedQueued.set(0);
                 hideHome();
                 progress.setVisibility(View.VISIBLE);
                 if (!address.hasFocus()) address.setText(url);
@@ -605,7 +722,7 @@ public class BrowserActivity extends Activity {
             @Override
             public boolean onRenderProcessGone(WebView v, RenderProcessGoneDetail detail) {
                 if (v == web) {
-                    wipe(null);
+                    wipe(null, null);
                     ((ViewGroup) web.getParent()).removeView(web);
                     web.destroy();
                     web = null;
@@ -623,19 +740,23 @@ public class BrowserActivity extends Activity {
 
             @Override
             public void onPageFinished(WebView v, String url) {
+                if (v != web) return;
                 progress.setVisibility(View.INVISIBLE);
                 updateBar();
+                scheduleCollapse();
             }
 
             @Override
             public void doUpdateVisitedHistory(WebView v, String url, boolean isReload) {
-                if (!address.hasFocus() && !homeShown) address.setText(url);
+                if (v != web) return;
+                if (!address.hasFocus() && !homeShown && isWebUrl(url)) address.setText(url);
                 updateBar();
             }
         });
         view.setWebChromeClient(new WebChromeClient() {
             @Override
             public void onProgressChanged(WebView v, int newProgress) {
+                if (v != web) return;
                 progress.setProgress(newProgress);
             }
 
@@ -651,9 +772,22 @@ public class BrowserActivity extends Activity {
         });
     }
 
+    private void scheduleCollapse() {
+        if (root == null || !collapseScheduled.compareAndSet(false, true)) return;
+        root.postDelayed(collapseRunnable, COLLAPSE_DELAY_MS);
+    }
+
+    private void collapseAds() {
+        collapseScheduled.set(false);
+        if (web == null || !hasPage() || (torMode && safer)) return;
+        if (BrowserPrivacy.siteAllowed(pageHost, allowedSnapshot)) return;
+        List<String> urls = new ArrayList<>(blockedUrls);
+        web.evaluateJavascript(BrowserScripts.collapse(urls), null);
+    }
+
     private void updateBar() {
         if (web == null) return;
-        boolean canBack = (homeShown && web.getUrl() != null) || (!homeShown && web.canGoBack());
+        boolean canBack = (homeShown && hasPage()) || (!homeShown && web.canGoBack());
         backButton.setAlpha(canBack ? 1f : 0.35f);
         forwardButton.setAlpha(web.canGoForward() ? 1f : 0.35f);
         updateShield();
@@ -663,7 +797,7 @@ public class BrowserActivity extends Activity {
         if (shield == null) return;
         boolean off = !homeShown && BrowserPrivacy.siteAllowed(pageHost, allowedSnapshot);
         shield.setText(off ? "off" : String.valueOf(homeShown ? sessionBlocked.get() : blockedCount.get()));
-        shield.setTextColor(off ? COLOR_OFF : COLOR_GREEN);
+        shield.setTextColor(off ? COLOR_OFF : accentColor());
         if (homeShown) updateHomeInfo();
     }
 
@@ -707,17 +841,222 @@ public class BrowserActivity extends Activity {
         menu.add(Menu.NONE, MENU_COPY, 2, "Copy link").setEnabled(page);
         menu.add(Menu.NONE, MENU_TRACKERS, 3, off ? "Turn tracker blocking on for this site" : "Turn tracker blocking off for this site").setEnabled(page);
         menu.add(Menu.NONE, MENU_OPEN_OUTSIDE, 4, "Open in another app").setEnabled(page);
-        menu.add(Menu.NONE, MENU_CLOSE, 5, "Close and wipe");
+        menu.add(Menu.NONE, MENU_TOR, 5, torMode ? "Turn Tor mode off" : "Turn Tor mode on").setEnabled(!switching);
+        if (torMode) {
+            menu.add(Menu.NONE, MENU_NEW_IDENTITY, 6, "New identity").setEnabled(!switching);
+            menu.add(Menu.NONE, MENU_SAFER, 7, "Safer: JavaScript off").setCheckable(true).setChecked(safer).setEnabled(!switching);
+        }
+        menu.add(Menu.NONE, MENU_CLOSE, 8, "Close and wipe");
         popup.setOnMenuItemClickListener(item -> {
             int id = item.getItemId();
             if (id == MENU_RELOAD && web != null) web.reload();
             else if (id == MENU_COPY) copyLink();
             else if (id == MENU_TRACKERS) toggleSite();
             else if (id == MENU_OPEN_OUTSIDE) openOutside();
+            else if (id == MENU_TOR) {
+                if (torMode) stopTor();
+                else startTor();
+            }
+            else if (id == MENU_NEW_IDENTITY) newIdentity();
+            else if (id == MENU_SAFER) toggleSafer();
             else if (id == MENU_CLOSE) finish();
             return true;
         });
         popup.show();
+    }
+
+    private void applyTheme() {
+        int bar = barColor();
+        topWrap.setBackgroundColor(bar);
+        bottomBar.setBackgroundColor(bar);
+        statusScrim.setBackgroundColor(bar);
+        navScrim.setBackgroundColor(bar);
+        shield.setBackground(box(COLOR_BG, BOX_RADIUS_DP));
+        address.setBackground(box(COLOR_BG, BOX_RADIUS_DP));
+        address.setHint(torMode ? HINT_TOR : HINT_NORMAL);
+        progress.setProgressTintList(ColorStateList.valueOf(accentColor()));
+        setTaskDescription(new ActivityManager.TaskDescription(TASK_LABEL, R.drawable.vv_logo, bar));
+        updateShield();
+        updateHomeInfo();
+    }
+
+    private void toast(String message) {
+        Toast.makeText(this, message, Toast.LENGTH_LONG).show();
+    }
+
+    private void startTor() {
+        if (switching || torMode) return;
+        if (!BrowserTor.supported()) {
+            toast("Tor mode needs a newer Android System WebView. Update it from the Play Store, then try again.");
+            return;
+        }
+        switching = true;
+        Toast.makeText(this, "Checking Orbot", Toast.LENGTH_SHORT).show();
+        Thread check = new Thread(() -> {
+            boolean ok = BrowserTor.socksReady();
+            runOnUiThread(() -> {
+                if (isDestroyed()) return;
+                if (!ok) {
+                    endSwitch();
+                    showOrbotMissing();
+                    return;
+                }
+                enterTor();
+            });
+        });
+        check.start();
+    }
+
+    private void enterTor() {
+        destroyWeb();
+        homeShown = false;
+        try {
+            ProxyController.getInstance().setProxyOverride(BrowserTor.config(), getMainExecutor(), () -> {
+                if (isDestroyed()) return;
+                torMode = true;
+                safer = false;
+                wipeAndCreate(() -> {
+                    applyTheme();
+                    showHome();
+                    endSwitch();
+                    showTorNote();
+                });
+            });
+        } catch (Exception e) {
+            torMode = false;
+            wipeAndCreate(() -> {
+                applyTheme();
+                showHome();
+                endSwitch();
+                toast("Tor mode could not start on this phone");
+            });
+        }
+    }
+
+    private void stopTor() {
+        if (switching || !torMode) return;
+        switching = true;
+        destroyWeb();
+        homeShown = false;
+        Runnable after = () -> {
+            if (isDestroyed()) return;
+            torMode = false;
+            safer = false;
+            wipeAndCreate(() -> {
+                applyTheme();
+                showHome();
+                endSwitch();
+                toast("Tor mode is off. Everything from the Tor session was cleared.");
+            });
+        };
+        try {
+            ProxyController.getInstance().clearProxyOverride(getMainExecutor(), after);
+        } catch (Exception e) {
+            after.run();
+        }
+    }
+
+    private void newIdentity() {
+        if (switching || !torMode) return;
+        switching = true;
+        destroyWeb();
+        homeShown = false;
+        wipeAndCreate(() -> {
+            showHome();
+            endSwitch();
+            toast("New identity. Cookies, logins and history from this session were cleared. For a new Tor route too, refresh the connection in Orbot.");
+        });
+    }
+
+    private void toggleSafer() {
+        if (!torMode || web == null || switching) return;
+        safer = !safer;
+        web.getSettings().setJavaScriptEnabled(!safer);
+        if (hasPage()) web.reload();
+        updateHomeInfo();
+        toast(safer ? "Safer is on. JavaScript is off, so some sites will lose menus, logins and video." : "Safer is off. JavaScript is back on.");
+    }
+
+    private void showTorNote() {
+        if (isFinishing()) return;
+        new AlertDialog.Builder(this)
+            .setTitle("Tor mode is on")
+            .setMessage("Every page now goes through Orbot. If Orbot stops, pages stop loading until it is running again.\n\n"
+                + "Sites can no longer see your IP address or location. They can still see some details about your phone's browser.\n\n"
+                + "Signing in tells that site who you are. After using a site you signed into, tap New identity in this menu and refresh the connection in Orbot before you visit anything else.\n\n"
+                + "Downloads are off while Tor mode is on.")
+            .setPositiveButton("Got it", null)
+            .show();
+    }
+
+    private void showOrbotMissing() {
+        if (isFinishing()) return;
+        Intent launch = BrowserTor.launchIntent(this);
+        AlertDialog.Builder builder = new AlertDialog.Builder(this)
+            .setTitle("Orbot isn't running")
+            .setNegativeButton("Cancel", null);
+        if (launch != null) {
+            builder.setMessage("Tor mode needs Orbot to be running. Open Orbot, tap Start, then turn Tor mode on again.")
+                .setPositiveButton("Open Orbot", (d, w) -> {
+                    try { startActivity(launch); } catch (Exception e) { toast("Could not open Orbot"); }
+                });
+        } else {
+            builder.setMessage("Tor mode needs Orbot, the Tor Project's app. Install it, start it, then turn Tor mode on again.")
+                .setPositiveButton("Get Orbot", (d, w) -> {
+                    try {
+                        startActivity(BrowserTor.storeIntent(false));
+                    } catch (Exception e) {
+                        try { startActivity(BrowserTor.storeIntent(true)); } catch (Exception ignored) { toast("Could not open the store"); }
+                    }
+                });
+        }
+        builder.show();
+    }
+
+    private void onDownload(String url, String userAgent, String contentDisposition, String mimeType, long contentLength) {
+        if (torMode) {
+            toast("Downloads are off while Tor mode is on");
+            return;
+        }
+        if (!BrowserDownloads.downloadable(url)) {
+            toast("This file can't be downloaded here");
+            return;
+        }
+        String name = BrowserDownloads.fileName(url, contentDisposition, mimeType);
+        String pageUrl = hasPage() ? web.getUrl() : null;
+        String size = contentLength > 0 ? Formatter.formatShortFileSize(this, contentLength) : null;
+        new AlertDialog.Builder(this)
+            .setTitle("Download this file?")
+            .setMessage(size == null ? name : name + "\n" + size)
+            .setPositiveButton("Download", (d, w) -> startDownload(url, userAgent, mimeType, name, pageUrl))
+            .setNegativeButton("Cancel", null)
+            .show();
+    }
+
+    private void startDownload(String url, String userAgent, String mimeType, String name, String pageUrl) {
+        if (torMode) return;
+        Runnable run = () -> {
+            if (torMode) return;
+            boolean ok = BrowserDownloads.enqueue(this, url, userAgent, mimeType, name, pageUrl);
+            toast(ok ? "Downloading " + name + " to Downloads" : "Could not start the download");
+        };
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q && checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+            pendingDownload = run;
+            requestPermissions(new String[] { Manifest.permission.WRITE_EXTERNAL_STORAGE }, REQUEST_STORAGE);
+            return;
+        }
+        run.run();
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode != REQUEST_STORAGE) return;
+        Runnable run = pendingDownload;
+        pendingDownload = null;
+        if (run == null) return;
+        if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) run.run();
+        else toast("Downloads need storage access on this version of Android");
     }
 
     private void copyLink() {
@@ -771,7 +1110,7 @@ public class BrowserActivity extends Activity {
     }
 
     private void open(String input) {
-        if (web == null) return;
+        if (web == null || switching || !ready) return;
         String text = input == null ? "" : input.trim();
         if (text.isEmpty()) return;
         String url;
@@ -788,7 +1127,7 @@ public class BrowserActivity extends Activity {
         }
         address.clearFocus();
         hideHome();
-        web.loadUrl(BrowserPrivacy.clean(url));
+        web.loadUrl(BrowserPrivacy.clean(url), GPC_HEADERS);
     }
 
     private void hideKeyboard() {
@@ -813,11 +1152,11 @@ public class BrowserActivity extends Activity {
         String url = internal ? intent.getStringExtra(EXTRA_URL) : null;
         if (url != null && isWebUrl(url)) {
             hideHome();
-            web.loadUrl(BrowserPrivacy.clean(url));
+            web.loadUrl(BrowserPrivacy.clean(url), GPC_HEADERS);
             return;
         }
         boolean focus = intent.getBooleanExtra(EXTRA_FOCUS, false) || ACTION_SEARCH.equals(intent.getAction());
-        if (web.getUrl() == null || focus) showHome();
+        if (!hasPage() || focus) showHome();
         if (focus) focusAddress();
     }
 
@@ -825,6 +1164,10 @@ public class BrowserActivity extends Activity {
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         setIntent(intent);
+        if (!ready || switching) {
+            pendingIntent = intent;
+            return;
+        }
         handleIntent(intent);
     }
 
@@ -855,7 +1198,7 @@ public class BrowserActivity extends Activity {
             hideKeyboard();
             return;
         }
-        if (web != null && homeShown && web.getUrl() != null) {
+        if (web != null && homeShown && hasPage()) {
             goBack();
             return;
         }
@@ -866,12 +1209,9 @@ public class BrowserActivity extends Activity {
         finish();
     }
 
-    private void wipe(WebView view) {
-        CookieManager cookies = CookieManager.getInstance();
-        cookies.removeAllCookies(null);
-        cookies.removeSessionCookies(null);
-        cookies.flush();
+    private void wipe(WebView view, Runnable done) {
         WebStorage.getInstance().deleteAllData();
+        GeolocationPermissions.getInstance().clearAll();
         WebViewDatabase.getInstance(this).clearHttpAuthUsernamePassword();
         if (view != null) {
             view.clearCache(true);
@@ -879,17 +1219,29 @@ public class BrowserActivity extends Activity {
             view.clearFormData();
             view.clearSslPreferences();
         }
+        CookieManager cookies = CookieManager.getInstance();
+        cookies.removeAllCookies(removed -> {
+            cookies.flush();
+            if (done != null) done.run();
+        });
     }
 
     @Override
     protected void onDestroy() {
         if (barAnimator != null) barAnimator.cancel();
+        if (root != null) root.removeCallbacks(collapseRunnable);
         if (web != null) {
             web.stopLoading();
-            wipe(web);
+            wipe(web, null);
             ((ViewGroup) web.getParent()).removeView(web);
             web.destroy();
             web = null;
+        }
+        if (torMode && WebViewFeature.isFeatureSupported(WebViewFeature.PROXY_OVERRIDE)) {
+            try {
+                ProxyController.getInstance().clearProxyOverride(Runnable::run, () -> {});
+            } catch (Exception e) {
+            }
         }
         super.onDestroy();
     }
