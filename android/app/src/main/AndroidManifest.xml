@@ -59,7 +59,7 @@
             android:launchMode="singleTask"
             android:theme="@android:style/Theme.Material.NoActionBar"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation|density|fontScale"
-            android:windowSoftInputMode="adjustResize"
+            android:windowSoftInputMode="adjustResize|stateAlwaysHidden"
             android:label="Search"
             android:exported="false" />
 

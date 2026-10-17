@@ -433,8 +433,8 @@ async function enterApp(masterKey) {
   if (state.pendingShare) saveSharedLink()
 }
 
-const LAUNCH_TABS = { bookmarks: 'bookmarks', logins: 'manage', wallets: 'wallets', personal: 'personal' }
-const LAUNCH_LABELS = { bookmarks: 'Bookmarks', logins: 'your logins', wallets: 'Crypto Wallets', personal: 'Personal Info' }
+const LAUNCH_TABS = { bookmarks: 'bookmarks', logins: 'manage', wallets: 'wallets', personal: 'personal', settings: 'settings' }
+const LAUNCH_LABELS = { bookmarks: 'Bookmarks', logins: 'your logins', wallets: 'Crypto Wallets', personal: 'Personal Info', settings: 'Settings' }
 const LAUNCH_WAIT_MS = 3000
 const LAUNCH_POLL_MS = 50
 const LAUNCH_TTL_MS = 120000
@@ -486,7 +486,7 @@ async function openLaunch(fresh) {
     if (name === 'wallets') state.launchGrant = true
   }
   showTab(tab)
-  if (name === 'bookmarks') return
+  if (name === 'bookmarks' || name === 'settings') return
   if (fresh && name !== 'wallets') return
   const gate = await waitForGate(tab)
   if (gate && state.tab === tab) gate.click()

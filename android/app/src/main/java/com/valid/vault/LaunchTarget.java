@@ -22,7 +22,8 @@ public class LaunchTarget extends Plugin {
     static final String TAB_LOGINS = "logins";
     static final String TAB_WALLETS = "wallets";
     static final String TAB_PERSONAL = "personal";
-    private static final Set<String> TABS = new HashSet<>(Arrays.asList(TAB_BOOKMARKS, TAB_LOGINS, TAB_WALLETS, TAB_PERSONAL));
+    static final String TAB_SETTINGS = "settings";
+    private static final Set<String> TABS = new HashSet<>(Arrays.asList(TAB_BOOKMARKS, TAB_LOGINS, TAB_WALLETS, TAB_PERSONAL, TAB_SETTINGS));
     private static final String ACTION_PREFIX = "com.valid.vault.OPEN_";
     private static final String EVENT_LAUNCH = "launchTab";
 

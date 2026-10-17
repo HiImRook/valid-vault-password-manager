@@ -1,5 +1,10 @@
 package com.valid.vault;
 
+import android.content.Context;
+
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Set;
@@ -9,6 +14,9 @@ import org.json.JSONArray;
 final class BrowserScripts {
 
     static final Set<String> ALL_ORIGINS = Collections.singleton("*");
+
+    static final String PAUSE_MEDIA =
+        "(function(){try{document.querySelectorAll('video,audio').forEach(function(m){if(!m.paused)m.pause()})}catch(e){}})();";
 
     static final String GPC =
         "(function(){try{Object.defineProperty(Navigator.prototype,'globalPrivacyControl',{get:function(){return true},configurable:true,enumerable:true})}catch(e){}})();";
@@ -42,7 +50,54 @@ final class BrowserScripts {
 
     private static final String COLLAPSE_TAIL = ");";
 
+    static final String START_BASE_URL = "https://start.invalid/";
+    private static final String BACKGROUNDS_ASSET = "browser/backgrounds.js";
+    private static final String PAINT_ASSET = "browser/paint.js";
+    private static final String START_ASSET = "browser/start.js";
+    private static final String START_HEAD =
+        "<!doctype html><html><head><meta charset=\"utf-8\">"
+        + "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; script-src 'unsafe-inline'; worker-src blob:; style-src 'unsafe-inline'\">"
+        + "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
+        + "<style>html,body{margin:0;height:100%;overflow:hidden;background:#0A0E0A}canvas{display:block;width:100vw;height:100vh}</style>"
+        + "</head><body><canvas id=\"stage\"></canvas><script id=\"art\">";
+    private static final String START_MIDDLE = "</script><script id=\"paint\">";
+    private static final String START_DRIVER = "</script><script>";
+    private static final String START_TAIL = "</script></body></html>";
+
     private BrowserScripts() {}
+
+    static String startHtml(String backgrounds, String painter, String driver) {
+        return START_HEAD + backgrounds + START_MIDDLE + painter + START_DRIVER + driver + START_TAIL;
+    }
+
+    static String startHtml(Context context) {
+        try {
+            return startHtml(asset(context, BACKGROUNDS_ASSET), asset(context, PAINT_ASSET), asset(context, START_ASSET));
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    static String paint(int seed) {
+        return "paintStart(" + seed + ")";
+    }
+
+    static String exportStart(int id) {
+        return "exportStart(" + id + ")";
+    }
+
+    static String takeExport(int id) {
+        return "takeExport(" + id + ")";
+    }
+
+    private static String asset(Context context, String name) throws Exception {
+        try (InputStream in = context.getAssets().open(name); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            byte[] buffer = new byte[16384];
+            int n;
+            while ((n = in.read(buffer)) > 0) out.write(buffer, 0, n);
+            return out.toString(StandardCharsets.UTF_8.name());
+        }
+    }
 
     static String collapse(Collection<String> blockedUrls) {
         JSONArray urls = new JSONArray();

@@ -12,8 +12,10 @@ import java.io.RandomAccessFile;
 import java.nio.channels.FileChannel;
 import java.nio.channels.FileLock;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.TreeSet;
@@ -33,6 +35,7 @@ final class BrowserSettings {
 
     String engine = ENGINE_STARTPAGE;
     final Set<String> allowedSites = new TreeSet<>();
+    final List<BrowserPins.Pin> pins = new ArrayList<>();
 
     private BrowserSettings() {}
 
@@ -77,9 +80,8 @@ final class BrowserSettings {
     }
 
     private static BrowserSettings read(Context context) {
-        BrowserSettings settings = new BrowserSettings();
         File file = new File(context.getFilesDir(), FILE_NAME);
-        if (!file.exists() || file.length() > MAX_FILE_BYTES) return settings;
+        if (!file.exists() || file.length() > MAX_FILE_BYTES) return new BrowserSettings();
         try (FileInputStream in = new FileInputStream(file)) {
             byte[] data = new byte[(int) file.length()];
             int read = 0;
@@ -88,7 +90,16 @@ final class BrowserSettings {
                 if (n < 0) break;
                 read += n;
             }
-            JSONObject json = new JSONObject(new String(data, 0, read, StandardCharsets.UTF_8));
+            return parse(new String(data, 0, read, StandardCharsets.UTF_8));
+        } catch (Exception e) {
+            return new BrowserSettings();
+        }
+    }
+
+    static BrowserSettings parse(String text) {
+        BrowserSettings settings = new BrowserSettings();
+        try {
+            JSONObject json = new JSONObject(text);
             String engine = json.optString("engine", ENGINE_STARTPAGE);
             if (ENGINES.contains(engine)) settings.engine = engine;
             JSONArray sites = json.optJSONArray("allowedSites");
@@ -98,21 +109,42 @@ final class BrowserSettings {
                     if (!site.isEmpty()) settings.allowedSites.add(site);
                 }
             }
+            JSONArray pinned = json.optJSONArray("pinned");
+            if (pinned != null) {
+                for (int i = 0; i < pinned.length(); i++) {
+                    JSONObject pin = pinned.optJSONObject(i);
+                    if (pin == null) continue;
+                    BrowserPins.add(settings.pins, pin.optString("url", ""), pin.optString("title", ""));
+                }
+            }
         } catch (Exception e) {
             return new BrowserSettings();
         }
         return settings;
     }
 
-    private void write(Context context) throws Exception {
+    String serialize() throws Exception {
         JSONObject json = new JSONObject();
         json.put("engine", engine);
         JSONArray sites = new JSONArray();
         for (String site : allowedSites) sites.put(site);
         json.put("allowedSites", sites);
+        JSONArray pinned = new JSONArray();
+        for (BrowserPins.Pin pin : pins) {
+            JSONObject entry = new JSONObject();
+            entry.put("url", pin.url);
+            entry.put("title", pin.title);
+            pinned.put(entry);
+        }
+        json.put("pinned", pinned);
+        return json.toString();
+    }
+
+    private void write(Context context) throws Exception {
+        String text = serialize();
         File temp = new File(context.getFilesDir(), TEMP_PREFIX + android.os.Process.myPid());
         try (FileOutputStream out = new FileOutputStream(temp)) {
-            out.write(json.toString().getBytes(StandardCharsets.UTF_8));
+            out.write(text.getBytes(StandardCharsets.UTF_8));
             out.getFD().sync();
         }
         File target = new File(context.getFilesDir(), FILE_NAME);

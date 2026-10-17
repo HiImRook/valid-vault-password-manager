@@ -1,12 +1,20 @@
 package com.valid.vault;
 
 import android.app.DownloadManager;
+import android.content.ContentResolver;
+import android.content.ContentValues;
 import android.content.Context;
+import android.media.MediaScannerConnection;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Environment;
+import android.provider.MediaStore;
 import android.webkit.CookieManager;
 import android.webkit.URLUtil;
 
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.OutputStream;
 import java.util.Locale;
 import java.util.regex.Pattern;
 
@@ -51,6 +59,42 @@ final class BrowserDownloads {
             return uri.getScheme() + "://" + uri.getHost() + port + "/";
         } catch (Exception e) {
             return null;
+        }
+    }
+
+    static boolean saveImage(Context context, String name, byte[] png) {
+        if (png == null || png.length == 0) return false;
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                ContentResolver resolver = context.getContentResolver();
+                ContentValues values = new ContentValues();
+                values.put(MediaStore.Downloads.DISPLAY_NAME, name);
+                values.put(MediaStore.Downloads.MIME_TYPE, "image/png");
+                values.put(MediaStore.Downloads.IS_PENDING, 1);
+                Uri item = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
+                if (item == null) return false;
+                try (OutputStream out = resolver.openOutputStream(item)) {
+                    if (out == null) throw new java.io.IOException("No output");
+                    out.write(png);
+                } catch (Exception e) {
+                    resolver.delete(item, null, null);
+                    return false;
+                }
+                values.clear();
+                values.put(MediaStore.Downloads.IS_PENDING, 0);
+                resolver.update(item, values, null, null);
+                return true;
+            }
+            File dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
+            if (!dir.exists() && !dir.mkdirs()) return false;
+            File file = new File(dir, name);
+            try (FileOutputStream out = new FileOutputStream(file)) {
+                out.write(png);
+            }
+            MediaScannerConnection.scanFile(context, new String[] { file.getAbsolutePath() }, new String[] { "image/png" }, null);
+            return true;
+        } catch (Exception e) {
+            return false;
         }
     }
 
