@@ -40,6 +40,10 @@ A local, encrypted, QR code portable password manager. No cloud, accounts, or sy
 >
 > The phone's private browser now blocks tens of thousands of known tracker and ad domains from the EasyPrivacy and EasyList lists alongside its own, and removes the empty space left where an ad was blocked. Every page receives the Global Privacy Control signal. Files download to your Downloads folder after you confirm them. Tor mode, in the menu, sends every page through Orbot with no direct connection as a fallback, turns the bars purple, removes WebRTC, and offers Safer with JavaScript off. Switching in or out of Tor mode and New identity wipe the whole session. The browser also finishes its startup wipe before loading anything. See [CHANGELOG.md](CHANGELOG.md) for full details.
 
+> ✅ **Private Browser Tabs and Start Page - v0.8.6**
+>
+> The phone's private browser now has tabs, up to 15, with a tab count beside the address bar that opens a list to switch, close, or close them all. Every new tab opens on a start page with one of 20 generated backgrounds, drawn fresh for each tab, and a few are rare. Pin up to 12 sites to the start page from the menu or by name and address, and drag them into any order. Any background can be saved to Downloads as a picture. Press and hold a link to open it in a new tab, and the menu now opens Valid Vault's Settings. See [CHANGELOG.md](CHANGELOG.md) for full details.
+
 ---
 
 ## What is Valid Vault?
@@ -108,7 +112,7 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 **Private Browser (Android):**
 
 * Modified Chromium, through the Android System WebView, built into the phone app
-* Known trackers and ad scripts blocked, with a count in the address bar and a per-site switch for sites that break
+* Known trackers and ad scripts blocked, with a count on the start page and a per-site switch in the menu for sites that break
 * Valid Vault's own tracker list plus the EasyPrivacy and EasyList domain lists, applied when a page loads them from another site
 * Empty space left by blocked ads removed from the page
 * Global Privacy Control sent to every site
@@ -117,8 +121,10 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 * Third-party cookies blocked, and the app identity header hidden from sites
 * Private by default: cookies, site data, cache, and history wiped when you close it
 * Search with Startpage by default, or DuckDuckGo or Brave Search, chosen in Settings
-* Bottom toolbar with Back, Bookmarks, Home, Share, and Forward, and bars that slide away as you scroll
-* New tab page with the Valid Vault logo, a Search privately box, and trackers blocked this session
+* Tabs, up to 15, with a tab count beside the address bar that opens the tab list; tabs you aren't looking at are paused
+* Start page on every new tab with one of 20 generated backgrounds, pinned sites in any order, and a link to save the background to Downloads
+* Press and hold a link to open it in a new tab, copy it, or share it
+* Bottom toolbar with Back, Bookmarks, New tab, Share, and Forward, and bars that slide away as you scroll
 * 4x1 Search privately widget with a Bookmarks button, a 4x2 widget with Bookmarks, Logins, Wallet, and Personal, and a Search shortcut on the app icon; every button asks for fingerprint or device PIN once
 * Bookmarks open in the browser, and the browser's Bookmarks button opens them in Valid Vault
 * Runs in its own process with its own storage, so it never touches the vault
@@ -165,7 +171,7 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 * Android via Capacitor, with native plugins for biometric auth, file saving, autofill, sharing, and the private browser
 * Vendored, self-contained code only, no Google SDKs in the scan path
 
-## Current Status: v0.8.5 - Active Testing
+## Current Status: v0.8.6 - Active Testing
 
 **Completed:**
 
@@ -212,10 +218,11 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 * ✅ Home screen widgets for search, bookmarks, logins, wallets, and personal info, each one fingerprint away
 * ✅ Import passwords from another password manager's CSV export and bookmarks from a browser's HTML export, on the extension and the phone
 * ✅ Private browser Tor mode through Orbot, the EasyPrivacy and EasyList domain lists, empty ad space removed, Global Privacy Control, and downloads
+* ✅ Private browser tabs and a start page with generated backgrounds and pinned sites
 
 **In Development:**
 
-* 📋 Tabs in the private browser, with a start page for pinned sites, then Valid Vault autofill inside it
+* 📋 Valid Vault autofill inside the private browser
 * 📋 QR transport (v0.8.x): confirming the vault QR on phone cameras, scanner reliability across devices, and a bookmarks QR share
 * 📋 Continued field testing of sync, backup, and native file saving across Android versions
 
@@ -362,7 +369,9 @@ A native autofill service reads only which fields a form has, never their conten
 **Private Browser:**
 The browser is its own Android activity running in a separate process, with the WebView's data directory split off from the vault's. Every page request is checked against Valid Vault's own tracker list and against domains taken from EasyPrivacy and EasyList, which ship as a separate data file under their own license; list domains are blocked only when the page belongs to a different site. Blocked requests get an empty response, and the elements that requested them are hidden along with standard ad slots. Main-frame navigations are cleaned of tracking tags and unwrapped from known redirect links before loading. A script at the start of every frame sets Global Privacy Control, and pages opened from the address bar also carry the Sec-GPC header. Closing the browser deletes its cookies, storage, cache, and history, and opening it clears anything left from a session Android ended early before the first page loads. Browser files are left out of Android backups.
 
-Tor mode uses the WebView proxy override to send every request, including hostname lookups, to Orbot's SOCKS port with no direct rule, so a stopped Orbot means failed requests. Turning it on first checks that Orbot answers as a SOCKS proxy. The page view is destroyed before the proxy changes and a new one is created after the wipe, so nothing from one mode carries into the other. A script at the start of every frame removes WebRTC, downloads are refused, and the proxy only applies to the browser's own process, never the vault's.
+Each tab has its own page view, created when it first loads a page, and tabs you aren't looking at are hidden and paused. The start page background is drawn in a separate page view that has no network access, in a background worker so open tabs don't stall while it paints. Pinned sites are kept in the browser's own settings file, and nothing is added there while Tor mode is on.
+
+Tor mode uses the WebView proxy override to send every request, including hostname lookups, to Orbot's SOCKS port with no direct rule, so a stopped Orbot means failed requests. Turning it on first checks that Orbot answers as a SOCKS proxy. Every tab's page view is destroyed before the proxy changes and a new one is created after the wipe, so nothing from one mode carries into the other. A script at the start of every frame removes WebRTC, downloads are refused, and the proxy only applies to the browser's own process, never the vault's.
 
 **Sovereign QR Scanner:**
 Scanning uses the web camera through getUserMedia, drawing the square shown in the scan box to a canvas that a vendored jsQR decoder reads. No native scanning plugin, no Google SDK. The stream itself is a fountain code: the payload is compressed, split into small pieces shown once in order, then followed by mixes of pieces, and the receiver solves for any pieces it missed.

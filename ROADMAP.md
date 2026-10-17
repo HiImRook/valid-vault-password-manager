@@ -1,10 +1,21 @@
 # Valid Vault - Development Roadmap
 
-**Current Version:** v0.8.5 - **Status: Active Testing**
+**Current Version:** v0.8.6 - **Status: Active Testing**
 
 ---
 
 ## Version History (Completed)
+
+### v0.8.6 - Private Browser Tabs and Start Page (Oct 2026)
+
+* ✅ Tabs, up to 15, with a tab count beside the address bar and a tab list to switch, close, or close them all
+* ✅ Start page on every new tab with one of 20 generated backgrounds, the landscape logo shown turned sideways, and a rare cherry blossom
+* ✅ Pin up to 12 sites from the menu or by name and address, drag them into any order, and remove them
+* ✅ Save the current background to Downloads as a picture
+* ✅ Press and hold a link to open it in a new tab, copy it, or share it
+* ✅ Valid Vault settings in the browser menu, and New tab in the bottom toolbar in place of Home
+* ✅ The browser opens without the keyboard now, and the tracker count moved from the address bar to the start page
+* ✅ Tor mode closes every tab when it turns on or off, and pins and the tracker switch are off while it is on
 
 ### v0.8.5 - Private Browser Tor Mode and Downloads (Oct 2026)
 
@@ -238,11 +249,11 @@
 
 ---
 
-## Upcoming After v0.8.5
+## Upcoming After v0.8.6
 
 ### v0.8.x - The Phone App
 
-Built in this order, each step shipping as its own v0.8 release. The phone de-drift shipped in v0.8.0, the vault QR rebuild in v0.8.1, Android Autofill with Share to Bookmarks in v0.8.2, the private browser core in v0.8.3, importing from other managers in v0.8.4, and the browser's Tor mode and downloads in v0.8.5.
+Built in this order, each step shipping as its own v0.8 release. The phone de-drift shipped in v0.8.0, the vault QR rebuild in v0.8.1, Android Autofill with Share to Bookmarks in v0.8.2, the private browser core in v0.8.3, importing from other managers in v0.8.4, the browser's Tor mode and downloads in v0.8.5, and tabs with a start page in v0.8.6.
 
 **1. Android Autofill** - shipped in v0.8.2
 
@@ -251,7 +262,7 @@ Built in this order, each step shipping as its own v0.8 release. The phone de-dr
 **2. Modified Chromium browser** - core shipped in v0.8.3
 
 * Tor mode, downloads, the EasyPrivacy and EasyList lists, empty ad space removed, and Global Privacy Control shipped in v0.8.5
-* Next: tabs, with a start page for pinned sites and backgrounds in place of the home page
+* Tabs and the start page shipped in v0.8.6
 * Valid Vault autofill built in, with the same V tags and pickers as the extension
 * Reorder or choose the widget buttons
 * Confirm the browser on phones, and grow the tracker list from what testing shows
@@ -314,7 +325,7 @@ Until the vault QR is confirmed on devices, encrypted files on a USB drive are t
 
 ⚠️ **Android Autofill is new and not yet confirmed on a phone** - it is verified in Chromium with Android's autofill calls simulated. Chrome needs its Autofill using another service setting turned on, and browsers without support for third-party autofill do not ask Valid Vault at all
 
-⚠️ **The private browser and widgets are new** - the first browser build runs on a Samsung phone, and the v0.8.3 layout and widgets are being tested on phones now. The browser needs Android 9 or newer and opens one page at a time
+⚠️ **The private browser and widgets are new** - the first browser build runs on a Samsung phone, and the v0.8.3 layout and widgets are being tested on phones now. The browser needs Android 9 or newer
 
 ⚠️ **Imports read CSV and bookmark HTML files only** - Samsung Pass has no export Valid Vault can read. Delete the CSV file after importing, since it holds your passwords unencrypted
 
@@ -342,4 +353,4 @@ MIT License - See LICENSE file for details
 
 ---
 
-**Last Updated:** Oct 16, 2026
+**Last Updated:** Oct 17, 2026

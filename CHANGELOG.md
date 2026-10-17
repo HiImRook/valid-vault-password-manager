@@ -5,6 +5,35 @@ All notable changes to Valid Vault will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.6] - 2026-10-17
+
+The phone's private browser gets tabs and a start page with generated backgrounds and pinned sites.
+
+### Added
+
+* **Tabs.** Up to 15 tabs can be open at once. The number beside the address bar shows how many are open. Tap it to see your tabs, switch between them, close one, or close them all, and press and hold it to open a new tab. Tabs you aren't looking at are paused, and their video and audio stop.
+* **Start page.** Every new tab opens on a start page with one of 20 generated backgrounds, drawn fresh for each tab. A few are rare, all are unique, and some are seasonal.
+* **Pinned sites.** Add a site to the start page with Add to start page in the menu, or with the Add site tile by name and address. Up to 12 fit. New sites go at the bottom and earlier rows move up. Press and hold a site and drag it onto another to reorder, or let go in place to open it in a new tab or remove it.
+* **Save a background.** Like this background? Save it to Downloads, under the background, saves that exact picture as a PNG named after the scene.
+* **Links in new tabs.** Press and hold a link to open it in a new tab, copy it, or share it.
+* **Valid Vault settings.** The browser menu opens Valid Vault's Settings, after your fingerprint or device PIN if the vault is locked.
+
+### Changed
+
+* **New tab replaces Home.** The bottom toolbar has Back, Bookmarks, New tab, Share, and Forward. Back from a page you opened on the start page returns to it, and Back on a start page closes that tab when others are open.
+* **No keyboard on open.** The browser opens with the keyboard down, so the start page shows. Tap the address bar to type.
+* **Tracker count.** The count moved from the address bar to the start page, and the per-site tracker switch is in the menu.
+
+### Security
+
+* **Tor mode covers every tab.** Turning Tor mode on or off, and New identity, close every tab and wipe the session before anything loads again.
+* **Nothing saved from Tor mode.** Pinning sites and the per-site tracker switch are off while Tor mode is on, so a Tor session leaves nothing in the browser's settings.
+* **Backgrounds stay offline.** The start page background is drawn in its own page view with no network access, in a background worker, so it never slows the open tabs.
+
+### Notes
+
+* Verified with unit tests of tabs, Back, pinned sites, reordering, and the settings file, and in Chromium: all 20 backgrounds drawn the same way on and off the background worker, at phone and landscape sizes, with no network requests, and saving a background.
+
 ## [0.8.5] - 2026-10-16
 
 The phone's private browser gets a Tor mode through Orbot, downloads, a much larger tracker list, Global Privacy Control, and removal of the empty space blocked ads leave behind.
