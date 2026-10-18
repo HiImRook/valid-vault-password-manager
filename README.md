@@ -44,6 +44,10 @@ A local, encrypted, QR code portable password manager. No cloud, accounts, or sy
 >
 > The phone's private browser now has tabs, up to 15, with a tab count beside the address bar that opens a list to switch, close, or close them all. Every new tab opens on a start page with one of 20 generated backgrounds, drawn fresh for each tab, and a few are rare. Pin up to 12 sites to the start page from the menu or by name and address, and drag them into any order. Any background can be saved to Downloads as a picture. Press and hold a link to open it in a new tab, and the menu now opens Valid Vault's Settings. See [CHANGELOG.md](CHANGELOG.md) for full details.
 
+> ✅ **Private Browser Autofill - v0.8.7**
+>
+> The phone's private browser now fills logins from Valid Vault. Login fields get a green V, and the menu has Fill login. Either one asks for your fingerprint, device PIN, or password, then fills your saved login for that site, and every fill asks again. When you sign in with a new login or a new password, the browser offers to save it. If the exact address has nothing saved but another part of the site does, those logins are offered first. A login only fills the page it was requested for, and only that one login ever reaches the browser. In Tor mode nothing is offered on its own: Fill login in the menu works on https pages, with a reminder that signing in tells the site who you are. See [CHANGELOG.md](CHANGELOG.md) for full details.
+
 ---
 
 ## What is Valid Vault?
@@ -128,8 +132,14 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 * 4x1 Search privately widget with a Bookmarks button, a 4x2 widget with Bookmarks, Logins, Wallet, and Personal, and a Search shortcut on the app icon; every button asks for fingerprint or device PIN once
 * Bookmarks open in the browser, and the browser's Bookmarks button opens them in Valid Vault
 * Runs in its own process with its own storage, so it never touches the vault
+* Valid Vault autofill: login fields get a V tag, and Fill login is in the menu; every fill asks for fingerprint, device PIN, or password, and only the login you pick is handed to the page
+* A login fills only the page it was requested for, matched by scheme, address, and port, and pages without https ask before filling
+* Offers to save new logins and changed passwords after you sign in, and doesn't ask again for a login just filled or declined that session
+* Logins saved on other parts of a site are offered first when the exact address has none
+* In normal mode, scripts on a page can see that the fill bridge is present, so a site could tell the page is open in Valid Vault's browser; Tor mode leaves the bridge out entirely
 * Tor mode in the menu: every page goes through Orbot with no direct fallback, so pages stop loading if Orbot stops, and the bars turn purple while it is on
 * In Tor mode WebRTC is removed, downloads are off, Safer turns JavaScript off, and New identity clears the session; switching in or out wipes everything
+* In Tor mode there are no V tags and no save prompts; Fill login in the menu works on https pages with Safer off, and reminds you once each session that signing in tells the site who you are
 * Also works with a VPN, or Orbot in VPN mode
 
 **Sync and Backup:**
@@ -171,7 +181,7 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 * Android via Capacitor, with native plugins for biometric auth, file saving, autofill, sharing, and the private browser
 * Vendored, self-contained code only, no Google SDKs in the scan path
 
-## Current Status: v0.8.6 - Active Testing
+## Current Status: v0.8.7 - Active Testing
 
 **Completed:**
 
@@ -219,10 +229,10 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 * ✅ Import passwords from another password manager's CSV export and bookmarks from a browser's HTML export, on the extension and the phone
 * ✅ Private browser Tor mode through Orbot, the EasyPrivacy and EasyList domain lists, empty ad space removed, Global Privacy Control, and downloads
 * ✅ Private browser tabs and a start page with generated backgrounds and pinned sites
+* ✅ Valid Vault autofill inside the private browser, with V tags, Fill login, and save prompts
 
 **In Development:**
 
-* 📋 Valid Vault autofill inside the private browser
 * 📋 QR transport (v0.8.x): confirming the vault QR on phone cameras, scanner reliability across devices, and a bookmarks QR share
 * 📋 Continued field testing of sync, backup, and native file saving across Android versions
 
@@ -370,6 +380,8 @@ A native autofill service reads only which fields a form has, never their conten
 The browser is its own Android activity running in a separate process, with the WebView's data directory split off from the vault's. Every page request is checked against Valid Vault's own tracker list and against domains taken from EasyPrivacy and EasyList, which ship as a separate data file under their own license; list domains are blocked only when the page belongs to a different site. Blocked requests get an empty response, and the elements that requested them are hidden along with standard ad slots. Main-frame navigations are cleaned of tracking tags and unwrapped from known redirect links before loading. A script at the start of every frame sets Global Privacy Control, and pages opened from the address bar also carry the Sec-GPC header. Closing the browser deletes its cookies, storage, cache, and history, and opening it clears anything left from a session Android ended early before the first page loads. Browser files are left out of Android backups.
 
 Each tab has its own page view, created when it first loads a page, and tabs you aren't looking at are hidden and paused. The start page background is drawn in a separate page view that has no network access, in a background worker so open tabs don't stall while it paints. Pinned sites are kept in the browser's own settings file, and nothing is added there while Tor mode is on.
+
+Autofill in the browser goes through the same Valid Vault screen as Android Autofill, opened in the vault's own process. In normal mode a script at the start of each page draws the V tags and reports a tap or a submitted login over a message channel that only accepts the top frame of the tab's current site, and a V only counts right after a real touch on the page. After unlock, Valid Vault returns exactly one username and password to the browser, which checks that the tab is still on the same scheme, address, and port before filling. The fill script checks the page's origin again before reading anything. Saving runs the other way: the browser asks first, then hands the typed login to Valid Vault to unlock and save. In Tor mode the page script and message channel are never added, so filling only starts from the menu.
 
 Tor mode uses the WebView proxy override to send every request, including hostname lookups, to Orbot's SOCKS port with no direct rule, so a stopped Orbot means failed requests. Turning it on first checks that Orbot answers as a SOCKS proxy. Every tab's page view is destroyed before the proxy changes and a new one is created after the wipe, so nothing from one mode carries into the other. A script at the start of every frame removes WebRTC, downloads are refused, and the proxy only applies to the browser's own process, never the vault's.
 

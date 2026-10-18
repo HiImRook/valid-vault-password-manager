@@ -5,6 +5,29 @@ All notable changes to Valid Vault will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.7] - 2026-10-18
+
+The phone's private browser fills and saves logins from Valid Vault.
+
+### Added
+
+* **V tags in the browser.** Login fields in the private browser get a small green V. Tap it and Valid Vault asks for your fingerprint, device PIN, or password, then fills your saved login for that site. Every fill asks again, and one saved login fills right away while several are listed so you can pick.
+* **Fill login.** The browser's menu has Fill login, which does the same as tapping a V.
+* **Save from the browser.** When you sign in with a login Valid Vault doesn't have, or with a new password, the browser asks whether to save it. A new login saves right after you unlock, and a changed password asks before it replaces the old one, which is kept as the previous password. The browser doesn't ask again for a login you just filled or one you said Not now to in that session.
+* **Logins from other parts of a site.** When a fill has no saved login for the exact address but another part of the site does, such as login.example.com when example.com is saved, those logins are offered first, each with its own address, with Pick another saved site below them. This applies to Android Autofill in other browsers too.
+
+### Security
+
+* **Only the page it was asked for.** A login is filled only into the page it was requested for, matched by scheme, address, and port. If the page changes while Valid Vault is open, nothing is filled.
+* **Only one login crosses over.** The vault is unlocked in Valid Vault's own screen, and the browser receives only the one username and password you picked. It never sees the master key or the rest of the vault.
+* **Pages can't fill on their own.** A V only opens Valid Vault right after a real tap on the page, and pages that aren't using https ask before filling.
+* **Tor mode stays manual.** In Tor mode there are no V tags and no save prompts. Fill login in the menu works on https pages with Safer off, and the first fill each session reminds you that signing in tells the site who you are. New identity and switching Tor mode on or off clear everything the browser held for filling.
+
+### Notes
+
+* The phone User Guide covers filling and saving in the browser, and in Tor mode.
+* Verified in Chromium: V tags on login, multi-step, and late-loading forms, none on newsletter boxes or inside frames, fills on React-style fields, save capture on submit and sign-in buttons but not on show-password buttons, and a page that tampers with scripts unable to read a login meant for another address.
+
 ## [0.8.6] - 2026-10-17
 
 The phone's private browser gets tabs and a start page with generated backgrounds and pinned sites.

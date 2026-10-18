@@ -1,10 +1,19 @@
 # Valid Vault - Development Roadmap
 
-**Current Version:** v0.8.6 - **Status: Active Testing**
+**Current Version:** v0.8.7 - **Status: Active Testing**
 
 ---
 
 ## Version History (Completed)
+
+### v0.8.7 - Private Browser Autofill (Oct 2026)
+
+* ✅ V tags on login fields in the private browser, and Fill login in the menu, filled from Valid Vault after fingerprint, device PIN, or password on every fill
+* ✅ Save new logins and changed passwords from the browser, without asking again for a login just filled or declined that session
+* ✅ Logins saved on other parts of a site offered first when the exact address has none, in the browser and in Android Autofill
+* ✅ A login fills only the page it was requested for, matched by scheme, address, and port, and pages without https ask first
+* ✅ Tor mode: no V tags or save prompts, Fill login on https pages only, and a once-per-session reminder that signing in identifies you
+* ✅ Phone User Guide section for browser autofill
 
 ### v0.8.6 - Private Browser Tabs and Start Page (Oct 2026)
 
@@ -249,11 +258,11 @@
 
 ---
 
-## Upcoming After v0.8.6
+## Upcoming After v0.8.7
 
 ### v0.8.x - The Phone App
 
-Built in this order, each step shipping as its own v0.8 release. The phone de-drift shipped in v0.8.0, the vault QR rebuild in v0.8.1, Android Autofill with Share to Bookmarks in v0.8.2, the private browser core in v0.8.3, importing from other managers in v0.8.4, the browser's Tor mode and downloads in v0.8.5, and tabs with a start page in v0.8.6.
+Built in this order, each step shipping as its own v0.8 release. The phone de-drift shipped in v0.8.0, the vault QR rebuild in v0.8.1, Android Autofill with Share to Bookmarks in v0.8.2, the private browser core in v0.8.3, importing from other managers in v0.8.4, the browser's Tor mode and downloads in v0.8.5, tabs with a start page in v0.8.6, and Valid Vault autofill in the browser in v0.8.7.
 
 **1. Android Autofill** - shipped in v0.8.2
 
@@ -263,7 +272,7 @@ Built in this order, each step shipping as its own v0.8 release. The phone de-dr
 
 * Tor mode, downloads, the EasyPrivacy and EasyList lists, empty ad space removed, and Global Privacy Control shipped in v0.8.5
 * Tabs and the start page shipped in v0.8.6
-* Valid Vault autofill built in, with the same V tags and pickers as the extension
+* Valid Vault autofill with V tags, Fill login, and save prompts shipped in v0.8.7
 * Reorder or choose the widget buttons
 * Confirm the browser on phones, and grow the tracker list from what testing shows
 
@@ -353,4 +362,4 @@ MIT License - See LICENSE file for details
 
 ---
 
-**Last Updated:** Oct 17, 2026
+**Last Updated:** Oct 18, 2026
