@@ -31,6 +31,7 @@ import android.view.DragEvent;
 import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.Menu;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowInsets;
@@ -61,6 +62,7 @@ import android.widget.Toast;
 
 import androidx.annotation.RequiresApi;
 import androidx.webkit.ProxyController;
+import androidx.webkit.WebMessageCompat;
 import androidx.webkit.WebSettingsCompat;
 import androidx.webkit.WebViewCompat;
 import androidx.webkit.WebViewFeature;
@@ -71,6 +73,7 @@ import java.io.ByteArrayInputStream;
 import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -129,7 +132,15 @@ public class BrowserActivity extends Activity {
     private static final int MENU_NEW_TAB = 9;
     private static final int MENU_PIN = 10;
     private static final int MENU_SETTINGS = 11;
+    private static final int MENU_FILL = 12;
     private static final int REQUEST_STORAGE = 41;
+    private static final int REQUEST_FILL = 42;
+    private static final int REQUEST_SAVE = 43;
+    private static final long FILL_TOUCH_WINDOW_MS = 2000;
+    private static final long SAVE_PROMPT_DELAY_MS = 900;
+    private static final long SAVE_PENDING_MS = 60000;
+    private static final long SAVE_MUTE_MS = 60000;
+    private static final int MAX_KNOWN_LOGINS = 200;
     private static final int MAX_COLLAPSE_URLS = 200;
     private static final long COLLAPSE_DELAY_MS = 400;
     private static final Map<String, String> GPC_HEADERS = Collections.singletonMap("Sec-GPC", "1");
@@ -191,6 +202,16 @@ public class BrowserActivity extends Activity {
     private boolean rendererLost = false;
     private Runnable pendingStorage = null;
     private Runnable storageDenied = null;
+    private final Set<String> knownLogins = new HashSet<>();
+    private final Map<String, Long> mutedSaves = new HashMap<>();
+    private int fillTabId = -1;
+    private String fillHost = null;
+    private String fillOrigin = null;
+    private boolean resumed = false;
+    private boolean fillTor = false;
+    private boolean torFillWarned = false;
+    private AlertDialog saveDialog = null;
+    private AlertDialog fillDialog = null;
 
     private int dp(int value) {
         return (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, value, getResources().getDisplayMetrics());
@@ -1099,6 +1120,8 @@ public class BrowserActivity extends Activity {
         WebView old = tab.web;
         tab.web = null;
         if (root != null && tab.collapse != null) root.removeCallbacks(tab.collapse);
+        clearSave(tab);
+        if (tab.id == fillTabId) clearFill();
         old.stopLoading();
         ViewGroup parent = (ViewGroup) old.getParent();
         if (parent != null) parent.removeView(old);
@@ -1288,6 +1311,11 @@ public class BrowserActivity extends Activity {
             WebViewCompat.addDocumentStartJavaScript(view, BrowserScripts.GPC, BrowserScripts.ALL_ORIGINS);
             if (torMode) WebViewCompat.addDocumentStartJavaScript(view, BrowserScripts.NO_WEBRTC, BrowserScripts.ALL_ORIGINS);
         }
+        if (!torMode) attachAutofill(tab, view);
+        view.setOnTouchListener((v, e) -> {
+            if (e.getActionMasked() == MotionEvent.ACTION_UP) tab.lastTouchAt = SystemClock.uptimeMillis();
+            return false;
+        });
         CookieManager cookies = CookieManager.getInstance();
         cookies.setAcceptCookie(true);
         cookies.setAcceptThirdPartyCookies(view, false);
@@ -1405,6 +1433,255 @@ public class BrowserActivity extends Activity {
         });
     }
 
+    private void attachAutofill(BrowserTab tab, WebView view) {
+        if (!WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER) || !WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) return;
+        String script = BrowserScripts.autofill(this);
+        if (script == null) return;
+        try {
+            WebViewCompat.addWebMessageListener(view, BrowserFill.BRIDGE_NAME, BrowserScripts.ALL_ORIGINS, (v, message, sourceOrigin, isMainFrame, reply) ->
+                onFillMessage(tab, v, message == null ? null : message.getData(), sourceOrigin, isMainFrame));
+            WebViewCompat.addDocumentStartJavaScript(view, script, BrowserScripts.ALL_ORIGINS);
+        } catch (Exception e) {
+        }
+    }
+
+    private void onFillMessage(BrowserTab tab, WebView view, String data, Uri origin, boolean mainFrame) {
+        if (torMode || !mainFrame || view == null || view != tab.web || data == null || origin == null) return;
+        String scheme = origin.getScheme() == null ? "" : origin.getScheme().toLowerCase(Locale.ROOT);
+        if (!scheme.equals("https") && !scheme.equals("http")) return;
+        String host = origin.getHost();
+        if (host == null || !BrowserFill.sameHost(host, tab.pageHost)) return;
+        if (BrowserFill.MESSAGE_FILL.equals(data)) {
+            if (tab != activeTab() || tab.start) return;
+            if (SystemClock.uptimeMillis() - tab.lastTouchAt > FILL_TOUCH_WINDOW_MS) return;
+            tab.lastTouchAt = 0;
+            requestFill(tab);
+            return;
+        }
+        BrowserFill.Save save = BrowserFill.parseSave(data);
+        if (save != null) queueSave(tab, BrowserFill.domainOf(scheme + "://" + host + "/"), save);
+    }
+
+    private boolean fillBusy() {
+        return fillTabId >= 0;
+    }
+
+    private void clearFill() {
+        fillTabId = -1;
+        fillHost = null;
+        fillOrigin = null;
+        fillTor = false;
+    }
+
+    private void dismissFillDialogs() {
+        if (saveDialog != null) {
+            AlertDialog dialog = saveDialog;
+            saveDialog = null;
+            try { dialog.dismiss(); } catch (Exception e) {}
+        }
+        if (fillDialog != null) {
+            AlertDialog dialog = fillDialog;
+            fillDialog = null;
+            try { dialog.dismiss(); } catch (Exception e) {}
+        }
+    }
+
+    private boolean pageHostIs(BrowserTab tab, String host) {
+        if (tab == null || tab.web == null || tab.start) return false;
+        String url = tab.web.getUrl();
+        return isWebUrl(url) && BrowserFill.sameHost(BrowserFill.domainOf(url), host);
+    }
+
+    private void requestFill(BrowserTab tab) {
+        if (tab == null || tab.web == null || tab.start || switching || !ready || isFinishing() || fillBusy() || fillDialog != null || saveDialog != null) return;
+        String url = tab.web.getUrl();
+        if (!isWebUrl(url)) return;
+        String host = BrowserFill.domainOf(url);
+        if (host.isEmpty()) return;
+        boolean secure = BrowserFill.secure(url);
+        if (torMode) {
+            if (safer) {
+                toast("Turn Safer off to fill logins. Filling needs JavaScript.");
+                return;
+            }
+            if (!secure) {
+                toast("In Tor mode, logins only fill on https pages");
+                return;
+            }
+            if (!torFillWarned) {
+                confirmFill(tab, host, "Sign in with Tor?",
+                    "Signing in tells " + host + " who you are, even through Tor. When you're done with this site, tap New identity before you visit anything else.",
+                    "Fill login", true);
+                return;
+            }
+            launchFill(tab, host);
+            return;
+        }
+        if (!secure) {
+            confirmFill(tab, host, "This page isn't secure",
+                host + " is not using https, so anything sent from this page can be read on the way. Fill your login anyway?",
+                "Fill anyway", false);
+            return;
+        }
+        launchFill(tab, host);
+    }
+
+    private void confirmFill(BrowserTab tab, String host, String title, String message, String okLabel, boolean torNote) {
+        fillDialog = new AlertDialog.Builder(this)
+            .setTitle(title)
+            .setMessage(message)
+            .setPositiveButton(okLabel, (d, w) -> {
+                if (torNote) {
+                    if (!torMode) return;
+                    torFillWarned = true;
+                }
+                launchFill(tab, host);
+            })
+            .setNegativeButton("Cancel", null)
+            .create();
+        fillDialog.setOnDismissListener(d -> { if (fillDialog == d) fillDialog = null; });
+        fillDialog.show();
+    }
+
+    private void launchFill(BrowserTab tab, String host) {
+        if (switching || isFinishing() || fillBusy() || tab != activeTab() || !pageHostIs(tab, host)) return;
+        if (torMode && (safer || !BrowserFill.secure(tab.web.getUrl()))) return;
+        String origin = BrowserFill.originOf(tab.web.getUrl());
+        if (origin == null) return;
+        fillTabId = tab.id;
+        fillHost = host;
+        fillOrigin = origin;
+        fillTor = torMode;
+        try {
+            startActivityForResult(BrowserFill.fillIntent(this, host), REQUEST_FILL);
+        } catch (Exception e) {
+            clearFill();
+            toast("Could not open Valid Vault");
+        }
+    }
+
+    private void finishFill(int resultCode, Intent data) {
+        int tabId = fillTabId;
+        String host = fillHost;
+        String origin = fillOrigin;
+        boolean wasTor = fillTor;
+        clearFill();
+        String username = data == null ? null : data.getStringExtra(BrowserFill.EXTRA_RESULT_USERNAME);
+        String password = data == null ? null : data.getStringExtra(BrowserFill.EXTRA_RESULT_PASSWORD);
+        if (data != null) {
+            data.removeExtra(BrowserFill.EXTRA_RESULT_USERNAME);
+            data.removeExtra(BrowserFill.EXTRA_RESULT_PASSWORD);
+        }
+        String user = username == null ? "" : username;
+        String pass = password == null ? "" : password;
+        if (resultCode != RESULT_OK || (user.isEmpty() && pass.isEmpty())) return;
+        if (tabId < 0 || host == null || origin == null) {
+            toast("Nothing was filled. Try again from the page.");
+            return;
+        }
+        BrowserTab tab = tabs.find(tabId);
+        if (tab == null || tab.web == null || wasTor != torMode || switching) return;
+        if (!pageHostIs(tab, host) || !origin.equals(BrowserFill.originOf(tab.web.getUrl()))) {
+            toast("The page changed, so nothing was filled");
+            return;
+        }
+        if (torMode && (safer || !BrowserFill.secure(tab.web.getUrl()))) return;
+        String key = BrowserFill.loginKey(host, user, pass);
+        WebView target = tab.web;
+        target.evaluateJavascript(BrowserFill.fillScript(origin, user, pass), result -> {
+            if (target != tab.web) return;
+            int filled = BrowserFill.fillResult(result);
+            if (filled == BrowserFill.FILL_WRONG_PAGE) toast("The page changed, so nothing was filled");
+            else if (filled == BrowserFill.FILLED_NONE) toast("No login fields found on this page");
+            else if (filled < 0) toast("Could not fill this page");
+            else rememberLogin(key);
+        });
+    }
+
+    private void rememberLogin(String key) {
+        if (knownLogins.size() >= MAX_KNOWN_LOGINS) knownLogins.clear();
+        knownLogins.add(key);
+    }
+
+    private void queueSave(BrowserTab tab, String host, BrowserFill.Save save) {
+        if (torMode || host.isEmpty() || root == null) return;
+        if (knownLogins.contains(BrowserFill.loginKey(host, save.username, save.password))) return;
+        Long muted = mutedSaves.get(host);
+        long now = SystemClock.uptimeMillis();
+        if (muted != null && now - muted < SAVE_MUTE_MS) return;
+        tab.pendingSave = save;
+        tab.pendingSaveHost = host;
+        tab.pendingSaveAt = now;
+        scheduleSavePrompt(tab);
+    }
+
+    private void scheduleSavePrompt(BrowserTab tab) {
+        if (tab.savePrompt != null) root.removeCallbacks(tab.savePrompt);
+        tab.savePrompt = () -> promptSave(tab);
+        root.postDelayed(tab.savePrompt, SAVE_PROMPT_DELAY_MS);
+    }
+
+    private void clearSave(BrowserTab tab) {
+        if (tab == null) return;
+        if (root != null && tab.savePrompt != null) root.removeCallbacks(tab.savePrompt);
+        tab.savePrompt = null;
+        tab.pendingSave = null;
+        tab.pendingSaveHost = null;
+        tab.pendingSaveAt = 0;
+    }
+
+    private void promptSave(BrowserTab tab) {
+        tab.savePrompt = null;
+        BrowserFill.Save save = tab.pendingSave;
+        String host = tab.pendingSaveHost;
+        if (save == null || host == null || torMode || isFinishing() || tab.web == null || SystemClock.uptimeMillis() - tab.pendingSaveAt > SAVE_PENDING_MS) {
+            clearSave(tab);
+            return;
+        }
+        if (tab != activeTab() || tab.start) {
+            clearSave(tab);
+            return;
+        }
+        if (!resumed || switching || saveDialog != null || fillDialog != null || fillBusy()) {
+            scheduleSavePrompt(tab);
+            return;
+        }
+        clearSave(tab);
+        String key = BrowserFill.loginKey(host, save.username, save.password);
+        if (knownLogins.contains(key)) return;
+        String who = save.username.isEmpty() ? "No username" : save.username;
+        saveDialog = new AlertDialog.Builder(this)
+            .setTitle("Save this login?")
+            .setMessage(who + "\n" + host + "\n\nValid Vault will unlock, then save it encrypted in your vault.")
+            .setPositiveButton("Save", (d, w) -> launchSave(host, save, key))
+            .setNegativeButton("Not now", (d, w) -> declineSave(host, key))
+            .setOnCancelListener(d -> declineSave(host, key))
+            .create();
+        saveDialog.setOnDismissListener(d -> { if (saveDialog == d) saveDialog = null; });
+        saveDialog.show();
+    }
+
+    private void declineSave(String host, String key) {
+        rememberLogin(key);
+        mutedSaves.put(host, SystemClock.uptimeMillis());
+    }
+
+    private void launchSave(String host, BrowserFill.Save save, String key) {
+        if (torMode || isFinishing() || fillBusy()) return;
+        rememberLogin(key);
+        try {
+            startActivityForResult(BrowserFill.saveIntent(this, host, save), REQUEST_SAVE);
+        } catch (Exception e) {
+            toast("Could not open Valid Vault");
+        }
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQUEST_FILL) finishFill(resultCode, data);
+    }
+
     private boolean onLongPress(BrowserTab tab, WebView view) {
         WebView.HitTestResult hit = view.getHitTestResult();
         if (hit == null) return false;
@@ -1515,22 +1792,24 @@ public class BrowserActivity extends Activity {
         boolean off = page && BrowserPrivacy.siteAllowed(tab.pageHost, allowedSnapshot);
         boolean pinned = page && BrowserPins.contains(pinsSnapshot, url);
         menu.add(Menu.NONE, MENU_NEW_TAB, 1, "New tab").setEnabled(ready && !switching);
-        menu.add(Menu.NONE, MENU_RELOAD, 2, "Reload").setEnabled(page);
-        menu.add(Menu.NONE, MENU_COPY, 3, "Copy link").setEnabled(page);
-        menu.add(Menu.NONE, MENU_PIN, 4, pinned ? "Remove from start page" : "Add to start page").setEnabled(page && !torMode);
-        menu.add(Menu.NONE, MENU_TRACKERS, 5, off ? "Turn tracker blocking on for this site" : "Turn tracker blocking off for this site").setEnabled(page && !torMode);
-        menu.add(Menu.NONE, MENU_OPEN_OUTSIDE, 6, "Open in another app").setEnabled(page);
-        menu.add(Menu.NONE, MENU_TOR, 7, torMode ? "Turn Tor mode off" : "Turn Tor mode on").setEnabled(ready && !switching);
+        menu.add(Menu.NONE, MENU_FILL, 2, "Fill login").setEnabled(page && ready && !switching && !(torMode && safer));
+        menu.add(Menu.NONE, MENU_RELOAD, 3, "Reload").setEnabled(page);
+        menu.add(Menu.NONE, MENU_COPY, 4, "Copy link").setEnabled(page);
+        menu.add(Menu.NONE, MENU_PIN, 5, pinned ? "Remove from start page" : "Add to start page").setEnabled(page && !torMode);
+        menu.add(Menu.NONE, MENU_TRACKERS, 6, off ? "Turn tracker blocking on for this site" : "Turn tracker blocking off for this site").setEnabled(page && !torMode);
+        menu.add(Menu.NONE, MENU_OPEN_OUTSIDE, 7, "Open in another app").setEnabled(page);
+        menu.add(Menu.NONE, MENU_TOR, 8, torMode ? "Turn Tor mode off" : "Turn Tor mode on").setEnabled(ready && !switching);
         if (torMode) {
-            menu.add(Menu.NONE, MENU_NEW_IDENTITY, 8, "New identity").setEnabled(!switching);
-            menu.add(Menu.NONE, MENU_SAFER, 9, "Safer: JavaScript off").setCheckable(true).setChecked(safer).setEnabled(!switching);
+            menu.add(Menu.NONE, MENU_NEW_IDENTITY, 9, "New identity").setEnabled(!switching);
+            menu.add(Menu.NONE, MENU_SAFER, 10, "Safer: JavaScript off").setCheckable(true).setChecked(safer).setEnabled(!switching);
         }
-        menu.add(Menu.NONE, MENU_SETTINGS, 10, "Valid Vault settings");
-        menu.add(Menu.NONE, MENU_CLOSE, 11, "Close and wipe");
+        menu.add(Menu.NONE, MENU_SETTINGS, 11, "Valid Vault settings");
+        menu.add(Menu.NONE, MENU_CLOSE, 12, "Close and wipe");
         popup.setOnMenuItemClickListener(item -> {
             int id = item.getItemId();
             BrowserTab current = activeTab();
             if (id == MENU_NEW_TAB) newTab(false);
+            else if (id == MENU_FILL) requestFill(current);
             else if (id == MENU_RELOAD && current != null && current.web != null) current.web.reload();
             else if (id == MENU_COPY) copyLink();
             else if (id == MENU_PIN) togglePin();
@@ -1578,12 +1857,21 @@ public class BrowserActivity extends Activity {
         Toast.makeText(this, message, Toast.LENGTH_LONG).show();
     }
 
+    private void forgetFillSession() {
+        dismissFillDialogs();
+        clearFill();
+        knownLogins.clear();
+        mutedSaves.clear();
+        torFillWarned = false;
+    }
+
     private void resetSession(Runnable after) {
         closeSwitcher();
         hideKeyboard();
         destroyAllWebs();
         tabs.clear();
         sessionBlocked.set(0);
+        forgetFillSession();
         startView.setVisibility(View.INVISIBLE);
         wipe(art, () -> {
             if (isDestroyed() || rendererLost) return;
@@ -1618,6 +1906,7 @@ public class BrowserActivity extends Activity {
 
     private void enterTor() {
         closeSwitcher();
+        forgetFillSession();
         destroyAllWebs();
         tabs.clear();
         startView.setVisibility(View.INVISIBLE);
@@ -1646,6 +1935,7 @@ public class BrowserActivity extends Activity {
         if (switching || !torMode) return;
         switching = true;
         closeSwitcher();
+        forgetFillSession();
         destroyAllWebs();
         tabs.clear();
         startView.setVisibility(View.INVISIBLE);
@@ -1928,6 +2218,7 @@ public class BrowserActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        resumed = true;
         if (root == null || rendererLost) return;
         loadSettings();
         WebView web = activeWeb();
@@ -1938,6 +2229,7 @@ public class BrowserActivity extends Activity {
 
     @Override
     protected void onPause() {
+        resumed = false;
         WebView web = activeWeb();
         if (web != null) web.onPause();
         super.onPause();
@@ -1976,6 +2268,7 @@ public class BrowserActivity extends Activity {
         if (rendererLost) return;
         rendererLost = true;
         ready = false;
+        forgetFillSession();
         destroyAllWebs();
         if (art != null) {
             ViewGroup parent = (ViewGroup) art.getParent();
@@ -2008,6 +2301,7 @@ public class BrowserActivity extends Activity {
     @Override
     protected void onDestroy() {
         if (barAnimator != null) barAnimator.cancel();
+        forgetFillSession();
         if (!rendererLost && root != null) {
             for (BrowserTab tab : tabs.list()) if (tab.web != null) tab.web.stopLoading();
             wipe(art, null);

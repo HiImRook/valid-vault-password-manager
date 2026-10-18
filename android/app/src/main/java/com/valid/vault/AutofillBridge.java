@@ -44,9 +44,18 @@ public class AutofillBridge extends Plugin {
         ret.put("appCert", extra(intent, ValidAutofillService.EXTRA_APP_CERT));
         ret.put("hasUsername", intent.getParcelableExtra(ValidAutofillService.EXTRA_USERNAME_ID) != null);
         ret.put("hasPassword", intent.getParcelableExtra(ValidAutofillService.EXTRA_PASSWORD_ID) != null);
+        ret.put("browserReply", browserReply(intent));
         if (ValidAutofillService.MODE_SAVE.equals(mode)) {
             if (!saveTaken) {
-                saveEntry = AutofillHandoff.take(intent.getStringExtra(ValidAutofillService.EXTRA_TOKEN));
+                if (browserReply(intent)) {
+                    String username = intent.getStringExtra(BrowserFill.EXTRA_SAVE_USERNAME);
+                    String password = intent.getStringExtra(BrowserFill.EXTRA_SAVE_PASSWORD);
+                    saveEntry = password == null || password.isEmpty() ? null : new AutofillHandoff.Entry(username == null ? "" : username, password, 0);
+                    intent.removeExtra(BrowserFill.EXTRA_SAVE_USERNAME);
+                    intent.removeExtra(BrowserFill.EXTRA_SAVE_PASSWORD);
+                } else {
+                    saveEntry = AutofillHandoff.take(intent.getStringExtra(ValidAutofillService.EXTRA_TOKEN));
+                }
                 saveTaken = true;
             }
             ret.put("username", saveEntry == null ? "" : saveEntry.username);
@@ -54,6 +63,10 @@ public class AutofillBridge extends Plugin {
             ret.put("expired", saveEntry == null);
         }
         call.resolve(ret);
+    }
+
+    private static boolean browserReply(Intent intent) {
+        return intent.getBooleanExtra(BrowserFill.EXTRA_REPLY, false);
     }
 
     private void finishWith(int result, Intent data) {
@@ -70,6 +83,20 @@ public class AutofillBridge extends Plugin {
     @PluginMethod
     public synchronized void complete(PluginCall call) {
         Intent intent = getActivity().getIntent();
+        if (browserReply(intent)) {
+            String username = call.getString("username");
+            String password = call.getString("password");
+            if ((username == null || username.isEmpty()) && (password == null || password.isEmpty())) {
+                call.reject("Nothing to fill");
+                return;
+            }
+            Intent reply = new Intent();
+            reply.putExtra(BrowserFill.EXTRA_RESULT_USERNAME, username == null ? "" : username);
+            reply.putExtra(BrowserFill.EXTRA_RESULT_PASSWORD, password == null ? "" : password);
+            finishWith(Activity.RESULT_OK, reply);
+            call.resolve();
+            return;
+        }
         AutofillId usernameId = intent.getParcelableExtra(ValidAutofillService.EXTRA_USERNAME_ID);
         AutofillId passwordId = intent.getParcelableExtra(ValidAutofillService.EXTRA_PASSWORD_ID);
         String username = call.getString("username");

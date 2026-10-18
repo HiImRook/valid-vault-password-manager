@@ -17,6 +17,11 @@ final class BrowserTab {
     volatile String pageHost = "";
     volatile WebView web = null;
     Runnable collapse = null;
+    Runnable savePrompt = null;
+    BrowserFill.Save pendingSave = null;
+    String pendingSaveHost = null;
+    long pendingSaveAt = 0;
+    volatile long lastTouchAt = 0;
     boolean start = true;
     boolean fromStart = true;
     String title = "";

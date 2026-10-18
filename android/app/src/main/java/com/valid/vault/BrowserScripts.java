@@ -54,6 +54,8 @@ final class BrowserScripts {
     private static final String BACKGROUNDS_ASSET = "browser/backgrounds.js";
     private static final String PAINT_ASSET = "browser/paint.js";
     private static final String START_ASSET = "browser/start.js";
+    private static final String AUTOFILL_ASSET = "browser/autofill.js";
+    private static volatile String autofillCache = null;
     private static final String START_HEAD =
         "<!doctype html><html><head><meta charset=\"utf-8\">"
         + "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; script-src 'unsafe-inline'; worker-src blob:; style-src 'unsafe-inline'\">"
@@ -73,6 +75,18 @@ final class BrowserScripts {
     static String startHtml(Context context) {
         try {
             return startHtml(asset(context, BACKGROUNDS_ASSET), asset(context, PAINT_ASSET), asset(context, START_ASSET));
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    static String autofill(Context context) {
+        String cached = autofillCache;
+        if (cached != null) return cached;
+        try {
+            cached = asset(context, AUTOFILL_ASSET);
+            autofillCache = cached;
+            return cached;
         } catch (Exception e) {
             return null;
         }

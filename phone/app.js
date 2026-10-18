@@ -2168,6 +2168,19 @@ function chooseSite(sites, allowNew) {
   })
 }
 
+function chooseRelated(groups) {
+  return new Promise((resolve) => {
+    const list = $('fill-list')
+    list.textContent = ''
+    for (const group of groups) {
+      for (const login of group.credentials) {
+        list.appendChild(fillButton(login.username || '(no username)', group.domain, () => resolve({ site: group.domain, login })))
+      }
+    }
+    list.appendChild(fillButton('Pick another saved site', '', () => resolve(null)))
+  })
+}
+
 async function completeFill(site, login, mk) {
   try { await passwords.noteCredentialUse(site, login.username, mk) } catch (e) {}
   await platform.autofillComplete(login.username, login.password)
@@ -2191,6 +2204,15 @@ async function runFill(req, mk) {
   if (site && linkable) {
     const link = (tree.appLinks || {})[req.packageName]
     if (link && !link.cert && req.appCert) { try { await passwords.setAppLink(req.packageName, site, mk, req.appCert) } catch (e) {} }
+  }
+  if (!site && req.domain) {
+    const groups = passwords.relatedCredentials(tree, req.domain)
+    if (groups.length) {
+      fillHeader('Saved on other parts of this site', req.domain)
+      const picked = await chooseRelated(groups)
+      clearFillBody()
+      if (picked) { await completeFill(picked.site, picked.login, mk); return }
+    }
   }
   if (!site) {
     if (!sites.length) { fillMsg('There are no saved logins yet. Add one in Valid Vault first.', 'error'); return }
@@ -2263,7 +2285,8 @@ async function runSave(req, mk) {
   }
   fillHeader(existing ? 'Update saved password?' : 'Save login?', site + (username ? ' \u00b7 ' + username : ''))
   if (existing) $('fill-sub').textContent += '. The old password is kept as a previous password.'
-  if (!(await fillConfirm(existing ? 'Update' : 'Save'))) { platform.autofillClose(); return }
+  const askFirst = existing || !req.browserReply
+  if (askFirst && !(await fillConfirm(existing ? 'Update' : 'Save'))) { platform.autofillClose(); return }
   clearFillBody()
   state.fillBusy = true
   try { await passwords.saveCredential(site, username, req.password, mk, [], undefined) } finally { state.fillBusy = false }
