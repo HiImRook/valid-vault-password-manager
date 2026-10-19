@@ -5,6 +5,38 @@ All notable changes to Valid Vault will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.7.1] - 2026-10-19
+
+Autofill in the phone's private browser now matches the extension, with pull down to reload and a cleaner menu.
+
+### Added
+
+* **Personal Info in the browser.** First and last name, email, phone, and address fields, including dropdowns, get a V. Tap one and Valid Vault lists the Personal Info fields on that form, with the one you tapped checked and a choice of your saved emails. Check anything else you want and tap Fill. Fields you already typed in are left alone.
+* **Password generator in the browser.** New password boxes on sign-up and change password forms get an inverted V. Pick a style, with special characters or letters and numbers only, and a strong password fills the new and confirm boxes. It follows the lengths in Settings and the site's maximum length, pattern, and password rules, and the browser offers to save it when you submit.
+* **Your emails on login forms.** An email field on a login form offers your saved emails when the site has no saved login.
+* **Pull down to reload.** Pull down from the top of a page and let go once the arrow is full size.
+* **Edit quick view sites.** Press, hold, and let go on a site in new tab quick view, then tap Edit to change its name and address. It keeps its place in the list.
+* **About** in the browser menu.
+
+### Changed
+
+* **Sign-up forms recognized.** A form that asks for your name is treated as a sign-up form, so its email fills from Personal Info and its password box generates. A login page that marks its password box as new keeps the fill V.
+* **Larger V tags.** Tags are up to 36 pixels and step left of a site's own icons inside a field, such as a show password eye.
+* **A shorter menu.** Add to new tab quick view, the tracker switch, Tor mode, Valid Vault settings, and About. In Tor mode, New identity, Safer, and Fill login come first. New tab, Reload, Copy link, Open in another app, and Close and wipe are gone, since the toolbar, pull down, and Share already do them.
+* **Add to new tab quick view.** Renamed from Add to start page, and new sites go to the bottom of the list.
+* **Matching frames.** The address bar, the tab counter, and both widgets use the same line weight and color as the toolbar icons, and the tab counter is drawn as a page with a folded corner.
+* **Saved logins name the right account.** When a sign-up form is submitted, the save prompt uses the email or username field, not the nearest filled field.
+
+### Security
+
+* **Only what you check.** Only the Personal Info field you tapped starts checked, so a page that lists extra fields can't collect them in one tap. Values return only to the page that asked, after its origin is checked again.
+* **Taps need a real touch.** A V only opens Valid Vault right after a real tap on the page, and after a cancelled request that site's taps are ignored for a few seconds.
+* **Tor mode stays manual.** No Personal Info or password generator in Tor mode.
+
+### Notes
+
+* Verified in Chromium on sign-up, login, multi-step, change password, address, and newsletter forms, forms without a form tag, forms rebuilt while Valid Vault is open, and fields with a site's own show password icon.
+
 ## [0.8.7] - 2026-10-18
 
 The phone's private browser fills and saves logins from Valid Vault.

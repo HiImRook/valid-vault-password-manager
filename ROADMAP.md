@@ -1,10 +1,22 @@
 # Valid Vault - Development Roadmap
 
-**Current Version:** v0.8.7 - **Status: Active Testing**
+**Current Version:** v0.8.7.1 - **Status: Active Testing**
 
 ---
 
 ## Version History (Completed)
+
+### v0.8.7.1 - Private Browser Autofill Parity (Oct 2026)
+
+* ✅ Personal Info V tags on name, email, phone, and address fields, including dropdowns, with only the tapped field checked
+* ✅ Inverted V on new password boxes that generates into the new and confirm boxes, following length settings and site rules
+* ✅ Email fields on login forms offer saved emails when the site has no saved login
+* ✅ Forms that ask for a name treated as sign-up forms, and login pages that mark a password as new keep the fill V
+* ✅ Larger V tags that step left of a site's own icons
+* ✅ Pull down from the top of a page to reload
+* ✅ Menu trimmed to Add to new tab quick view, the tracker switch, Tor mode, Valid Vault settings, and About, with the Tor options at the top in Tor mode
+* ✅ Edit the name and address of sites in new tab quick view
+* ✅ Top bar and widget frames drawn with the same line weight and color as the toolbar icons, and a dog-eared tab counter
 
 ### v0.8.7 - Private Browser Autofill (Oct 2026)
 
@@ -258,11 +270,11 @@
 
 ---
 
-## Upcoming After v0.8.7
+## Upcoming After v0.8.7.1
 
 ### v0.8.x - The Phone App
 
-Built in this order, each step shipping as its own v0.8 release. The phone de-drift shipped in v0.8.0, the vault QR rebuild in v0.8.1, Android Autofill with Share to Bookmarks in v0.8.2, the private browser core in v0.8.3, importing from other managers in v0.8.4, the browser's Tor mode and downloads in v0.8.5, tabs with a start page in v0.8.6, and Valid Vault autofill in the browser in v0.8.7.
+Built in this order, each step shipping as its own v0.8 release. The phone de-drift shipped in v0.8.0, the vault QR rebuild in v0.8.1, Android Autofill with Share to Bookmarks in v0.8.2, the private browser core in v0.8.3, importing from other managers in v0.8.4, the browser's Tor mode and downloads in v0.8.5, tabs with a start page in v0.8.6, Valid Vault autofill in the browser in v0.8.7, and autofill matching the extension in v0.8.7.1.
 
 **1. Android Autofill** - shipped in v0.8.2
 
@@ -273,6 +285,7 @@ Built in this order, each step shipping as its own v0.8 release. The phone de-dr
 * Tor mode, downloads, the EasyPrivacy and EasyList lists, empty ad space removed, and Global Privacy Control shipped in v0.8.5
 * Tabs and the start page shipped in v0.8.6
 * Valid Vault autofill with V tags, Fill login, and save prompts shipped in v0.8.7
+* Personal Info, the password generator, and pull down to reload shipped in v0.8.7.1
 * Reorder or choose the widget buttons
 * Confirm the browser on phones, and grow the tracker list from what testing shows
 
@@ -303,6 +316,7 @@ Until the vault QR is confirmed on devices, encrypted files on a USB drive are t
 
 * Custom div-based combobox and `contenteditable` field support - no standard attribute signal exists for either, so this needs its own approach rather than an extension of the current classifier
 * Broader real-world testing of the heuristic field matcher across more sites
+* Forms built from web components (shadow DOM) in the private browser, which the extension already reaches
 
 ## Future Considerations (Post-1.0)
 
@@ -362,4 +376,4 @@ MIT License - See LICENSE file for details
 
 ---
 
-**Last Updated:** Oct 18, 2026
+**Last Updated:** Oct 19, 2026
