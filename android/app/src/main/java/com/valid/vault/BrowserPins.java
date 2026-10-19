@@ -8,6 +8,11 @@ final class BrowserPins {
     static final int MAX_PINS = 12;
     static final int MAX_TITLE_LENGTH = 40;
     static final int MAX_URL_LENGTH = 2048;
+    static final int EDIT_SAVED = 0;
+    static final int EDIT_UNCHANGED = 1;
+    static final int EDIT_MISSING = 2;
+    static final int EDIT_INVALID = 3;
+    static final int EDIT_DUPLICATE = 4;
 
     static final class Pin {
         final String url;
@@ -107,6 +112,20 @@ final class BrowserPins {
         Pin pin = pins.remove(from);
         pins.add(target, pin);
         return true;
+    }
+
+    static int edit(List<Pin> pins, String oldUrl, String newUrl, String title) {
+        int index = indexOf(pins, oldUrl);
+        if (index < 0) return EDIT_MISSING;
+        String normalized = normalizeUrl(newUrl);
+        if (normalized == null) return EDIT_INVALID;
+        int other = indexOf(pins, normalized);
+        if (other >= 0 && other != index) return EDIT_DUPLICATE;
+        String clean = cleanTitle(title);
+        Pin current = pins.get(index);
+        if (current.url.equals(normalized) && current.title.equals(clean)) return EDIT_UNCHANGED;
+        pins.set(index, new Pin(normalized, clean));
+        return EDIT_SAVED;
     }
 
     static boolean remove(List<Pin> pins, String url) {

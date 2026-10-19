@@ -202,7 +202,7 @@ async function autofillRequest() {
   if (!ab) return null
   try {
     const r = await ab.getRequest()
-    return r && (r.mode === 'fill' || r.mode === 'save') ? r : null
+    return r && (r.mode === 'fill' || r.mode === 'save' || r.mode === 'info') ? r : null
   } catch (e) {
     return null
   }
@@ -212,6 +212,12 @@ async function autofillComplete(username, password) {
   const ab = plugin('AutofillBridge')
   if (!ab) throw new Error('Autofill is not available')
   await ab.complete({ username, password })
+}
+
+async function autofillCompleteInfo(values) {
+  const ab = plugin('AutofillBridge')
+  if (!ab) throw new Error('Autofill is not available')
+  await ab.completeInfo({ values })
 }
 
 async function autofillClose() {
@@ -270,6 +276,12 @@ async function removeBrowserSite(site) {
   await bb.removeAllowedSite({ site })
 }
 
+async function setBrowserGenerator(min, max) {
+  const bb = plugin('BrowserBridge')
+  if (!bb) return
+  try { await bb.setGenerator({ min, max }) } catch (e) {}
+}
+
 async function openBrowserSearch() {
   const bb = plugin('BrowserBridge')
   if (!bb) throw new Error('The browser is not available on this device')
@@ -304,6 +316,8 @@ export {
   onLaunch,
   autofillRequest,
   autofillComplete,
+  autofillCompleteInfo,
+  setBrowserGenerator,
   autofillClose,
   autofillStatus,
   openAutofillSettings,

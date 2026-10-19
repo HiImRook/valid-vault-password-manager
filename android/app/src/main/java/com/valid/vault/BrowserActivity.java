@@ -1,6 +1,7 @@
 package com.valid.vault;
 
 import android.Manifest;
+import android.animation.ObjectAnimator;
 import android.animation.ValueAnimator;
 import android.app.Activity;
 import android.app.ActivityManager;
@@ -61,6 +62,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.RequiresApi;
+import androidx.webkit.JavaScriptReplyProxy;
 import androidx.webkit.ProxyController;
 import androidx.webkit.WebMessageCompat;
 import androidx.webkit.WebSettingsCompat;
@@ -121,25 +123,35 @@ public class BrowserActivity extends Activity {
     private static final long BAR_ANIM_MS = 180;
     private static final long SCROLL_SETTLE_MS = 300;
     private static final long KEYBOARD_DELAY_MS = 150;
-    private static final int MENU_RELOAD = 1;
-    private static final int MENU_COPY = 2;
+    private static final int PULL_SIZE_DP = 42;
+    private static final int PULL_TRIGGER_DP = 72;
+    private static final int PULL_MAX_DP = 110;
+    private static final int PULL_REST_DP = 14;
+    private static final float PULL_RESISTANCE = 0.55f;
+    private static final long PULL_RETURN_MS = 180;
+    private static final long PULL_SPIN_MS = 800;
+    private static final long PULL_TIMEOUT_MS = 10000;
     private static final int MENU_TRACKERS = 3;
-    private static final int MENU_OPEN_OUTSIDE = 4;
-    private static final int MENU_CLOSE = 5;
     private static final int MENU_TOR = 6;
     private static final int MENU_NEW_IDENTITY = 7;
     private static final int MENU_SAFER = 8;
-    private static final int MENU_NEW_TAB = 9;
     private static final int MENU_PIN = 10;
     private static final int MENU_SETTINGS = 11;
     private static final int MENU_FILL = 12;
+    private static final int MENU_ABOUT = 13;
+    private static final int FRAME_STROKE_DP = 2;
+    private static final int TAB_EAR_DP = 9;
+    private static final int TAB_RADIUS_DP = 7;
     private static final int REQUEST_STORAGE = 41;
     private static final int REQUEST_FILL = 42;
     private static final int REQUEST_SAVE = 43;
+    private static final int REQUEST_INFO = 44;
     private static final long FILL_TOUCH_WINDOW_MS = 2000;
     private static final long SAVE_PROMPT_DELAY_MS = 900;
     private static final long SAVE_PENDING_MS = 60000;
     private static final long SAVE_MUTE_MS = 60000;
+    private static final long TAP_MUTE_MS = 15000;
+    private static final long REPLY_WINDOW_MS = 10000;
     private static final int MAX_KNOWN_LOGINS = 200;
     private static final int MAX_COLLAPSE_URLS = 200;
     private static final long COLLAPSE_DELAY_MS = 400;
@@ -202,11 +214,26 @@ public class BrowserActivity extends Activity {
     private boolean rendererLost = false;
     private Runnable pendingStorage = null;
     private Runnable storageDenied = null;
+    private FrameLayout pullView;
+    private ImageView pullIcon;
+    private BrowserTab pullTab = null;
+    private float pullStartY = 0f;
+    private float lastTouchY = 0f;
+    private boolean touchDown = false;
+    private boolean pullReady = false;
+    private boolean refreshing = false;
+    private ObjectAnimator pullSpin = null;
+    private final Runnable pullTimeout = this::hidePull;
     private final Set<String> knownLogins = new HashSet<>();
     private final Map<String, Long> mutedSaves = new HashMap<>();
+    private final Map<String, Long> mutedTaps = new HashMap<>();
     private int fillTabId = -1;
     private String fillHost = null;
     private String fillOrigin = null;
+    private List<String> fillFields = Collections.emptyList();
+    private JavaScriptReplyProxy fillProxy = null;
+    private int genMin = BrowserSettings.GEN_DEFAULT_MIN;
+    private int genMax = BrowserSettings.GEN_DEFAULT_MAX;
     private boolean resumed = false;
     private boolean fillTor = false;
     private boolean torFillWarned = false;
@@ -231,6 +258,18 @@ public class BrowserActivity extends Activity {
 
     private GradientDrawable box(int fill, int radiusDp) {
         return box(fill, radiusDp, borderColor());
+    }
+
+    private GradientDrawable frame() {
+        GradientDrawable shape = new GradientDrawable();
+        shape.setColor(COLOR_BG);
+        shape.setStroke(dp(FRAME_STROKE_DP), accentColor());
+        shape.setCornerRadius(dp(BOX_RADIUS_DP));
+        return shape;
+    }
+
+    private BrowserTabIcon tabFrame() {
+        return new BrowserTabIcon(COLOR_BG, accentColor(), dp(FRAME_STROKE_DP), dp(TAB_RADIUS_DP), dp(TAB_EAR_DP));
     }
 
     private GradientDrawable box(int fill, int radiusDp, int stroke) {
@@ -271,6 +310,8 @@ public class BrowserActivity extends Activity {
     private void loadSettings() {
         BrowserSettings settings = BrowserSettings.load(this);
         engine = settings.engine;
+        genMin = settings.genMin;
+        genMax = settings.genMax;
         allowedSnapshot = Collections.unmodifiableSet(new HashSet<>(settings.allowedSites));
         pinsSnapshot = new ArrayList<>(settings.pins);
     }
@@ -313,6 +354,9 @@ public class BrowserActivity extends Activity {
 
         startView = buildStart();
         root.addView(startView, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+        pullView = buildPull();
+        root.addView(pullView, new FrameLayout.LayoutParams(dp(PULL_SIZE_DP), dp(PULL_SIZE_DP), Gravity.TOP | Gravity.CENTER_HORIZONTAL));
 
         topWrap = buildTopBar();
         root.addView(topWrap, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(TOP_ROW_DP + PROGRESS_DP), Gravity.TOP));
@@ -536,7 +580,7 @@ public class BrowserActivity extends Activity {
         address.setImeOptions(EditorInfo.IME_ACTION_GO);
         address.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
         address.setPadding(dp(12), 0, dp(12), 0);
-        address.setBackground(box(COLOR_BG, BOX_RADIUS_DP));
+        address.setBackground(frame());
         address.setOnEditorActionListener((v, actionId, event) -> {
             boolean enter = event != null && event.getKeyCode() == KeyEvent.KEYCODE_ENTER && event.getAction() == KeyEvent.ACTION_DOWN;
             if (actionId == EditorInfo.IME_ACTION_GO || enter) {
@@ -557,7 +601,7 @@ public class BrowserActivity extends Activity {
         tabButton.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
         tabButton.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
         tabButton.setGravity(Gravity.CENTER);
-        tabButton.setBackground(box(COLOR_BG, 9));
+        tabButton.setBackground(tabFrame());
         tabButton.setContentDescription("Tabs");
         tabButton.setOnClickListener(v -> {
             if (switcherOpen()) closeSwitcher();
@@ -797,23 +841,65 @@ public class BrowserActivity extends Activity {
         renderPins();
     }
 
-    private void showAddSite() {
-        if (isFinishing() || torMode) return;
+    private LinearLayout siteForm(EditText name, EditText site) {
         LinearLayout form = new LinearLayout(this);
         form.setOrientation(LinearLayout.VERTICAL);
         form.setPadding(dp(20), dp(8), dp(20), 0);
-        EditText name = new EditText(this);
         name.setHint("Name");
         name.setSingleLine(true);
         name.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_WORDS);
         form.addView(name);
-        EditText site = new EditText(this);
         site.setHint("Address, like example.com");
         site.setSingleLine(true);
         site.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
         form.addView(site);
+        return form;
+    }
+
+    private void showEditSite(BrowserPins.Pin pin) {
+        if (isFinishing() || torMode) return;
+        EditText name = new EditText(this);
+        EditText site = new EditText(this);
+        LinearLayout form = siteForm(name, site);
+        name.setText(pin.title.isEmpty() ? BrowserPins.hostLabel(pin.url) : pin.title);
+        site.setText(pin.url);
         new AlertDialog.Builder(this)
-            .setTitle("Add a site to the start page")
+            .setTitle("Edit site")
+            .setView(form)
+            .setPositiveButton("Save", (d, w) -> {
+                String url = BrowserPins.fromInput(site.getText().toString());
+                if (url == null) {
+                    toast("Enter a web address, like example.com");
+                    return;
+                }
+                editPin(pin.url, url, name.getText().toString());
+            })
+            .setNegativeButton("Cancel", null)
+            .show();
+    }
+
+    private void editPin(String oldUrl, String newUrl, String title) {
+        int[] result = { BrowserPins.EDIT_MISSING };
+        BrowserSettings saved = BrowserSettings.update(this, settings -> result[0] = BrowserPins.edit(settings.pins, oldUrl, newUrl, title));
+        if (saved == null) {
+            toast("Could not save the change");
+            return;
+        }
+        loadSettings();
+        renderPins();
+        if (result[0] == BrowserPins.EDIT_DUPLICATE) toast("That site is already in new tab quick view");
+        else if (result[0] == BrowserPins.EDIT_INVALID) toast("Enter a web address, like example.com");
+        else if (result[0] == BrowserPins.EDIT_MISSING) toast("That site was already removed");
+        else if (result[0] == BrowserPins.EDIT_SAVED) toast("Saved");
+    }
+
+    private void showAddSite() {
+        if (isFinishing() || torMode) return;
+        EditText name = new EditText(this);
+        EditText site = new EditText(this);
+        LinearLayout form = siteForm(name, site);
+        new AlertDialog.Builder(this)
+            .setTitle("Add a site to new tab quick view")
             .setView(form)
             .setPositiveButton("Add", (d, w) -> {
                 String url = BrowserPins.fromInput(site.getText().toString());
@@ -822,7 +908,7 @@ public class BrowserActivity extends Activity {
                     return;
                 }
                 if (BrowserPins.contains(pinsSnapshot, url)) {
-                    toast("That site is already on the start page");
+                    toast("That site is already in new tab quick view");
                     return;
                 }
                 setPinned(url, name.getText().toString(), true);
@@ -890,8 +976,9 @@ public class BrowserActivity extends Activity {
         if (isFinishing()) return;
         new AlertDialog.Builder(this)
             .setTitle(BrowserPins.label(pin))
-            .setItems(new CharSequence[] { "Open in new tab", "Remove from start page" }, (d, which) -> {
-                if (which == 0) openInNewTab(pin.url, true);
+            .setItems(new CharSequence[] { "Edit", "Open in new tab", "Remove from new tab quick view" }, (d, which) -> {
+                if (which == 0) showEditSite(pin);
+                else if (which == 1) openInNewTab(pin.url, true);
                 else setPinned(pin.url, "", false);
             })
             .show();
@@ -914,8 +1001,8 @@ public class BrowserActivity extends Activity {
         }
         loadSettings();
         renderPins();
-        if (pin && full[0]) toast("The start page holds " + BrowserPins.MAX_PINS + " sites. Remove one first.");
-        else if (changed[0]) toast(pin ? "Added to the start page" : "Removed from the start page");
+        if (pin && full[0]) toast("New tab quick view holds " + BrowserPins.MAX_PINS + " sites. Remove one first.");
+        else if (changed[0]) toast(pin ? "Added to the bottom of new tab quick view" : "Removed from new tab quick view");
     }
 
     private void updateStartInfo() {
@@ -1104,9 +1191,109 @@ public class BrowserActivity extends Activity {
         art.evaluateJavascript(BrowserScripts.paint(seed), null);
     }
 
+    private FrameLayout buildPull() {
+        FrameLayout circle = new FrameLayout(this);
+        GradientDrawable shape = new GradientDrawable();
+        shape.setShape(GradientDrawable.OVAL);
+        shape.setColor(COLOR_BAR);
+        shape.setStroke(dp(1), COLOR_BORDER);
+        circle.setBackground(shape);
+        circle.setVisibility(View.GONE);
+        circle.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        pullIcon = new ImageView(this);
+        pullIcon.setImageResource(R.drawable.vv_ic_refresh);
+        pullIcon.setScaleType(ImageView.ScaleType.CENTER);
+        circle.addView(pullIcon, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        return circle;
+    }
+
+    private float barBottom() {
+        return statusInset + dp(TOP_ROW_DP + PROGRESS_DP) * (1f - barHidden);
+    }
+
+    private void onTopOverscroll(BrowserTab tab, WebView view) {
+        if (!touchDown || pullTab != null || refreshing || switching || view != tab.web || tab != activeTab() || tab.start || !hasPage(tab)) return;
+        if (switcherOpen() || (address != null && address.hasFocus())) return;
+        pullTab = tab;
+        pullStartY = lastTouchY;
+        pullReady = false;
+        GradientDrawable shape = (GradientDrawable) pullView.getBackground();
+        shape.setStroke(dp(1), borderColor());
+        pullIcon.setImageTintList(ColorStateList.valueOf(accentColor()));
+        pullView.animate().cancel();
+        pullView.setVisibility(View.VISIBLE);
+        drawPull(0f);
+    }
+
+    private void drawPull(float distance) {
+        float max = dp(PULL_MAX_DP);
+        float trigger = dp(PULL_TRIGGER_DP);
+        float offset = Math.min(max, distance * PULL_RESISTANCE);
+        float progress = Math.min(1f, offset / (trigger * PULL_RESISTANCE));
+        pullReady = offset >= trigger * PULL_RESISTANCE;
+        pullView.setTranslationY(barBottom() - dp(PULL_SIZE_DP) + offset);
+        pullView.setAlpha(0.35f + 0.65f * progress);
+        float scale = pullReady ? 1f : 0.8f + 0.15f * progress;
+        pullView.setScaleX(scale);
+        pullView.setScaleY(scale);
+        pullIcon.setRotation(progress * 300f);
+    }
+
+    private void movePull(BrowserTab tab, float y) {
+        if (pullTab != tab || refreshing) return;
+        float distance = y - pullStartY;
+        if (distance < 0f) {
+            cancelPull();
+            return;
+        }
+        drawPull(distance);
+    }
+
+    private void releasePull(BrowserTab tab) {
+        if (pullTab != tab || refreshing) return;
+        if (!pullReady || tab.web == null || tab != activeTab() || switching) {
+            cancelPull();
+            return;
+        }
+        refreshing = true;
+        pullView.animate().translationY(barBottom() + dp(PULL_REST_DP)).alpha(1f).scaleX(1f).scaleY(1f).setDuration(PULL_RETURN_MS).start();
+        pullSpin = ObjectAnimator.ofFloat(pullIcon, View.ROTATION, pullIcon.getRotation(), pullIcon.getRotation() + 360f);
+        pullSpin.setDuration(PULL_SPIN_MS);
+        pullSpin.setRepeatCount(ValueAnimator.INFINITE);
+        pullSpin.start();
+        root.removeCallbacks(pullTimeout);
+        root.postDelayed(pullTimeout, PULL_TIMEOUT_MS);
+        tab.web.reload();
+    }
+
+    private void cancelPull() {
+        if (pullTab == null || refreshing) return;
+        pullTab = null;
+        pullReady = false;
+        pullView.animate().translationY(barBottom() - dp(PULL_SIZE_DP)).alpha(0f).setDuration(PULL_RETURN_MS)
+            .withEndAction(() -> { if (pullTab == null && !refreshing) pullView.setVisibility(View.GONE); }).start();
+    }
+
+    private void hidePull() {
+        if (pullView == null) return;
+        if (root != null) root.removeCallbacks(pullTimeout);
+        if (pullSpin != null) {
+            pullSpin.cancel();
+            pullSpin = null;
+        }
+        boolean wasShowing = pullTab != null || refreshing;
+        pullTab = null;
+        pullReady = false;
+        refreshing = false;
+        if (!wasShowing) return;
+        pullView.animate().cancel();
+        pullView.animate().translationY(barBottom() - dp(PULL_SIZE_DP)).alpha(0f).setDuration(PULL_RETURN_MS)
+            .withEndAction(() -> { if (pullTab == null && !refreshing) pullView.setVisibility(View.GONE); }).start();
+    }
+
     @RequiresApi(api = Build.VERSION_CODES.P)
     private void createWeb(BrowserTab tab) {
-        WebView view = new WebView(this);
+        WebView view = new BrowserWebView(this);
         view.setBackgroundColor(COLOR_BG);
         tab.web = view;
         configure(tab, view);
@@ -1122,6 +1309,7 @@ public class BrowserActivity extends Activity {
         if (root != null && tab.collapse != null) root.removeCallbacks(tab.collapse);
         clearSave(tab);
         if (tab.id == fillTabId) clearFill();
+        if (pullTab == tab) hidePull();
         old.stopLoading();
         ViewGroup parent = (ViewGroup) old.getParent();
         if (parent != null) parent.removeView(old);
@@ -1141,6 +1329,7 @@ public class BrowserActivity extends Activity {
     }
 
     private void deactivate(BrowserTab tab) {
+        if (tab != null && pullTab == tab) hidePull();
         if (tab == null || tab.web == null) return;
         if (hasPage(tab)) tab.web.evaluateJavascript(BrowserScripts.PAUSE_MEDIA, null);
         tab.web.setVisibility(View.GONE);
@@ -1155,6 +1344,7 @@ public class BrowserActivity extends Activity {
 
     private void showStart(BrowserTab tab) {
         if (tab == null) return;
+        if (pullTab == tab) hidePull();
         tab.start = true;
         if (tab.web != null) {
             tab.web.setVisibility(View.GONE);
@@ -1312,8 +1502,25 @@ public class BrowserActivity extends Activity {
             if (torMode) WebViewCompat.addDocumentStartJavaScript(view, BrowserScripts.NO_WEBRTC, BrowserScripts.ALL_ORIGINS);
         }
         if (!torMode) attachAutofill(tab, view);
+        if (view instanceof BrowserWebView) ((BrowserWebView) view).setTopOverscroll(w -> onTopOverscroll(tab, w));
         view.setOnTouchListener((v, e) -> {
-            if (e.getActionMasked() == MotionEvent.ACTION_UP) tab.lastTouchAt = SystemClock.uptimeMillis();
+            int action = e.getActionMasked();
+            if (action == MotionEvent.ACTION_DOWN) {
+                touchDown = true;
+                lastTouchY = e.getY();
+            } else if (action == MotionEvent.ACTION_MOVE) {
+                lastTouchY = e.getY();
+                movePull(tab, e.getY());
+            } else if (action == MotionEvent.ACTION_POINTER_DOWN) {
+                cancelPull();
+            } else if (action == MotionEvent.ACTION_UP) {
+                touchDown = false;
+                tab.lastTouchAt = SystemClock.uptimeMillis();
+                releasePull(tab);
+            } else if (action == MotionEvent.ACTION_CANCEL) {
+                touchDown = false;
+                cancelPull();
+            }
             return false;
         });
         CookieManager cookies = CookieManager.getInstance();
@@ -1390,6 +1597,7 @@ public class BrowserActivity extends Activity {
             @Override
             public void onPageFinished(WebView v, String url) {
                 if (v != tab.web) return;
+                if (refreshing && pullTab == tab) hidePull();
                 if (isWebUrl(url)) tab.url = url;
                 scheduleCollapse(tab);
                 if (tab != activeTab() || tab.start) return;
@@ -1439,27 +1647,149 @@ public class BrowserActivity extends Activity {
         if (script == null) return;
         try {
             WebViewCompat.addWebMessageListener(view, BrowserFill.BRIDGE_NAME, BrowserScripts.ALL_ORIGINS, (v, message, sourceOrigin, isMainFrame, reply) ->
-                onFillMessage(tab, v, message == null ? null : message.getData(), sourceOrigin, isMainFrame));
+                onFillMessage(tab, v, message == null ? null : message.getData(), sourceOrigin, isMainFrame, reply));
             WebViewCompat.addDocumentStartJavaScript(view, script, BrowserScripts.ALL_ORIGINS);
         } catch (Exception e) {
         }
     }
 
-    private void onFillMessage(BrowserTab tab, WebView view, String data, Uri origin, boolean mainFrame) {
+    private void onFillMessage(BrowserTab tab, WebView view, String data, Uri origin, boolean mainFrame, JavaScriptReplyProxy reply) {
         if (torMode || !mainFrame || view == null || view != tab.web || data == null || origin == null) return;
         String scheme = origin.getScheme() == null ? "" : origin.getScheme().toLowerCase(Locale.ROOT);
         if (!scheme.equals("https") && !scheme.equals("http")) return;
         String host = origin.getHost();
         if (host == null || !BrowserFill.sameHost(host, tab.pageHost)) return;
-        if (BrowserFill.MESSAGE_FILL.equals(data)) {
-            if (tab != activeTab() || tab.start) return;
-            if (SystemClock.uptimeMillis() - tab.lastTouchAt > FILL_TOUCH_WINDOW_MS) return;
-            tab.lastTouchAt = 0;
-            requestFill(tab);
+        BrowserFill.Message message = BrowserFill.parseMessage(data);
+        if (message == null) return;
+        if (BrowserFill.TYPE_SAVE.equals(message.type)) {
+            queueSave(tab, BrowserFill.domainOf(scheme + "://" + host + "/"), message.save);
             return;
         }
-        BrowserFill.Save save = BrowserFill.parseSave(data);
-        if (save != null) queueSave(tab, BrowserFill.domainOf(scheme + "://" + host + "/"), save);
+        if (tab != activeTab() || tab.start) return;
+        if (BrowserFill.TYPE_GENERATED.equals(message.type) || BrowserFill.TYPE_FILLED.equals(message.type)) {
+            if (SystemClock.uptimeMillis() > tab.expectReplyUntil) return;
+            tab.expectReplyUntil = 0;
+            if (BrowserFill.TYPE_GENERATED.equals(message.type)) {
+                toast("A strong " + message.number + "-character password is filled in" + (message.both ? " both boxes." : ".") + " The browser offers to save it when you sign up.");
+            } else if (message.number == 0) {
+                toast("No matching fields were empty on this page");
+            }
+            return;
+        }
+        if (SystemClock.uptimeMillis() - tab.lastTouchAt > FILL_TOUCH_WINDOW_MS) return;
+        tab.lastTouchAt = 0;
+        String messageOrigin = BrowserFill.originOf(scheme + "://" + origin.getAuthority() + "/");
+        if (messageOrigin == null || tapMuted(host)) return;
+        if (BrowserFill.TYPE_FILL.equals(message.type)) requestFill(tab, BrowserFill.FIELD_EMAIL.equals(message.field));
+        else if (BrowserFill.TYPE_INFO.equals(message.type)) requestInfo(tab, message.field, message.fields, reply, messageOrigin);
+        else if (BrowserFill.TYPE_GENERATE.equals(message.type)) requestGenerate(tab, reply, messageOrigin);
+    }
+
+    private boolean tapMuted(String host) {
+        Long at = mutedTaps.get(host.toLowerCase(Locale.ROOT));
+        return at != null && SystemClock.uptimeMillis() - at < TAP_MUTE_MS;
+    }
+
+    private void muteTaps(String host) {
+        if (host != null) mutedTaps.put(host.toLowerCase(Locale.ROOT), SystemClock.uptimeMillis());
+    }
+
+    private boolean pageReady(BrowserTab tab) {
+        return tab != null && tab.web != null && !tab.start && !switching && ready && !isFinishing() && !fillBusy() && fillDialog == null && saveDialog == null;
+    }
+
+    private void requestInfo(BrowserTab tab, String field, List<String> fields, JavaScriptReplyProxy reply, String messageOrigin) {
+        if (torMode || reply == null || !pageReady(tab)) return;
+        String url = tab.web.getUrl();
+        if (!isWebUrl(url) || !messageOrigin.equals(BrowserFill.originOf(url))) return;
+        String host = BrowserFill.domainOf(url);
+        if (host.isEmpty()) return;
+        Runnable launch = () -> launchInfo(tab, host, field, fields, reply, messageOrigin);
+        if (!BrowserFill.secure(url)) {
+            confirmFill(tab, "This page isn't secure",
+                host + " is not using https, so anything sent from this page can be read on the way. Fill your Personal Info anyway?",
+                "Fill anyway", false, launch);
+            return;
+        }
+        launch.run();
+    }
+
+    private void launchInfo(BrowserTab tab, String host, String field, List<String> fields, JavaScriptReplyProxy reply, String origin) {
+        if (torMode || switching || isFinishing() || fillBusy() || tab != activeTab() || !pageHostIs(tab, host)) return;
+        if (!origin.equals(BrowserFill.originOf(tab.web.getUrl()))) return;
+        fillTabId = tab.id;
+        fillHost = host;
+        fillOrigin = origin;
+        fillTor = false;
+        fillFields = fields;
+        fillProxy = reply;
+        try {
+            startActivityForResult(BrowserFill.infoIntent(this, host, field, fields), REQUEST_INFO);
+        } catch (Exception e) {
+            clearFill();
+            toast("Could not open Valid Vault");
+        }
+    }
+
+    private void finishInfo(int resultCode, Intent data) {
+        int tabId = fillTabId;
+        String host = fillHost;
+        String origin = fillOrigin;
+        List<String> fields = fillFields;
+        JavaScriptReplyProxy reply = fillProxy;
+        clearFill();
+        String result = data == null ? null : data.getStringExtra(BrowserFill.EXTRA_RESULT_INFO);
+        if (data != null) data.removeExtra(BrowserFill.EXTRA_RESULT_INFO);
+        if (resultCode != RESULT_OK || result == null) {
+            muteTaps(host);
+            return;
+        }
+        if (tabId < 0 || host == null || origin == null || reply == null) {
+            toast("Nothing was filled. Try again from the page.");
+            return;
+        }
+        BrowserTab tab = tabs.find(tabId);
+        if (tab == null || tab.web == null || torMode || switching) return;
+        if (!pageHostIs(tab, host) || !origin.equals(BrowserFill.originOf(tab.web.getUrl()))) {
+            toast("The page changed, so nothing was filled");
+            return;
+        }
+        String command = BrowserFill.infoCommand(result, fields);
+        if (command == null) {
+            toast("Nothing was filled");
+            return;
+        }
+        try {
+            tab.expectReplyUntil = SystemClock.uptimeMillis() + REPLY_WINDOW_MS;
+            reply.postMessage(command);
+        } catch (Exception e) {
+            toast("Could not fill this page");
+        }
+    }
+
+    private void requestGenerate(BrowserTab tab, JavaScriptReplyProxy reply, String origin) {
+        if (torMode || reply == null || !pageReady(tab)) return;
+        if (!origin.equals(BrowserFill.originOf(tab.web.getUrl()))) return;
+        String host = tab.pageHost;
+        CharSequence[] styles = { "With special characters (Aa1!)", "Letters and numbers only (Aa1)" };
+        fillDialog = new AlertDialog.Builder(this)
+            .setTitle("New password")
+            .setItems(styles, (d, which) -> {
+                if (torMode || switching || tab != activeTab() || tab.web == null || !origin.equals(BrowserFill.originOf(tab.web.getUrl()))) return;
+                String command = BrowserFill.generateCommand(which == 1 ? BrowserFill.STYLE_PLAIN : BrowserFill.STYLE_FULL, genMin, genMax);
+                if (command == null) return;
+                try {
+                    tab.expectReplyUntil = SystemClock.uptimeMillis() + REPLY_WINDOW_MS;
+                    reply.postMessage(command);
+                } catch (Exception e) {
+                    toast("Could not fill this page");
+                }
+            })
+            .setNegativeButton("Cancel", (d, w) -> muteTaps(host))
+            .setOnCancelListener(d -> muteTaps(host))
+            .create();
+        fillDialog.setOnDismissListener(d -> { if (fillDialog == d) fillDialog = null; });
+        fillDialog.show();
     }
 
     private boolean fillBusy() {
@@ -1471,6 +1801,8 @@ public class BrowserActivity extends Activity {
         fillHost = null;
         fillOrigin = null;
         fillTor = false;
+        fillFields = Collections.emptyList();
+        fillProxy = null;
     }
 
     private void dismissFillDialogs() {
@@ -1492,8 +1824,8 @@ public class BrowserActivity extends Activity {
         return isWebUrl(url) && BrowserFill.sameHost(BrowserFill.domainOf(url), host);
     }
 
-    private void requestFill(BrowserTab tab) {
-        if (tab == null || tab.web == null || tab.start || switching || !ready || isFinishing() || fillBusy() || fillDialog != null || saveDialog != null) return;
+    private void requestFill(BrowserTab tab, boolean emailField) {
+        if (!pageReady(tab)) return;
         String url = tab.web.getUrl();
         if (!isWebUrl(url)) return;
         String host = BrowserFill.domainOf(url);
@@ -1509,24 +1841,24 @@ public class BrowserActivity extends Activity {
                 return;
             }
             if (!torFillWarned) {
-                confirmFill(tab, host, "Sign in with Tor?",
+                confirmFill(tab, "Sign in with Tor?",
                     "Signing in tells " + host + " who you are, even through Tor. When you're done with this site, tap New identity before you visit anything else.",
-                    "Fill login", true);
+                    "Fill login", true, () -> launchFill(tab, host, false));
                 return;
             }
-            launchFill(tab, host);
+            launchFill(tab, host, false);
             return;
         }
         if (!secure) {
-            confirmFill(tab, host, "This page isn't secure",
+            confirmFill(tab, "This page isn't secure",
                 host + " is not using https, so anything sent from this page can be read on the way. Fill your login anyway?",
-                "Fill anyway", false);
+                "Fill anyway", false, () -> launchFill(tab, host, emailField));
             return;
         }
-        launchFill(tab, host);
+        launchFill(tab, host, emailField);
     }
 
-    private void confirmFill(BrowserTab tab, String host, String title, String message, String okLabel, boolean torNote) {
+    private void confirmFill(BrowserTab tab, String title, String message, String okLabel, boolean torNote, Runnable launch) {
         fillDialog = new AlertDialog.Builder(this)
             .setTitle(title)
             .setMessage(message)
@@ -1535,7 +1867,7 @@ public class BrowserActivity extends Activity {
                     if (!torMode) return;
                     torFillWarned = true;
                 }
-                launchFill(tab, host);
+                launch.run();
             })
             .setNegativeButton("Cancel", null)
             .create();
@@ -1543,7 +1875,7 @@ public class BrowserActivity extends Activity {
         fillDialog.show();
     }
 
-    private void launchFill(BrowserTab tab, String host) {
+    private void launchFill(BrowserTab tab, String host, boolean emailField) {
         if (switching || isFinishing() || fillBusy() || tab != activeTab() || !pageHostIs(tab, host)) return;
         if (torMode && (safer || !BrowserFill.secure(tab.web.getUrl()))) return;
         String origin = BrowserFill.originOf(tab.web.getUrl());
@@ -1553,7 +1885,7 @@ public class BrowserActivity extends Activity {
         fillOrigin = origin;
         fillTor = torMode;
         try {
-            startActivityForResult(BrowserFill.fillIntent(this, host), REQUEST_FILL);
+            startActivityForResult(BrowserFill.fillIntent(this, host, emailField && !torMode), REQUEST_FILL);
         } catch (Exception e) {
             clearFill();
             toast("Could not open Valid Vault");
@@ -1574,7 +1906,10 @@ public class BrowserActivity extends Activity {
         }
         String user = username == null ? "" : username;
         String pass = password == null ? "" : password;
-        if (resultCode != RESULT_OK || (user.isEmpty() && pass.isEmpty())) return;
+        if (resultCode != RESULT_OK || (user.isEmpty() && pass.isEmpty())) {
+            if (resultCode != RESULT_OK) muteTaps(host);
+            return;
+        }
         if (tabId < 0 || host == null || origin == null) {
             toast("Nothing was filled. Try again from the page.");
             return;
@@ -1680,6 +2015,7 @@ public class BrowserActivity extends Activity {
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         if (requestCode == REQUEST_FILL) finishFill(resultCode, data);
+        else if (requestCode == REQUEST_INFO) finishInfo(resultCode, data);
     }
 
     private boolean onLongPress(BrowserTab tab, WebView view) {
@@ -1791,30 +2127,24 @@ public class BrowserActivity extends Activity {
         boolean page = url != null;
         boolean off = page && BrowserPrivacy.siteAllowed(tab.pageHost, allowedSnapshot);
         boolean pinned = page && BrowserPins.contains(pinsSnapshot, url);
-        menu.add(Menu.NONE, MENU_NEW_TAB, 1, "New tab").setEnabled(ready && !switching);
-        menu.add(Menu.NONE, MENU_FILL, 2, "Fill login").setEnabled(page && ready && !switching && !(torMode && safer));
-        menu.add(Menu.NONE, MENU_RELOAD, 3, "Reload").setEnabled(page);
-        menu.add(Menu.NONE, MENU_COPY, 4, "Copy link").setEnabled(page);
-        menu.add(Menu.NONE, MENU_PIN, 5, pinned ? "Remove from start page" : "Add to start page").setEnabled(page && !torMode);
-        menu.add(Menu.NONE, MENU_TRACKERS, 6, off ? "Turn tracker blocking on for this site" : "Turn tracker blocking off for this site").setEnabled(page && !torMode);
-        menu.add(Menu.NONE, MENU_OPEN_OUTSIDE, 7, "Open in another app").setEnabled(page);
-        menu.add(Menu.NONE, MENU_TOR, 8, torMode ? "Turn Tor mode off" : "Turn Tor mode on").setEnabled(ready && !switching);
+        int order = 0;
         if (torMode) {
-            menu.add(Menu.NONE, MENU_NEW_IDENTITY, 9, "New identity").setEnabled(!switching);
-            menu.add(Menu.NONE, MENU_SAFER, 10, "Safer: JavaScript off").setCheckable(true).setChecked(safer).setEnabled(!switching);
+            menu.add(Menu.NONE, MENU_NEW_IDENTITY, ++order, "New identity").setEnabled(!switching);
+            menu.add(Menu.NONE, MENU_SAFER, ++order, "Safer: JavaScript off").setCheckable(true).setChecked(safer).setEnabled(!switching);
+            menu.add(Menu.NONE, MENU_FILL, ++order, "Fill login").setEnabled(page && ready && !switching && !safer);
+        } else {
+            menu.add(Menu.NONE, MENU_PIN, ++order, pinned ? "Remove from new tab quick view" : "Add to new tab quick view").setEnabled(page);
+            menu.add(Menu.NONE, MENU_TRACKERS, ++order, off ? "Turn tracker blocking on for this site" : "Turn tracker blocking off for this site").setEnabled(page);
         }
-        menu.add(Menu.NONE, MENU_SETTINGS, 11, "Valid Vault settings");
-        menu.add(Menu.NONE, MENU_CLOSE, 12, "Close and wipe");
+        menu.add(Menu.NONE, MENU_TOR, ++order, torMode ? "Turn off Tor mode" : "Turn on Tor mode").setEnabled(ready && !switching);
+        menu.add(Menu.NONE, MENU_SETTINGS, ++order, "Valid Vault settings");
+        menu.add(Menu.NONE, MENU_ABOUT, ++order, "About");
         popup.setOnMenuItemClickListener(item -> {
             int id = item.getItemId();
             BrowserTab current = activeTab();
-            if (id == MENU_NEW_TAB) newTab(false);
-            else if (id == MENU_FILL) requestFill(current);
-            else if (id == MENU_RELOAD && current != null && current.web != null) current.web.reload();
-            else if (id == MENU_COPY) copyLink();
+            if (id == MENU_FILL) requestFill(current, false);
             else if (id == MENU_PIN) togglePin();
             else if (id == MENU_TRACKERS) toggleSite();
-            else if (id == MENU_OPEN_OUTSIDE) openOutside();
             else if (id == MENU_TOR) {
                 if (torMode) stopTor();
                 else startTor();
@@ -1822,10 +2152,25 @@ public class BrowserActivity extends Activity {
             else if (id == MENU_NEW_IDENTITY) newIdentity();
             else if (id == MENU_SAFER) toggleSafer();
             else if (id == MENU_SETTINGS) openVault(LaunchTarget.TAB_SETTINGS, "Settings");
-            else if (id == MENU_CLOSE) finish();
+            else if (id == MENU_ABOUT) showAbout();
             return true;
         });
         popup.show();
+    }
+
+    private void showAbout() {
+        if (isFinishing()) return;
+        String version = "";
+        try {
+            version = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
+        } catch (Exception e) {
+            version = "";
+        }
+        new AlertDialog.Builder(this)
+            .setTitle("About")
+            .setMessage("Valid Vault private browser" + (version == null || version.isEmpty() ? "" : "\nVersion " + version))
+            .setPositiveButton("OK", null)
+            .show();
     }
 
     private void togglePin() {
@@ -1842,9 +2187,9 @@ public class BrowserActivity extends Activity {
         bottomBar.setBackgroundColor(bar);
         statusScrim.setBackgroundColor(bar);
         navScrim.setBackgroundColor(bar);
-        address.setBackground(box(COLOR_BG, BOX_RADIUS_DP));
+        address.setBackground(frame());
         address.setHint(torMode ? HINT_TOR : HINT_NORMAL);
-        tabButton.setBackground(box(COLOR_BG, 9));
+        tabButton.setBackground(tabFrame());
         tabButton.setTextColor(accentColor());
         progress.setProgressTintList(ColorStateList.valueOf(accentColor()));
         setTaskDescription(new ActivityManager.TaskDescription(TASK_LABEL, R.drawable.vv_logo, bar));
@@ -1862,6 +2207,7 @@ public class BrowserActivity extends Activity {
         clearFill();
         knownLogins.clear();
         mutedSaves.clear();
+        mutedTaps.clear();
         torFillWarned = false;
     }
 
@@ -2080,21 +2426,6 @@ public class BrowserActivity extends Activity {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) Toast.makeText(this, "Link copied", Toast.LENGTH_SHORT).show();
     }
 
-    private void copyLink() {
-        String url = currentUrl();
-        if (url != null) copyText(url);
-    }
-
-    private void openOutside() {
-        String url = currentUrl();
-        if (url == null) return;
-        try {
-            startActivity(Intent.createChooser(new Intent(Intent.ACTION_VIEW, Uri.parse(url)), "Open with"));
-        } catch (Exception e) {
-            Toast.makeText(this, "No other app can open this link", Toast.LENGTH_SHORT).show();
-        }
-    }
-
     private void shareText(String url, String title) {
         Intent send = new Intent(Intent.ACTION_SEND);
         send.setType("text/plain");
@@ -2230,6 +2561,8 @@ public class BrowserActivity extends Activity {
     @Override
     protected void onPause() {
         resumed = false;
+        touchDown = false;
+        hidePull();
         WebView web = activeWeb();
         if (web != null) web.onPause();
         super.onPause();

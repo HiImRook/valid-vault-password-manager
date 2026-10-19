@@ -14,6 +14,7 @@ import java.nio.channels.FileLock;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -26,6 +27,10 @@ final class BrowserSettings {
     static final String ENGINE_DUCKDUCKGO = "duckduckgo";
     static final String ENGINE_BRAVE = "brave";
     static final Set<String> ENGINES = new HashSet<>(Arrays.asList(ENGINE_STARTPAGE, ENGINE_DUCKDUCKGO, ENGINE_BRAVE));
+    static final List<Integer> GEN_MIN_CHOICES = Collections.unmodifiableList(Arrays.asList(16, 20));
+    static final List<Integer> GEN_MAX_CHOICES = Collections.unmodifiableList(Arrays.asList(24, 32, 48, 64));
+    static final int GEN_DEFAULT_MIN = 16;
+    static final int GEN_DEFAULT_MAX = 24;
 
     private static final String FILE_NAME = "browser_settings.json";
     private static final String TEMP_PREFIX = "browser_settings.json.tmp.";
@@ -34,6 +39,8 @@ final class BrowserSettings {
     private static final Object LOCK = new Object();
 
     String engine = ENGINE_STARTPAGE;
+    int genMin = GEN_DEFAULT_MIN;
+    int genMax = GEN_DEFAULT_MAX;
     final Set<String> allowedSites = new TreeSet<>();
     final List<BrowserPins.Pin> pins = new ArrayList<>();
 
@@ -102,6 +109,10 @@ final class BrowserSettings {
             JSONObject json = new JSONObject(text);
             String engine = json.optString("engine", ENGINE_STARTPAGE);
             if (ENGINES.contains(engine)) settings.engine = engine;
+            int min = json.optInt("genMin", GEN_DEFAULT_MIN);
+            int max = json.optInt("genMax", GEN_DEFAULT_MAX);
+            if (GEN_MIN_CHOICES.contains(min)) settings.genMin = min;
+            if (GEN_MAX_CHOICES.contains(max)) settings.genMax = max;
             JSONArray sites = json.optJSONArray("allowedSites");
             if (sites != null) {
                 for (int i = 0; i < sites.length(); i++) {
@@ -126,6 +137,8 @@ final class BrowserSettings {
     String serialize() throws Exception {
         JSONObject json = new JSONObject();
         json.put("engine", engine);
+        json.put("genMin", genMin);
+        json.put("genMax", genMax);
         JSONArray sites = new JSONArray();
         for (String site : allowedSites) sites.put(site);
         json.put("allowedSites", sites);

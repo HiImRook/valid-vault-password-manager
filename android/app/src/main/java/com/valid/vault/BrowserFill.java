@@ -3,10 +3,16 @@ package com.valid.vault;
 import android.content.Context;
 import android.content.Intent;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Iterator;
+import java.util.List;
 import java.util.Locale;
 
 final class BrowserFill {
@@ -16,9 +22,25 @@ final class BrowserFill {
     static final String EXTRA_SAVE_PASSWORD = "vv_browser_save_password";
     static final String EXTRA_RESULT_USERNAME = "vv_browser_result_username";
     static final String EXTRA_RESULT_PASSWORD = "vv_browser_result_password";
+    static final String EXTRA_RESULT_INFO = "vv_browser_result_info";
+    static final String EXTRA_EMAIL_FIELD = "vv_browser_email_field";
+    static final String EXTRA_INFO_FIELD = "vv_browser_info_field";
+    static final String EXTRA_INFO_FIELDS = "vv_browser_info_fields";
+    static final String MODE_INFO = "info";
     static final String BRIDGE_NAME = "vvAutofill";
-    static final String MESSAGE_FILL = "fill";
+    static final String TYPE_FILL = "fill";
     static final String TYPE_SAVE = "save";
+    static final String TYPE_INFO = "info";
+    static final String TYPE_GENERATE = "generate";
+    static final String TYPE_GENERATED = "generated";
+    static final String TYPE_FILLED = "filled";
+    static final String FIELD_EMAIL = "email";
+    static final String STYLE_FULL = "full";
+    static final String STYLE_PLAIN = "plain";
+    static final List<String> INFO_TYPES = Collections.unmodifiableList(Arrays.asList(
+        "firstName", "lastName", "email", "phone", "address.street", "address.city", "address.state", "address.zip", "address.country"));
+    static final int MAX_MESSAGE_LENGTH = 8192;
+    static final int MAX_INFO_RESULT = 32768;
     static final int MAX_FIELD_LENGTH = 1024;
     static final int FILLED_NONE = 0;
     static final int FILL_ERROR = -1;
@@ -147,6 +169,105 @@ final class BrowserFill {
         }
     }
 
+    static final class Message {
+        final String type;
+        final String field;
+        final List<String> fields;
+        final Save save;
+        final int number;
+        final boolean both;
+
+        Message(String type, String field, List<String> fields, Save save, int number, boolean both) {
+            this.type = type;
+            this.field = field;
+            this.fields = fields;
+            this.save = save;
+            this.number = number;
+            this.both = both;
+        }
+    }
+
+    static Message parseMessage(String message) {
+        if (message == null || message.length() > MAX_MESSAGE_LENGTH) return null;
+        try {
+            JSONObject json = new JSONObject(message);
+            String type = json.optString("type", "");
+            if (TYPE_SAVE.equals(type)) {
+                Save save = parseSave(message);
+                return save == null ? null : new Message(type, "", Collections.emptyList(), save, 0, false);
+            }
+            if (TYPE_FILL.equals(type)) {
+                return new Message(type, FIELD_EMAIL.equals(json.optString("field", "")) ? FIELD_EMAIL : "", Collections.emptyList(), null, 0, false);
+            }
+            if (TYPE_INFO.equals(type)) {
+                String field = json.optString("field", "");
+                if (!INFO_TYPES.contains(field)) return null;
+                List<String> fields = new ArrayList<>();
+                fields.add(field);
+                JSONArray list = json.optJSONArray("fields");
+                if (list != null) {
+                    for (int i = 0; i < list.length() && i < INFO_TYPES.size() * 2; i++) {
+                        String t = list.optString(i, "");
+                        if (INFO_TYPES.contains(t) && !fields.contains(t)) fields.add(t);
+                    }
+                }
+                return new Message(type, field, Collections.unmodifiableList(fields), null, 0, false);
+            }
+            if (TYPE_GENERATE.equals(type)) return new Message(type, "", Collections.emptyList(), null, 0, false);
+            if (TYPE_GENERATED.equals(type)) {
+                int length = json.optInt("length", 0);
+                if (length <= 0 || length > MAX_FIELD_LENGTH) return null;
+                return new Message(type, "", Collections.emptyList(), null, length, json.optBoolean("both", false));
+            }
+            if (TYPE_FILLED.equals(type)) {
+                int count = json.optInt("count", -1);
+                if (count < 0 || count > INFO_TYPES.size() * 4) return null;
+                return new Message(type, "", Collections.emptyList(), null, count, false);
+            }
+            return null;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    static String infoCommand(String result, List<String> requested) {
+        if (result == null || result.length() > MAX_INFO_RESULT || requested == null) return null;
+        try {
+            JSONObject given = new JSONObject(result);
+            JSONObject values = new JSONObject();
+            Iterator<String> keys = given.keys();
+            while (keys.hasNext()) {
+                String key = keys.next();
+                if (!requested.contains(key)) continue;
+                Object value = given.opt(key);
+                if (!(value instanceof String)) continue;
+                String text = (String) value;
+                if (text.isEmpty() || text.length() > MAX_FIELD_LENGTH) continue;
+                values.put(key, text);
+            }
+            if (values.length() == 0) return null;
+            JSONObject command = new JSONObject();
+            command.put("cmd", TYPE_INFO);
+            command.put("values", values);
+            return command.toString();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    static String generateCommand(String style, int min, int max) {
+        try {
+            JSONObject command = new JSONObject();
+            command.put("cmd", TYPE_GENERATE);
+            command.put("style", STYLE_PLAIN.equals(style) ? STYLE_PLAIN : STYLE_FULL);
+            command.put("min", min);
+            command.put("max", max);
+            return command.toString();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     static Save parseSave(String message) {
         if (message == null || message.length() > MAX_FIELD_LENGTH * 4) return null;
         try {
@@ -180,12 +301,24 @@ final class BrowserFill {
         return url != null && url.toLowerCase(Locale.ROOT).startsWith("https://");
     }
 
-    static Intent fillIntent(Context context, String domain) {
+    static Intent fillIntent(Context context, String domain, boolean emailField) {
         Intent intent = new Intent(context, AutofillActivity.class);
         intent.putExtra(ValidAutofillService.EXTRA_MODE, ValidAutofillService.MODE_FILL);
         intent.putExtra(ValidAutofillService.EXTRA_DOMAIN, domain);
         intent.putExtra(ValidAutofillService.EXTRA_IS_BROWSER, true);
         intent.putExtra(EXTRA_REPLY, true);
+        intent.putExtra(EXTRA_EMAIL_FIELD, emailField);
+        return intent;
+    }
+
+    static Intent infoIntent(Context context, String domain, String field, List<String> fields) {
+        Intent intent = new Intent(context, AutofillActivity.class);
+        intent.putExtra(ValidAutofillService.EXTRA_MODE, MODE_INFO);
+        intent.putExtra(ValidAutofillService.EXTRA_DOMAIN, domain);
+        intent.putExtra(ValidAutofillService.EXTRA_IS_BROWSER, true);
+        intent.putExtra(EXTRA_REPLY, true);
+        intent.putExtra(EXTRA_INFO_FIELD, field);
+        intent.putExtra(EXTRA_INFO_FIELDS, new ArrayList<>(fields));
         return intent;
     }
 

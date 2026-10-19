@@ -172,6 +172,12 @@
     .fill-item { display: block; width: 100%; text-align: left; background: var(--bg); color: var(--text); border: 1px solid var(--green-faint); margin-top: 8px; font-weight: 400; word-break: break-all; }
     .fill-item .fill-item-sub { display: block; color: var(--text-dim); font-size: 12px; margin-top: 3px; }
     .fill-actions { display: flex; gap: 8px; margin-top: 12px; }
+    .fill-check { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 6px; cursor: pointer; }
+    .fill-check input[type="checkbox"] { width: 20px; height: 20px; flex: none; accent-color: var(--green); margin: 0; }
+    .fill-check-body { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
+    .fill-check-body .fill-item-sub { margin-top: 0; }
+    .fill-check-value { color: var(--text); word-break: break-word; }
+    .fill-check-select { width: 100%; }
     .fill-actions button { flex: 1; }
     .wv-dialog-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 2000; padding: 16px; }
     .wv-dialog { background: var(--bg-raise); border: 1px solid var(--green-dim); border-radius: 8px; padding: 18px; width: min(460px, 100%); }
@@ -476,20 +482,22 @@
           <summary>Private browser</summary>
           <div class="body">
             <p>Valid Vault includes a Chromium browser for private browsing. Open it from Settings, from a Valid Vault widget, or by long-pressing the app icon and tapping Search. Tapping a bookmark opens it there too.</p>
-            <p>The bar along the bottom has Back, Bookmarks, New tab, Share, and Forward. Both bars slide away as you scroll down a page and come back when you scroll up. Bookmarks opens Valid Vault and asks for your fingerprint or device PIN. The menu at the top right has New tab, Fill login, Reload, Copy link, Add to start page, the tracker switch for the site, Open in another app, Tor mode, Valid Vault settings, and Close and wipe.</p>
+            <p>The bar along the bottom has Back, Bookmarks, New tab, Share, and Forward. Both bars slide away as you scroll down a page and come back when you scroll up. Pull down from the top of a page to reload it. Bookmarks opens Valid Vault and asks for your fingerprint or device PIN. The menu at the top right has Add to new tab quick view, the tracker switch for the site, Tor mode, Valid Vault settings, and About. In Tor mode, New identity, Safer, and Fill login sit at the top of it instead.</p>
             <p>Up to 15 tabs can be open at once. The number beside the address bar shows how many are open. Tap it to see your tabs, switch between them, close one, or close them all. Press and hold it to open a new tab. Press and hold a link to open it in a new tab, copy it, or share it. Tabs you aren't looking at are paused.</p>
-            <p>Each new tab opens on the start page, with its own background. Add sites with Add to start page in the menu, or with the Add site tile, which asks for a name and address. Up to 12 fit. New sites go at the bottom and earlier rows move up. Press and hold a site and drag it onto another to reorder them, or press, hold and let go to open it in a new tab or remove it. Tap the address bar to search or type an address.</p>
+            <p>Each new tab opens on the start page, with its own background. Add sites with Add to new tab quick view in the menu, or with the Add site tile, which asks for a name and address. Up to 12 fit. New sites go at the bottom and earlier rows move up. Press and hold a site and drag it onto another to reorder them, or press, hold and let go to edit its name and address, open it in a new tab, or remove it. Tap the address bar to search or type an address.</p>
             <p>Like a background? Tap Save it to Downloads under it to keep a copy of that exact picture, for a wallpaper or to share.</p>
             <p>Type a web address to go straight to it, or anything else to search. Startpage is the default search engine. DuckDuckGo and Brave Search are in Settings, Browser.</p>
             <p>Known trackers and ad scripts are blocked, using Valid Vault's own list and the EasyPrivacy and EasyList lists, and the empty space a blocked ad leaves is removed. Tracking tags such as utm and fbclid, and share tags like YouTube's si, are removed from links, and redirect wrappers from Google, Facebook, and others are skipped so you land on the real page. Third-party cookies are off, and every site is sent Global Privacy Control, which asks it not to sell or share your data.</p>
             <p>The start page shows how many trackers were blocked this session. If a site breaks, use the tracker switch in the menu to turn blocking off for that site. Settings, Browser lists those sites so you can turn blocking back on.</p>
             <p>When a page offers a file, the browser shows its name and size and asks before downloading it to your Downloads folder.</p>
-            <p>Login fields get a small green V. Tap it, or choose Fill login from the menu, and Valid Vault asks for your fingerprint or password, then fills your saved login for that site. Every fill asks again. If the site has no saved login but another part of it does, such as login.example.com when example.com is saved, those logins are offered first. When you sign in with a login Valid Vault doesn't have yet, or with a new password, the browser asks whether to save it. Pages that aren't using https ask before filling.</p>
+            <p>Login fields get a small green V. Tap it and Valid Vault asks for your fingerprint or password, then fills your saved login for that site. Every fill asks again. If the site has no saved login but another part of it does, such as login.example.com when example.com is saved, those logins are offered first. When you sign in with a login Valid Vault doesn't have yet, or with a new password, the browser asks whether to save it. Pages that aren't using https ask before filling.</p>
+            <p>Name, email, phone, and address fields get a V too. Tap one and, after your fingerprint, Valid Vault lists what it can fill on that form from Personal Info, with a choice of your saved emails. Uncheck anything you don't want and tap Fill. Fields you already typed in are left alone. On a login form, an email field with no saved login offers your saved emails instead.</p>
+            <p>New password boxes on sign-up and change password forms get an inverted V, a green tag with a dark V. Tap it and pick a style, with special characters or letters and numbers only, and a strong password fills the new and confirm boxes, using the lengths set in Settings and any rules the site gives. The browser offers to save it when you submit.</p>
             <p>Closing the browser wipes cookies, site data, cache, and history. It runs separately from your vault and only receives the one login you choose to fill, for the page you're on.</p>
             <p>Tor mode sends every page through Orbot, the Tor Project's app, so sites can't see your IP address or location. Install Orbot and tap Start, then choose Turn Tor mode on from the browser's menu. The bars turn purple while it is on. If Orbot stops, pages stop loading until it is running again. Turning Tor mode on or off closes every tab and wipes the session, and each time the browser opens it starts in normal mode.</p>
             <p>In Tor mode, downloads are off and New identity in the menu closes every tab and clears the session. Safer turns JavaScript off for extra protection, though some sites lose menus, logins, or video while it is on.</p>
             <p>Signing in to a site tells that site who you are. When you're done with a site you signed into, tap New identity and refresh the connection in Orbot before you visit anything else.</p>
-            <p>In Tor mode, logins never fill on their own. The green V is off and the browser never offers to save, so use Fill login in the menu. It only works on https pages, needs Safer off, and reminds you once each session that signing in tells the site who you are.</p>
+            <p>In Tor mode, logins never fill on their own. The green V is off and the browser never offers to save, so use Fill login in the menu. It only works on https pages, needs Safer off, and reminds you once each session that signing in tells the site who you are. Personal Info and the password generator are off in Tor mode.</p>
             <p>For a VPN, or Orbot in VPN mode, the browser's traffic goes through it like any other app.</p>
           </div>
         </details>
@@ -10692,7 +10700,7 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
 <script>
 (function () {
 'use strict'
-const VALID_VAULT_VERSION = "0.8.7"
+const VALID_VAULT_VERSION = "0.8.7.1"
 const __modules = Object.create(null)
 __modules["extension/crypto.js"] = (function () {
 const SALT_LENGTH = 16
@@ -16441,7 +16449,7 @@ async function autofillRequest() {
   if (!ab) return null
   try {
     const r = await ab.getRequest()
-    return r && (r.mode === 'fill' || r.mode === 'save') ? r : null
+    return r && (r.mode === 'fill' || r.mode === 'save' || r.mode === 'info') ? r : null
   } catch (e) {
     return null
   }
@@ -16451,6 +16459,12 @@ async function autofillComplete(username, password) {
   const ab = plugin('AutofillBridge')
   if (!ab) throw new Error('Autofill is not available')
   await ab.complete({ username, password })
+}
+
+async function autofillCompleteInfo(values) {
+  const ab = plugin('AutofillBridge')
+  if (!ab) throw new Error('Autofill is not available')
+  await ab.completeInfo({ values })
 }
 
 async function autofillClose() {
@@ -16509,6 +16523,12 @@ async function removeBrowserSite(site) {
   await bb.removeAllowedSite({ site })
 }
 
+async function setBrowserGenerator(min, max) {
+  const bb = plugin('BrowserBridge')
+  if (!bb) return
+  try { await bb.setGenerator({ min, max }) } catch (e) {}
+}
+
 async function openBrowserSearch() {
   const bb = plugin('BrowserBridge')
   if (!bb) throw new Error('The browser is not available on this device')
@@ -16525,7 +16545,7 @@ async function openInBrowser(url) {
   }
   openExternal(url)
 }
-return Object.freeze({ "isNative": isNative, "biometricAvailable": biometricAvailable, "biometricEnroll": biometricEnroll, "biometricUnlock": biometricUnlock, "biometricRemove": biometricRemove, "saveToDownloads": saveToDownloads, "canShareFiles": canShareFiles, "shareFile": shareFile, "pickTextFile": pickTextFile, "takeShared": takeShared, "onShared": onShared, "returnToSender": returnToSender, "takeLaunch": takeLaunch, "onLaunch": onLaunch, "autofillRequest": autofillRequest, "autofillComplete": autofillComplete, "autofillClose": autofillClose, "autofillStatus": autofillStatus, "openAutofillSettings": openAutofillSettings, "openExternal": openExternal, "browserSettings": browserSettings, "setBrowserEngine": setBrowserEngine, "removeBrowserSite": removeBrowserSite, "openBrowserSearch": openBrowserSearch, "openInBrowser": openInBrowser })
+return Object.freeze({ "isNative": isNative, "biometricAvailable": biometricAvailable, "biometricEnroll": biometricEnroll, "biometricUnlock": biometricUnlock, "biometricRemove": biometricRemove, "saveToDownloads": saveToDownloads, "canShareFiles": canShareFiles, "shareFile": shareFile, "pickTextFile": pickTextFile, "takeShared": takeShared, "onShared": onShared, "returnToSender": returnToSender, "takeLaunch": takeLaunch, "onLaunch": onLaunch, "autofillRequest": autofillRequest, "autofillComplete": autofillComplete, "autofillCompleteInfo": autofillCompleteInfo, "setBrowserGenerator": setBrowserGenerator, "autofillClose": autofillClose, "autofillStatus": autofillStatus, "openAutofillSettings": openAutofillSettings, "openExternal": openExternal, "browserSettings": browserSettings, "setBrowserEngine": setBrowserEngine, "removeBrowserSite": removeBrowserSite, "openBrowserSearch": openBrowserSearch, "openInBrowser": openInBrowser })
 })()
 
 __modules["extension/fileimport.js"] = (function () {
@@ -17177,6 +17197,7 @@ async function loadSettings() {
     const prefs = generator.normalizePrefs({ min: a.genMinLength, max: a.genMaxLength })
     state.settings.genMin = prefs.min
     state.settings.genMax = prefs.max
+    platform.setBrowserGenerator(prefs.min, prefs.max)
   } catch (e) {}
 }
 
@@ -19004,6 +19025,7 @@ async function saveGenerator() {
   state.settings.genMin = prefs.min
   state.settings.genMax = prefs.max
   await saveAuthFields({ genMinLength: prefs.min, genMaxLength: prefs.max })
+  await platform.setBrowserGenerator(prefs.min, prefs.max)
   showMsg('msg-settings', 'Password generator updated', 'success')
 }
 
@@ -19205,6 +19227,106 @@ function chooseRelated(groups) {
   })
 }
 
+function chooseEmail(emails) {
+  return new Promise((resolve) => {
+    const list = $('fill-list')
+    list.textContent = ''
+    for (const email of emails) list.appendChild(fillButton(email, '', () => resolve(email)))
+    list.appendChild(fillButton('Pick a saved login instead', '', () => resolve(null)))
+  })
+}
+
+const INFO_LABELS = {
+  firstName: 'First name',
+  lastName: 'Last name',
+  email: 'Email',
+  phone: 'Phone',
+  'address.street': 'Street address',
+  'address.city': 'City',
+  'address.state': 'State',
+  'address.zip': 'ZIP',
+  'address.country': 'Country'
+}
+
+function infoValues(profile, type) {
+  if (!profile) return []
+  if (type === 'email') {
+    return (profile.emails || [])
+      .filter((e) => e && typeof e.value === 'string' && e.value)
+      .slice()
+      .sort((a, b) => (a.position || 0) - (b.position || 0))
+      .map((e) => e.value)
+  }
+  const value = type.indexOf('address.') === 0 ? (profile.address || {})[type.slice(8)] : profile[type]
+  return typeof value === 'string' && value ? [value] : []
+}
+
+async function runInfoFill(req, mk) {
+  const r = await personalinfo.getProfile(mk)
+  if (!r.success) { fillMsg('Could not read Personal Info: ' + (r.error || 'unknown error'), 'error'); return }
+  const types = []
+  for (const t of [req.infoField].concat(req.infoFields || [])) {
+    if (INFO_LABELS[t] && !types.includes(t)) types.push(t)
+  }
+  const rows = types.map((type) => ({ type, values: infoValues(r.profile, type) })).filter((row) => row.values.length)
+  if (!rows.length) {
+    fillHeader('Nothing saved for these fields', req.domain)
+    fillMsg('Add your details in Valid Vault, Personal Info, and they can be filled here.', 'info')
+    return
+  }
+  fillHeader('Fill from Personal Info', req.domain + '. Check anything else you want filled on this page.')
+  const chosen = new Map()
+  const list = $('fill-list')
+  list.textContent = ''
+  const actions = $('fill-actions')
+  actions.textContent = ''
+  actions.classList.remove('hidden')
+  const fillBtn = btn('Fill', '', async () => {
+    if (!chosen.size) return
+    fillBtn.disabled = true
+    try {
+      await platform.autofillCompleteInfo(Object.fromEntries(chosen))
+    } catch (e) {
+      fillBtn.disabled = false
+      fillMsg('Could not fill: ' + errText(e), 'error')
+    }
+  })
+  fillBtn.disabled = !rows.some((row) => row.type === req.infoField)
+  for (const row of rows) {
+    const item = el('label', 'fill-item fill-check')
+    const box = el('input')
+    box.type = 'checkbox'
+    box.checked = row.type === req.infoField
+    const body = el('span', 'fill-check-body')
+    body.appendChild(el('span', 'fill-item-sub', INFO_LABELS[row.type]))
+    let current = () => row.values[0]
+    if (row.values.length > 1) {
+      const pick = el('select', 'fill-check-select')
+      for (const value of row.values) {
+        const opt = el('option', '', value)
+        opt.value = value
+        pick.appendChild(opt)
+      }
+      pick.onchange = () => { if (box.checked) chosen.set(row.type, pick.value) }
+      current = () => pick.value
+      body.appendChild(pick)
+    } else {
+      body.appendChild(el('span', 'fill-check-value', row.values[0]))
+    }
+    box.onchange = () => {
+      if (box.checked) chosen.set(row.type, current())
+      else chosen.delete(row.type)
+      fillBtn.disabled = !chosen.size
+    }
+    if (box.checked) chosen.set(row.type, current())
+    item.appendChild(box)
+    item.appendChild(body)
+    list.appendChild(item)
+  }
+  actions.appendChild(btn('Not now', 'secondary', () => platform.autofillClose()))
+  actions.appendChild(fillBtn)
+}
+
 async function completeFill(site, login, mk) {
   try { await passwords.noteCredentialUse(site, login.username, mk) } catch (e) {}
   await platform.autofillComplete(login.username, login.password)
@@ -19236,6 +19358,16 @@ async function runFill(req, mk) {
       const picked = await chooseRelated(groups)
       clearFillBody()
       if (picked) { await completeFill(picked.site, picked.login, mk); return }
+    }
+  }
+  if (!site && req.emailField) {
+    const pr = await personalinfo.getProfile(mk)
+    const emails = pr.success ? infoValues(pr.profile, 'email') : []
+    if (emails.length) {
+      fillHeader('Your emails', 'No saved login for ' + req.domain)
+      const picked = await chooseEmail(emails)
+      clearFillBody()
+      if (picked) { await platform.autofillComplete(picked, ''); return }
     }
   }
   if (!site) {
@@ -19338,7 +19470,7 @@ async function runAutofill(req) {
   }
   armFillIdle()
   const target = req.domain || req.appLabel || req.packageName || ''
-  fillHeader(req.mode === 'save' ? 'Save to Valid Vault' : 'Fill from Valid Vault', target)
+  fillHeader(req.mode === 'save' ? 'Save to Valid Vault' : req.mode === 'info' ? 'Fill from Personal Info' : 'Fill from Valid Vault', target)
   if (req.mode === 'save' && req.expired) { fillMsg('That save request expired. Sign in again to save it.', 'error'); return }
   try {
     const status = await auth.initAuth()
@@ -19354,6 +19486,7 @@ async function runAutofill(req) {
     }
     await passwords.ensureVault(r.masterKey)
     if (req.mode === 'save') await runSave(req, r.masterKey)
+    else if (req.mode === 'info') await runInfoFill(req, r.masterKey)
     else await runFill(req, r.masterKey)
   } catch (e) {
     fillMsg('Something went wrong: ' + errText(e), 'error')

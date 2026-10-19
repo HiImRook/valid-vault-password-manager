@@ -84,6 +84,30 @@ public class BrowserBridge extends Plugin {
     }
 
     @PluginMethod
+    public void setGenerator(PluginCall call) {
+        Integer min = call.getInt("min");
+        Integer max = call.getInt("max");
+        if (min == null || max == null || !BrowserSettings.GEN_MIN_CHOICES.contains(min) || !BrowserSettings.GEN_MAX_CHOICES.contains(max)) {
+            call.reject("Unknown password length");
+            return;
+        }
+        BrowserSettings current = BrowserSettings.load(getContext());
+        if (current.genMin == min && current.genMax == max) {
+            call.resolve();
+            return;
+        }
+        BrowserSettings saved = BrowserSettings.update(getContext(), settings -> {
+            settings.genMin = min;
+            settings.genMax = max;
+        });
+        if (saved == null) {
+            call.reject("Could not save the password length");
+            return;
+        }
+        call.resolve();
+    }
+
+    @PluginMethod
     public void removeAllowedSite(PluginCall call) {
         String site = BrowserSettings.normalizeSite(call.getString("site"));
         if (site.isEmpty()) {

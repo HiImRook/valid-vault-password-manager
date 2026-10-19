@@ -153,6 +153,7 @@ async function loadSettings() {
     const prefs = generator.normalizePrefs({ min: a.genMinLength, max: a.genMaxLength })
     state.settings.genMin = prefs.min
     state.settings.genMax = prefs.max
+    platform.setBrowserGenerator(prefs.min, prefs.max)
   } catch (e) {}
 }
 
@@ -1980,6 +1981,7 @@ async function saveGenerator() {
   state.settings.genMin = prefs.min
   state.settings.genMax = prefs.max
   await saveAuthFields({ genMinLength: prefs.min, genMaxLength: prefs.max })
+  await platform.setBrowserGenerator(prefs.min, prefs.max)
   showMsg('msg-settings', 'Password generator updated', 'success')
 }
 
@@ -2181,6 +2183,106 @@ function chooseRelated(groups) {
   })
 }
 
+function chooseEmail(emails) {
+  return new Promise((resolve) => {
+    const list = $('fill-list')
+    list.textContent = ''
+    for (const email of emails) list.appendChild(fillButton(email, '', () => resolve(email)))
+    list.appendChild(fillButton('Pick a saved login instead', '', () => resolve(null)))
+  })
+}
+
+const INFO_LABELS = {
+  firstName: 'First name',
+  lastName: 'Last name',
+  email: 'Email',
+  phone: 'Phone',
+  'address.street': 'Street address',
+  'address.city': 'City',
+  'address.state': 'State',
+  'address.zip': 'ZIP',
+  'address.country': 'Country'
+}
+
+function infoValues(profile, type) {
+  if (!profile) return []
+  if (type === 'email') {
+    return (profile.emails || [])
+      .filter((e) => e && typeof e.value === 'string' && e.value)
+      .slice()
+      .sort((a, b) => (a.position || 0) - (b.position || 0))
+      .map((e) => e.value)
+  }
+  const value = type.indexOf('address.') === 0 ? (profile.address || {})[type.slice(8)] : profile[type]
+  return typeof value === 'string' && value ? [value] : []
+}
+
+async function runInfoFill(req, mk) {
+  const r = await personalinfo.getProfile(mk)
+  if (!r.success) { fillMsg('Could not read Personal Info: ' + (r.error || 'unknown error'), 'error'); return }
+  const types = []
+  for (const t of [req.infoField].concat(req.infoFields || [])) {
+    if (INFO_LABELS[t] && !types.includes(t)) types.push(t)
+  }
+  const rows = types.map((type) => ({ type, values: infoValues(r.profile, type) })).filter((row) => row.values.length)
+  if (!rows.length) {
+    fillHeader('Nothing saved for these fields', req.domain)
+    fillMsg('Add your details in Valid Vault, Personal Info, and they can be filled here.', 'info')
+    return
+  }
+  fillHeader('Fill from Personal Info', req.domain + '. Check anything else you want filled on this page.')
+  const chosen = new Map()
+  const list = $('fill-list')
+  list.textContent = ''
+  const actions = $('fill-actions')
+  actions.textContent = ''
+  actions.classList.remove('hidden')
+  const fillBtn = btn('Fill', '', async () => {
+    if (!chosen.size) return
+    fillBtn.disabled = true
+    try {
+      await platform.autofillCompleteInfo(Object.fromEntries(chosen))
+    } catch (e) {
+      fillBtn.disabled = false
+      fillMsg('Could not fill: ' + errText(e), 'error')
+    }
+  })
+  fillBtn.disabled = !rows.some((row) => row.type === req.infoField)
+  for (const row of rows) {
+    const item = el('label', 'fill-item fill-check')
+    const box = el('input')
+    box.type = 'checkbox'
+    box.checked = row.type === req.infoField
+    const body = el('span', 'fill-check-body')
+    body.appendChild(el('span', 'fill-item-sub', INFO_LABELS[row.type]))
+    let current = () => row.values[0]
+    if (row.values.length > 1) {
+      const pick = el('select', 'fill-check-select')
+      for (const value of row.values) {
+        const opt = el('option', '', value)
+        opt.value = value
+        pick.appendChild(opt)
+      }
+      pick.onchange = () => { if (box.checked) chosen.set(row.type, pick.value) }
+      current = () => pick.value
+      body.appendChild(pick)
+    } else {
+      body.appendChild(el('span', 'fill-check-value', row.values[0]))
+    }
+    box.onchange = () => {
+      if (box.checked) chosen.set(row.type, current())
+      else chosen.delete(row.type)
+      fillBtn.disabled = !chosen.size
+    }
+    if (box.checked) chosen.set(row.type, current())
+    item.appendChild(box)
+    item.appendChild(body)
+    list.appendChild(item)
+  }
+  actions.appendChild(btn('Not now', 'secondary', () => platform.autofillClose()))
+  actions.appendChild(fillBtn)
+}
+
 async function completeFill(site, login, mk) {
   try { await passwords.noteCredentialUse(site, login.username, mk) } catch (e) {}
   await platform.autofillComplete(login.username, login.password)
@@ -2212,6 +2314,16 @@ async function runFill(req, mk) {
       const picked = await chooseRelated(groups)
       clearFillBody()
       if (picked) { await completeFill(picked.site, picked.login, mk); return }
+    }
+  }
+  if (!site && req.emailField) {
+    const pr = await personalinfo.getProfile(mk)
+    const emails = pr.success ? infoValues(pr.profile, 'email') : []
+    if (emails.length) {
+      fillHeader('Your emails', 'No saved login for ' + req.domain)
+      const picked = await chooseEmail(emails)
+      clearFillBody()
+      if (picked) { await platform.autofillComplete(picked, ''); return }
     }
   }
   if (!site) {
@@ -2314,7 +2426,7 @@ async function runAutofill(req) {
   }
   armFillIdle()
   const target = req.domain || req.appLabel || req.packageName || ''
-  fillHeader(req.mode === 'save' ? 'Save to Valid Vault' : 'Fill from Valid Vault', target)
+  fillHeader(req.mode === 'save' ? 'Save to Valid Vault' : req.mode === 'info' ? 'Fill from Personal Info' : 'Fill from Valid Vault', target)
   if (req.mode === 'save' && req.expired) { fillMsg('That save request expired. Sign in again to save it.', 'error'); return }
   try {
     const status = await auth.initAuth()
@@ -2330,6 +2442,7 @@ async function runAutofill(req) {
     }
     await passwords.ensureVault(r.masterKey)
     if (req.mode === 'save') await runSave(req, r.masterKey)
+    else if (req.mode === 'info') await runInfoFill(req, r.masterKey)
     else await runFill(req, r.masterKey)
   } catch (e) {
     fillMsg('Something went wrong: ' + errText(e), 'error')

@@ -9,8 +9,11 @@ import android.view.autofill.AutofillManager;
 import android.view.autofill.AutofillValue;
 import android.widget.RemoteViews;
 
+import java.util.ArrayList;
+
 import androidx.annotation.RequiresApi;
 
+import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
@@ -45,6 +48,14 @@ public class AutofillBridge extends Plugin {
         ret.put("hasUsername", intent.getParcelableExtra(ValidAutofillService.EXTRA_USERNAME_ID) != null);
         ret.put("hasPassword", intent.getParcelableExtra(ValidAutofillService.EXTRA_PASSWORD_ID) != null);
         ret.put("browserReply", browserReply(intent));
+        ret.put("emailField", browserReply(intent) && intent.getBooleanExtra(BrowserFill.EXTRA_EMAIL_FIELD, false));
+        if (browserReply(intent) && BrowserFill.MODE_INFO.equals(mode)) {
+            ret.put("infoField", extra(intent, BrowserFill.EXTRA_INFO_FIELD));
+            JSArray fields = new JSArray();
+            ArrayList<String> list = intent.getStringArrayListExtra(BrowserFill.EXTRA_INFO_FIELDS);
+            if (list != null) for (String t : list) if (BrowserFill.INFO_TYPES.contains(t)) fields.put(t);
+            ret.put("infoFields", fields);
+        }
         if (ValidAutofillService.MODE_SAVE.equals(mode)) {
             if (!saveTaken) {
                 if (browserReply(intent)) {
@@ -118,6 +129,24 @@ public class AutofillBridge extends Plugin {
         }
         Intent reply = new Intent();
         reply.putExtra(AutofillManager.EXTRA_AUTHENTICATION_RESULT, dataset.build());
+        finishWith(Activity.RESULT_OK, reply);
+        call.resolve();
+    }
+
+    @PluginMethod
+    public synchronized void completeInfo(PluginCall call) {
+        Intent intent = getActivity().getIntent();
+        if (!browserReply(intent) || !BrowserFill.MODE_INFO.equals(extra(intent, ValidAutofillService.EXTRA_MODE))) {
+            call.reject("Not a Personal Info request");
+            return;
+        }
+        JSObject values = call.getObject("values");
+        if (values == null || values.length() == 0) {
+            call.reject("Nothing to fill");
+            return;
+        }
+        Intent reply = new Intent();
+        reply.putExtra(BrowserFill.EXTRA_RESULT_INFO, values.toString());
         finishWith(Activity.RESULT_OK, reply);
         call.resolve();
     }

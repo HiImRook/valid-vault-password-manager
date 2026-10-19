@@ -22,6 +22,7 @@ final class BrowserTab {
     String pendingSaveHost = null;
     long pendingSaveAt = 0;
     volatile long lastTouchAt = 0;
+    long expectReplyUntil = 0;
     boolean start = true;
     boolean fromStart = true;
     String title = "";
