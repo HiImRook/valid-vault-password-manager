@@ -52,6 +52,10 @@ A local, encrypted, QR code portable password manager. No cloud, accounts, or sy
 >
 > Autofill in the phone's private browser now matches the extension. Name, email, phone, and address fields get a V that fills from Personal Info, with the field you tapped checked and anything else on the form one tap away. New password boxes get an inverted V that generates a strong password into both boxes, following your length settings and the site's rules. Pull down from the top of a page to reload it. The V tags are larger and step aside for a site's own icons, like a show password eye. The menu is trimmed to what isn't already on screen, sites in new tab quick view can be renamed and edited, and the top bar and widgets are redrawn to match the toolbar icons. See [CHANGELOG.md](CHANGELOG.md) for full details.
 
+> ✅ **Faster Vault QR - v0.8.8**
+>
+> Sharing the vault by QR is about twice as fast, and much less fussy about aim. Each frame carries its data as raw bytes, so it holds a third more at the same density, and frames change twice as often. The scanner reads frames on several processor cores at once and also looks at the whole camera image, so a code that drifts off center keeps reading. A live readout shows pieces received, the share of frames caught, and reads per second. The extension draws the QR as large as the window allows, and the phone goes to full brightness while it shows one. Master Key Name is now Key and Vault Name, so key and vault files always carry the same name. Update the phone and the extension together, since older scanners can't read the new QR. See [CHANGELOG.md](CHANGELOG.md) for full details.
+
 ---
 
 ## What is Valid Vault?
@@ -154,8 +158,8 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 * Uni-Vault - link every browser on one computer to a single encrypted vault file; saves reach the file within about a second and other linked browsers pick them up within about 30 seconds, or within seconds while Manage is open, merged by timestamp with tombstoned deletes
 * Uni-Vault refuses a damaged file, a replaced file, or a file made with a different key and never overwrites it; each browser keeps its own working copy, and Sync shows the linked file and last sync time with Reconnect and Unlink
 * Uni-Vault works in Chrome and Edge out of the box; Brave needs its File System Access API setting switched on, explained in the User Guide, and Export and Import work in Brave as before
-* Live QR sync - stream your vault or your protected key as a one-way fountain QR, scan it on the other device
-* Sovereign scanner - the standard web camera plus a vendored jsQR decoder, no Google dependency
+* Live QR sync - stream your vault or your protected key as a one-way fountain QR, scan it on the other device; frames carry raw bytes, change every 0.2 seconds, and any frame the camera catches helps, in any order
+* Sovereign scanner - the standard web camera plus a vendored jsQR decoder, no Google dependency; it reads on several processor cores at once, checks the whole camera image as well as the scan box, and shows pieces received, frames caught, and reads per second while it works
 * Encrypted vault backup - save directly to Downloads or share the file, inert without the matching master key
 * USB cold storage - Export Vault and Export Key to a USB drive for an offline backup you hold yourself; both files are encrypted, Valid Vault has no plaintext export, and the drive restores through the same import path as a QR share
 * Protected key transfer - the master key only leaves a device wrapped under a passphrase and three security questions you pick, stretched with 1,000,000 PBKDF2 rounds; the same package goes into the key QR and the key file, and the receiving device must enter all of them to accept it
@@ -188,7 +192,7 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 * Android via Capacitor, with native plugins for biometric auth, file saving, autofill, sharing, and the private browser
 * Vendored, self-contained code only, no Google SDKs in the scan path
 
-## Current Status: v0.8.7.1 - Active Testing
+## Current Status: v0.8.8 - Active Testing
 
 **Completed:**
 
@@ -238,10 +242,11 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 * ✅ Private browser tabs and a start page with generated backgrounds and pinned sites
 * ✅ Valid Vault autofill inside the private browser, with V tags, Fill login, and save prompts
 * ✅ Private browser autofill matching the extension: Personal Info, the password generator, and emails on login fields
+* ✅ Vault QR about twice as fast and tolerant of off-center aim, with a live readout while scanning
 
 **In Development:**
 
-* 📋 QR transport (v0.8.x): confirming the vault QR on phone cameras, scanner reliability across devices, and a bookmarks QR share
+* 📋 QR transport (v0.8.x): scanner reliability across more phones and cameras, and a bookmarks QR share
 * 📋 Continued field testing of sync, backup, and native file saving across Android versions
 
 ## Sync and Backup Model
@@ -394,7 +399,7 @@ Autofill in the browser goes through the same Valid Vault screen as Android Auto
 Tor mode uses the WebView proxy override to send every request, including hostname lookups, to Orbot's SOCKS port with no direct rule, so a stopped Orbot means failed requests. Turning it on first checks that Orbot answers as a SOCKS proxy. Every tab's page view is destroyed before the proxy changes and a new one is created after the wipe, so nothing from one mode carries into the other. A script at the start of every frame removes WebRTC, downloads are refused, and the proxy only applies to the browser's own process, never the vault's.
 
 **Sovereign QR Scanner:**
-Scanning uses the web camera through getUserMedia, drawing the square shown in the scan box to a canvas that a vendored jsQR decoder reads. No native scanning plugin, no Google SDK. The stream itself is a fountain code: the payload is compressed, split into small pieces shown once in order, then followed by mixes of pieces, and the receiver solves for any pieces it missed.
+Scanning uses the web camera through getUserMedia. Each new camera frame is handed to a vendored jsQR decoder running in background workers, up to three at a time, alternating between the square shown in the scan box and the whole camera image, so a code off center still reads. No native scanning plugin, no Google SDK. The stream itself is a fountain code: the payload is compressed, split into small pieces shown once in order, then followed by mixes of pieces, and the receiver solves for any pieces it missed. Each frame is a short text header followed by raw bytes in the QR's byte mode, at medium error correction, which holds up to blur from a camera filming a screen.
 
 **Single-File Bundle:**
 build.js bundles the phone app from the extension's own modules and the phone screens in phone/ into one self-contained HTML file. No module loader, no CDN, no external requests at runtime. The extension and the phone run the same vault, crypto, unlock, key, and merge code.

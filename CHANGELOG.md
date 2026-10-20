@@ -5,6 +5,30 @@ All notable changes to Valid Vault will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.8] - 2026-10-20
+
+The vault QR is about twice as fast and much less fussy about aim, on the phone and the extension.
+
+### Added
+
+* **Live readout while scanning.** The scan box shows pieces received, the share of frames caught, and reads per second, for example Receiving 108 of 148 · catching 94% · 16 reads/s.
+* **Full brightness on the phone.** While the phone shows a QR, the screen goes to full brightness and stays on, and goes back to normal when the QR closes.
+* **Rename the Uni-Vault file.** On the extension, renaming offers to save the linked vault file under the new name and link to it. The old file stays where it is for you to delete.
+
+### Changed
+
+* **More per frame.** Each frame carries its data as raw bytes instead of text, so it holds a third more at the same density, with the same error correction.
+* **Faster frames.** The QR changes every 0.2 seconds instead of every 0.4.
+* **Scanning on several cores.** The scanner reads frames in background workers, up to three at a time, and skips camera frames it has already seen.
+* **Off-center aim keeps reading.** The scanner alternates between the scan box and the whole camera image, so a code that drifts away from the center still reads.
+* **A bigger QR on the extension.** The QR is drawn as large as the window allows and scrolls into view when it opens.
+* **Key and Vault Name.** Master Key Name in Settings is now Key and Vault Name. One name covers both, so key and vault files you export always match. Renaming a file by hand never stops it from opening.
+
+### Notes
+
+* Update the phone and the extension together. An older scanner can't read a 0.8.8 QR, while the 0.8.8 scanner still reads codes from older versions.
+* An 111-piece vault finished in about 25 seconds with blur, shake, or off-center aim, against about 60 seconds before.
+
 ## [0.8.7.1] - 2026-10-19
 
 Autofill in the phone's private browser now matches the extension, with pull down to reload and a cleaner menu.

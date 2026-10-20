@@ -1,10 +1,18 @@
 # Valid Vault - Development Roadmap
 
-**Current Version:** v0.8.7.1 - **Status: Active Testing**
+**Current Version:** v0.8.8 - **Status: Active Testing**
 
 ---
 
 ## Version History (Completed)
+
+### v0.8.8 - Faster Vault QR (Oct 2026)
+
+* ✅ Vault QR about twice as fast: frames carry raw bytes, a third more per frame at the same density, and change every 0.2 seconds
+* ✅ Scanner reads on up to three processor cores at once and checks the whole camera image as well as the scan box, so off-center aim keeps reading
+* ✅ Live readout while scanning: pieces received, share of frames caught, and reads per second
+* ✅ Extension QR drawn as large as the window allows, and the phone at full brightness with the screen kept on while showing a QR
+* ✅ Master Key Name is now Key and Vault Name, with an offer on the extension to save a Uni-Vault file under the new name
 
 ### v0.8.7.1 - Private Browser Autofill Parity (Oct 2026)
 
@@ -270,11 +278,11 @@
 
 ---
 
-## Upcoming After v0.8.7.1
+## Upcoming After v0.8.8
 
 ### v0.8.x - The Phone App
 
-Built in this order, each step shipping as its own v0.8 release. The phone de-drift shipped in v0.8.0, the vault QR rebuild in v0.8.1, Android Autofill with Share to Bookmarks in v0.8.2, the private browser core in v0.8.3, importing from other managers in v0.8.4, the browser's Tor mode and downloads in v0.8.5, tabs with a start page in v0.8.6, Valid Vault autofill in the browser in v0.8.7, and autofill matching the extension in v0.8.7.1.
+Built in this order, each step shipping as its own v0.8 release. The phone de-drift shipped in v0.8.0, the vault QR rebuild in v0.8.1, Android Autofill with Share to Bookmarks in v0.8.2, the private browser core in v0.8.3, importing from other managers in v0.8.4, the browser's Tor mode and downloads in v0.8.5, tabs with a start page in v0.8.6, Valid Vault autofill in the browser in v0.8.7, autofill matching the extension in v0.8.7.1, and the faster vault QR in v0.8.8.
 
 **1. Android Autofill** - shipped in v0.8.2
 
@@ -291,12 +299,12 @@ Built in this order, each step shipping as its own v0.8 release. The phone de-dr
 
 **3. QR transport**
 
-* Confirm the v0.8.1 vault QR on phone cameras and computer screens, and tune frame size and speed from what testing shows
-* QR scanner reliability across devices and cameras, including scans that stall before completing
+* Faster vault QR, off-center scanning, and a live readout shipped in v0.8.8
+* Scanner reliability across more phones and cameras, tuned from what the readout shows
 * Bookmarks QR share
 * Unlock behavior quirks reported by community testing
 
-Until the vault QR is confirmed on devices, encrypted files on a USB drive are the dependable device-to-device path, already verified in use.
+Encrypted files on a USB drive remain a dependable device-to-device path, already verified in use.
 
 **4. App injection**
 
@@ -342,9 +350,8 @@ Until the vault QR is confirmed on devices, encrypted files on a USB drive are t
 
 ⚠️ **SSN and card storage deliberately deferred**, pending security work
 
-⚠️ **The v0.8.1 vault QR is not yet confirmed with a phone camera** - it is rebuilt larger, lighter, and compressed, and verified in Chromium; vault files carry everything in the meantime, including on a USB drive
 
-⚠️ **QR needs v0.8.1 on both sides** - a 0.8.0 scanner can't read the new QR, while the 0.8.1 scanner still reads 0.8.0 codes
+⚠️ **QR needs v0.8.8 on both sides** - an older scanner can't read a 0.8.8 QR, while the 0.8.8 scanner still reads codes from older versions
 
 ⚠️ **Android Autofill is new and not yet confirmed on a phone** - it is verified in Chromium with Android's autofill calls simulated. Chrome needs its Autofill using another service setting turned on, and browsers without support for third-party autofill do not ask Valid Vault at all
 
@@ -376,4 +383,4 @@ MIT License - See LICENSE file for details
 
 ---
 
-**Last Updated:** Oct 19, 2026
+**Last Updated:** Oct 20, 2026
