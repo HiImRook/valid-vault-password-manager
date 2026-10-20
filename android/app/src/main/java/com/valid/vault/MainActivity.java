@@ -12,6 +12,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(AutofillSetup.class);
         registerPlugin(BrowserBridge.class);
         registerPlugin(LaunchTarget.class);
+        registerPlugin(QrScreen.class);
         super.onCreate(savedInstanceState);
     }
 }

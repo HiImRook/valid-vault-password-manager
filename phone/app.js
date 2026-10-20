@@ -10,7 +10,7 @@ import * as keypackage from '../extension/keypackage.js'
 import * as vaultFile from '../extension/vaultfile.js'
 import * as generator from '../extension/generator.js'
 import { createEncoder, createDecoder, QR_FRAME_MS } from '../extension/fountain.js'
-import { qrSvg, openCamera, readCode } from '../extension/qrtools.js'
+import { qrSvg, openCamera, scanStream, scanReadout } from '../extension/qrtools.js'
 import { generateMasterKey, masterKeyToCryptoKey } from '../extension/crypto.js'
 import { formDialog, confirmDialog, askSecret, closeAllDialogs } from '../extension/dialogs.js'
 import * as platform from './platform.js'
@@ -36,6 +36,7 @@ const SHARE_TITLE_MAX = 200
 const SHARE_RETURN_MS = 900
 const FILL_IDLE_MS = 120000
 const FILL_DONE_MS = 1200
+const SCAN_READOUT_MS = 1000
 const SITE_INPUT_PATTERN = /^[a-z0-9-]+(\.[a-z0-9-]+)+$/
 const DEAD_FINGERPRINT_CODES = ['missing', 'invalidated']
 const FINGERPRINT_RESET_TEXT = 'Android reset fingerprint unlock on this phone, so the old fingerprint setting was removed. Tap Enroll under Fingerprint to set it up again.'
@@ -1517,6 +1518,7 @@ function stopShare() {
     clearInterval(s.frameTimer)
     clearInterval(s.countdown)
     clearTimeout(s.shutoff)
+    platform.holdScreen(false)
   }
   $('share-qr').textContent = ''
   $('qr-overlay').classList.add('hidden')
@@ -1536,6 +1538,7 @@ async function streamShare(payload, label) {
     container.innerHTML = qrSvg(encoder.nextFrame())
   }
   renderNext()
+  platform.holdScreen(true)
   let remaining = state.settings.qrTimeout
   timerEl.textContent = 'Closes in ' + remaining + 's'
   state.share = {
@@ -1549,12 +1552,23 @@ async function streamShare(payload, label) {
   }
 }
 
+function makeScanWorker() {
+  if (!state.scanWorkerUrl) {
+    const lib = document.getElementById('vv-jsqr')
+    const handler = document.getElementById('vv-scanworker')
+    if (!lib || !handler) throw new Error('Scanner worker is not bundled')
+    state.scanWorkerUrl = URL.createObjectURL(new Blob([lib.textContent, '\n', handler.textContent], { type: 'text/javascript' }))
+  }
+  return new Worker(state.scanWorkerUrl)
+}
+
 function stopScanner() {
   const s = state.scan
   if (!s) return
   state.scan = null
   s.settled = true
-  if (s.raf) cancelAnimationFrame(s.raf)
+  if (s.reader) s.reader.stop()
+  if (s.ticker) clearInterval(s.ticker)
   try { if (s.stream) s.stream.getTracks().forEach((t) => t.stop()) } catch (e) {}
   try { if (s.video) { s.video.pause(); s.video.srcObject = null } } catch (e) {}
   s.box.innerHTML = s.original
@@ -1566,7 +1580,7 @@ async function startScanner(box, onPayload, msgId) {
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { showMsg(msgId, 'Camera not available', 'error'); return }
   if (typeof window.jsQR !== 'function') { showMsg(msgId, 'Scanner failed to load', 'error'); return }
   const decoder = createDecoder()
-  const scan = { box, original: box.innerHTML, wasHidden: box.classList.contains('hidden'), stream: null, raf: null, video: null, settled: false }
+  const scan = { box, original: box.innerHTML, wasHidden: box.classList.contains('hidden'), stream: null, reader: null, ticker: null, video: null, settled: false }
   state.scan = scan
   box.classList.remove('hidden')
   box.innerHTML = ''
@@ -1574,8 +1588,6 @@ async function startScanner(box, onPayload, msgId) {
   video.setAttribute('playsinline', 'true')
   video.muted = true
   scan.video = video
-  const canvas = el('canvas')
-  const ctx = canvas.getContext('2d', { willReadFrequently: true })
   const cancel = btn('Cancel', 'scan-cancel', () => { stopScanner(); showMsg(msgId, 'Scan cancelled', 'info') })
   const status = el('div', 'scan-status', 'Point at the other device')
   box.appendChild(video)
@@ -1586,31 +1598,26 @@ async function startScanner(box, onPayload, msgId) {
     if (scan.settled) { scan.stream.getTracks().forEach((t) => t.stop()); return }
     video.srcObject = scan.stream
     await video.play()
-    const tick = () => {
+    let last = null
+    scan.reader = scanStream(video, makeScanWorker, (frame) => {
+      if (scan.settled) return
+      const outcome = decoder.addFrame(frame)
+      if (!outcome.success) return
+      last = outcome
+      status.textContent = scanReadout(outcome, scan.reader)
+      if (!outcome.complete) return
+      stopScanner()
+      showMsg(msgId, 'Received ' + outcome.total + ' of ' + outcome.total + ', importing...', 'info')
+      decoder.assemble().then((assembled) => {
+        if (!assembled.success) throw new Error(assembled.error)
+        return onPayload(assembled.payload)
+      }).catch((e) => showMsg(msgId, 'Import failed: ' + errText(e), 'error'))
+    })
+    scan.ticker = setInterval(() => {
       if (scan.settled) return
       session.resetActivity()
-      if (video.readyState === video.HAVE_ENOUGH_DATA) {
-        let text = null
-        try { text = readCode(video, canvas, ctx) } catch (e) {}
-        if (text) {
-          const outcome = decoder.addFrame(text)
-          if (outcome.success) {
-            status.textContent = 'Receiving: ' + outcome.solved + ' of ' + outcome.total
-            if (outcome.complete) {
-              stopScanner()
-              showMsg(msgId, 'Received ' + outcome.total + ' of ' + outcome.total + ', importing...', 'info')
-              decoder.assemble().then((assembled) => {
-                if (!assembled.success) throw new Error(assembled.error)
-                return onPayload(assembled.payload)
-              }).catch((e) => showMsg(msgId, 'Import failed: ' + errText(e), 'error'))
-              return
-            }
-          }
-        }
-      }
-      scan.raf = requestAnimationFrame(tick)
-    }
-    scan.raf = requestAnimationFrame(tick)
+      if (last) status.textContent = scanReadout(last, scan.reader)
+    }, SCAN_READOUT_MS)
   } catch (e) {
     stopScanner()
     showMsg(msgId, 'Camera failed: ' + errText(e) + '. Allow camera access for Valid Vault in Android settings.', 'error')
@@ -1990,7 +1997,7 @@ async function renameKey() {
   if (!name) { showMsg('msg-settings', 'Name cannot be empty', 'error'); return }
   try {
     await saveAuthFields({ keyNickname: name })
-    showMsg('msg-settings', 'Key renamed.', 'success')
+    showMsg('msg-settings', 'Key and vault renamed. Files you export from now on use the new name.', 'success')
   } catch (e) {
     showMsg('msg-settings', 'Rename failed', 'error')
   }

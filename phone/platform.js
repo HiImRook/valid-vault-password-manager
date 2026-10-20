@@ -282,6 +282,15 @@ async function setBrowserGenerator(min, max) {
   try { await bb.setGenerator({ min, max }) } catch (e) {}
 }
 
+async function holdScreen(on) {
+  const qs = plugin('QrScreen')
+  if (!qs) return
+  try {
+    if (on) await qs.hold()
+    else await qs.release()
+  } catch (e) {}
+}
+
 async function openBrowserSearch() {
   const bb = plugin('BrowserBridge')
   if (!bb) throw new Error('The browser is not available on this device')
@@ -318,6 +327,7 @@ export {
   autofillComplete,
   autofillCompleteInfo,
   setBrowserGenerator,
+  holdScreen,
   autofillClose,
   autofillStatus,
   openAutofillSettings,

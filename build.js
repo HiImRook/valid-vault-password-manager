@@ -5,7 +5,8 @@ const path = require('path')
 const ROOT = __dirname
 const ENTRY = path.join(ROOT, 'phone', 'app.js')
 const TEMPLATE = path.join(ROOT, 'phone', 'app.html')
-const CLASSIC_SCRIPTS = [path.join(ROOT, 'extension', 'jsqr.js')]
+const CLASSIC_SCRIPTS = [{ file: path.join(ROOT, 'extension', 'jsqr.js'), id: 'vv-jsqr' }]
+const TEXT_SCRIPTS = [{ file: path.join(ROOT, 'extension', 'scanworker.js'), id: 'vv-scanworker' }]
 const OUTPUT_DIR = path.join(ROOT, 'www')
 const OUTPUT = path.join(OUTPUT_DIR, 'index.html')
 const FONT_NAME = 'Orbitron.ttf'
@@ -120,7 +121,9 @@ function main() {
     modules.map(wrapModule).join('\n\n'),
     '})()'
   ].join('\n')
-  const classic = CLASSIC_SCRIPTS.map((file) => '<script>\n' + guardScript(fs.readFileSync(file, 'utf8')) + '\n</script>').join('\n')
+  const classic = CLASSIC_SCRIPTS.map((s) => '<script id="' + s.id + '">\n' + guardScript(fs.readFileSync(s.file, 'utf8')) + '\n</script>')
+    .concat(TEXT_SCRIPTS.map((s) => '<script type="text/plain" id="' + s.id + '">\n' + guardScript(fs.readFileSync(s.file, 'utf8')) + '\n</script>'))
+    .join('\n')
   const html = template.replace(PLACEHOLDER, () => classic + '\n<script>\n' + guardScript(bundle) + '\n</script>')
   fs.mkdirSync(OUTPUT_DIR, { recursive: true })
   fs.writeFileSync(OUTPUT, html)

@@ -209,7 +209,7 @@
           <button id="btn-share-vault">Share Vault</button>
           <button id="btn-share-key" class="secondary">Share Master Key</button>
         </div>
-        <div id="share-qr-wrap" class="hidden" style="position:relative;margin-top:14px;max-width:480px;">
+        <div id="share-qr-wrap" class="hidden" style="position:relative;margin-top:14px;margin-left:auto;margin-right:auto;max-width:480px;">
           <button id="btn-stop-share" style="position:absolute;top:0;right:0;background:none;border:1px solid var(--green-dim);color:var(--green);border-radius:6px;padding:4px 10px;font-size:12px;z-index:2;">Close</button>
           <div id="share-qr-label" style="color:var(--text-dim);font-size:12px;margin-bottom:8px;"></div>
           <div id="share-qr" style="background:#fff;padding:10px;border-radius:8px;"></div>
@@ -256,8 +256,8 @@
 
         <div class="setting-row">
           <div>
-            <div class="setting-label">Master Key Name</div>
-            <div class="setting-desc">A label for reference. Used in exported filenames.</div>
+            <div class="setting-label">Key and Vault Name</div>
+            <div class="setting-desc">One name for your master key and your vault. Key and vault files you export use it. It is a label only and is never needed to import.</div>
           </div>
           <div style="display:flex;gap:8px;align-items:center;">
             <input type="text" id="key-nickname-input" placeholder="My Master Key" autocomplete="off" style="width:160px;">

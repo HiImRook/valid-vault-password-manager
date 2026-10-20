@@ -32,6 +32,11 @@ function QR8bitByte(data) {
   this.data = data;
   this.parsedData = [];
 
+  if (data instanceof Uint8Array) {
+    this.parsedData = Array.prototype.slice.call(data);
+    return;
+  }
+
   // Added to support UTF-8 Characters
   for (var i = 0, l = this.data.length; i < l; i++) {
     var byteArray = [];
@@ -182,11 +187,11 @@ function QRCode(options) {
     }
   }
   
-  if (typeof this.options.content !== 'string') {
+  if (!(this.options.bytes instanceof Uint8Array) && typeof this.options.content !== 'string') {
     throw new Error("Expected 'content' as string!");
   }
   
-  if (this.options.content.length === 0 /* || this.options.content.length > 7089 */) {
+  if ((this.options.bytes instanceof Uint8Array ? this.options.bytes.length : this.options.content.length) === 0 /* || this.options.content.length > 7089 */) {
     throw new Error("Expected 'content' to be non-empty!");
   }
   
@@ -220,7 +225,7 @@ function QRCode(options) {
   
   //Get type number
   function _getTypeNumber(content, ecl) {      
-    var length = _getUTF8Length(content);
+    var length = content instanceof Uint8Array ? content.length : _getUTF8Length(content);
     
     var type = 1;
     var limit = 0;
@@ -272,7 +277,7 @@ function QRCode(options) {
   }
   
   //Generate QR Code matrix
-  var content = this.options.content;
+  var content = this.options.bytes instanceof Uint8Array ? this.options.bytes : this.options.content;
   var type = _getTypeNumber(content, this.options.ecl);
   var ecl = _getErrorCorrectLevel(this.options.ecl);
   this.qrcode = new QRCodeModel(type, ecl);

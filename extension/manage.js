@@ -10,7 +10,7 @@ import * as store from './store.js'
 import * as pairing from './pairing.js'
 import { splitIntoFrames, createFrameCollector } from './frames.js'
 import { createEncoder, createDecoder, QR_FRAME_MS } from './fountain.js'
-import { qrSvg, openCamera, readCode } from './qrtools.js'
+import { qrSvg, openCamera, scanStream, scanReadout } from './qrtools.js'
 import { masterKeyToCryptoKey, decrypt } from './crypto.js'
 import { formDialog, askSecret, closeAllDialogs } from './dialogs.js'
 import * as keypackage from './keypackage.js'
@@ -996,6 +996,9 @@ const AUTOLOCK_MIN_SEC = 10
 const AUTOLOCK_MAX_SEC = 7200
 const QR_TIMEOUT_MIN_SEC = 5
 const QR_TIMEOUT_MAX_SEC = 600
+const SCAN_READOUT_MS = 1000
+const SHARE_QR_MIN_PX = 320
+const SHARE_QR_VIEW_MARGIN_PX = 110
 const readoutAutolockTimeout = document.getElementById('readout-autolock-timeout')
 const readoutQrTimeout = document.getElementById('readout-qr-timeout')
 
@@ -1087,10 +1090,12 @@ async function init() {
       const a = await store.getAuth() || {}
       a.keyNickname = name
       await store.setAuth(a)
-      if (msgEl) { msgEl.textContent = 'Key renamed.'; msgEl.style.color = 'var(--green)' }
+      if (msgEl) { msgEl.textContent = 'Key and vault renamed. Files you export from now on use the new name.'; msgEl.style.color = 'var(--green)' }
     } catch (e) {
       if (msgEl) { msgEl.textContent = 'Rename failed'; msgEl.style.color = 'var(--danger)' }
+      return
     }
+    await offerLinkedRename(name, msgEl)
   }
 
   attachActivityListeners()
@@ -1117,6 +1122,13 @@ function stopShareFountain() {
   if (shareShutoffTimer) { clearTimeout(shareShutoffTimer); shareShutoffTimer = null }
   const c = document.getElementById('share-qr'); if (c) c.innerHTML = ''
 }
+function sizeShareQr() {
+  const wrap = document.getElementById('share-qr-wrap')
+  if (!wrap || wrap.classList.contains('hidden') || !wrap.parentElement) return
+  const fit = Math.min(wrap.parentElement.clientWidth, window.innerHeight - SHARE_QR_VIEW_MARGIN_PX)
+  wrap.style.maxWidth = Math.max(SHARE_QR_MIN_PX, fit) + 'px'
+}
+
 async function streamShare(payload, label) {
   stopShareFountain()
   const token = {}
@@ -1131,10 +1143,13 @@ async function streamShare(payload, label) {
   if (shareToken !== token) return
   if (labelEl) labelEl.textContent = label
   if (wrap) wrap.classList.remove('hidden')
+  sizeShareQr()
+  window.addEventListener('resize', sizeShareQr)
   function renderNext() {
     container.innerHTML = qrSvg(encoder.nextFrame())
   }
   renderNext()
+  if (wrap) wrap.scrollIntoView({ block: 'center' })
   shareFountainTimer = setInterval(renderNext, QR_FRAME_MS)
   let remaining = seconds
   if (timerEl) timerEl.textContent = 'Auto-closes in ' + remaining + 's'
@@ -1146,6 +1161,7 @@ async function streamShare(payload, label) {
 }
 function stopShare() {
   stopShareFountain()
+  window.removeEventListener('resize', sizeShareQr)
   const wrap = document.getElementById('share-qr-wrap')
   if (wrap) wrap.classList.add('hidden')
 }
@@ -1191,6 +1207,34 @@ function readFileText(cb) {
     r.readAsText(f)
   }
   input.click()
+}
+
+async function offerLinkedRename(name, msgEl) {
+  if (!uniVault.uniVaultSupported()) return
+  const linked = await uniVault.getLink()
+  const wanted = backupFileName(name)
+  if (!linked || linked.name === wanted) return
+  const choice = await formDialog({
+    title: 'Rename your Uni-Vault file too?',
+    text: 'This browser is linked to ' + linked.name + '. Save the vault as ' + wanted + ' and link to it instead? Browsers cannot rename a file in place, so the old file stays where it is. Once your other browsers are linked to the new file, delete the old one.',
+    okLabel: 'Save under the new name',
+    cancelLabel: 'Keep the old file'
+  })
+  if (!choice) return
+  const mk = session.getMasterKey()
+  if (!mk) { if (msgEl) { msgEl.textContent = 'Unlock first to save the vault under the new name.'; msgEl.style.color = 'var(--danger)' } return }
+  let handle
+  try { handle = await window.showSaveFilePicker({ suggestedName: wanted, startIn: linked.handle, types: VAULT_FILE_TYPES }) } catch (e) { return }
+  if (!(await requireTransferAuth())) return
+  const result = await uniVault.linkNew(handle, mk)
+  if (!msgEl) return
+  if (result.state === 'ok') {
+    msgEl.textContent = 'Uni-Vault now uses ' + handle.name + '. In your other browsers, use Import Vault in Sync, pick ' + handle.name + ', and link it. Then delete ' + linked.name + '.'
+    msgEl.style.color = 'var(--green)'
+  } else {
+    msgEl.textContent = result.message || 'Could not link the new file.'
+    msgEl.style.color = 'var(--danger)'
+  }
 }
 
 function backupFileName(nickname) {
@@ -1706,12 +1750,11 @@ const _qrScanBox = document.getElementById('qr-scan-box'); if (_qrScanBox) _qrSc
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { syncMsg('Camera not available', 'error'); return }
   scanActive = true
   const decoder = createDecoder()
-  let settled = false, stream = null, raf = null
+  let settled = false, stream = null, reader = null, ticker = null
   const origHtml = box.innerHTML
   box.innerHTML = ''
   const video = document.createElement('video'); video.setAttribute('playsinline', 'true'); video.muted = true
   video.style.cssText = 'width:100%;height:100%;object-fit:cover;'
-  const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d', { willReadFrequently: true })
   const cancel = document.createElement('button'); cancel.textContent = 'Cancel'
   cancel.style.cssText = 'position:absolute;top:8px;left:8px;z-index:3;background:var(--danger);color:#fff;border:none;border-radius:6px;padding:6px 14px;font-weight:700;'
   const status = document.createElement('div'); status.style.cssText = 'position:absolute;bottom:8px;left:0;right:0;text-align:center;color:#33ff66;font-family:monospace;font-size:12px;z-index:3;'
@@ -1720,7 +1763,8 @@ const _qrScanBox = document.getElementById('qr-scan-box'); if (_qrScanBox) _qrSc
   function cleanup() {
     settled = true
     setTimeout(function () { scanActive = false }, 400)
-    if (raf) { cancelAnimationFrame(raf); raf = null }
+    if (reader) { reader.stop(); reader = null }
+    if (ticker) { clearInterval(ticker); ticker = null }
     try { if (stream) { stream.getTracks().forEach(function (t) { t.stop() }); stream = null } } catch (e) {}
     try { video.pause(); video.srcObject = null } catch (e) {}
     box.innerHTML = origHtml
@@ -1730,30 +1774,22 @@ const _qrScanBox = document.getElementById('qr-scan-box'); if (_qrScanBox) _qrSc
     stream = await openCamera()
     if (settled) { stream.getTracks().forEach(function (t) { t.stop() }); stream = null; return }
     video.srcObject = stream; await video.play()
-    function tick() {
+    let last = null
+    reader = scanStream(video, function () { return new Worker('scanworker.js') }, function (frame) {
       if (settled) return
-      if (video.readyState === video.HAVE_ENOUGH_DATA) {
-        let text = null
-        try { text = readCode(video, canvas, ctx) } catch (e) {}
-        if (text) {
-          const outcome = decoder.addFrame(text)
-          if (outcome.success) {
-            status.textContent = 'Receiving: ' + outcome.solved + ' of ' + outcome.total
-            if (outcome.complete) {
-              cleanup()
-              syncMsg('Received ' + outcome.total + ' of ' + outcome.total + ', importing...', 'success')
-              decoder.assemble().then(function (assembled) {
-                if (!assembled.success) { syncMsg('Import failed: ' + assembled.error, 'error'); return }
-                handleImported(assembled.payload)
-              })
-              return
-            }
-          }
-        }
-      }
-      if (!settled) raf = requestAnimationFrame(tick)
-    }
-    if (!settled) raf = requestAnimationFrame(tick)
+      const outcome = decoder.addFrame(frame)
+      if (!outcome.success) return
+      last = outcome
+      status.textContent = scanReadout(outcome, reader)
+      if (!outcome.complete) return
+      cleanup()
+      syncMsg('Received ' + outcome.total + ' of ' + outcome.total + ', importing...', 'success')
+      decoder.assemble().then(function (assembled) {
+        if (!assembled.success) { syncMsg('Import failed: ' + assembled.error, 'error'); return }
+        handleImported(assembled.payload)
+      })
+    })
+    ticker = setInterval(function () { if (!settled && last) status.textContent = scanReadout(last, reader) }, SCAN_READOUT_MS)
   } catch (e) { cleanup(); syncMsg('Camera failed: ' + (e && e.message ? e.message : e), 'error') }
 }
 
