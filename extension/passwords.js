@@ -8,6 +8,7 @@ const MULTI_PART_SUFFIXES = new Set(['co.uk', 'org.uk', 'ac.uk', 'gov.uk', 'me.u
 const SHARED_HOST_SUFFIXES = new Set(['github.io', 'gitlab.io', 'herokuapp.com', 'vercel.app', 'netlify.app', 'pages.dev', 'workers.dev', 'web.app', 'firebaseapp.com', 'appspot.com', 'blogspot.com', 'wordpress.com', 'azurewebsites.net', 'cloudfront.net', 'cloudapp.net', 'amazonaws.com', 'glitch.me', 'onrender.com', 'fly.dev', 'replit.app', 'repl.co', 'ngrok.io', 'ngrok-free.app', 'myshopify.com', 'wixsite.com', 'squarespace.com', 'substack.com', 'tumblr.com', 'neocities.org', 'carrd.co', 'duckdns.org', 'translate.goog', 'webflow.io', 'framer.website', 'notion.site', 'surge.sh', 'bitbucket.io', 'readthedocs.io', 'deno.dev', 'railway.app'])
 const IPV4_PATTERN = /^\d{1,3}(\.\d{1,3}){3}$/
 const APP_PACKAGE_PATTERN = /^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+$/
+const IMPORTED_LINK_STAMP = 1
 
 function retirePassword(cred, oldPassword, now) {
   if (!oldPassword || oldPassword === cred.password) return
@@ -776,8 +777,67 @@ function groupEntries(entries) {
   return groups
 }
 
-function previewLoginImport(tree, entries) {
-  const counts = { fresh: 0, same: 0, conflicts: 0, deleted: 0, fileDuplicates: 0 }
+function uniqueSite(sites) {
+  const distinct = Array.from(new Set(sites))
+  return distinct.length === 1 ? distinct[0] : null
+}
+
+function sameSecret(a, b) {
+  return a.username === b.username && a.password === b.password
+}
+
+function matchImportedApps(tree, entries, apps) {
+  const links = new Map()
+  const addLink = (pkg, site) => { if (APP_PACKAGE_PATTERN.test(pkg) && !links.has(pkg)) links.set(pkg, site) }
+  for (const entry of entries) if (entry.app && entry.site) addLink(entry.app, entry.site)
+  const resolved = []
+  const open = []
+  for (const app of apps || []) {
+    const existing = (tree.appLinks || {})[app.app]
+    let site = existing && !existing.deleted ? existing.site : null
+    if (!site) site = links.get(app.app) || null
+    if (!site) site = uniqueSite(entries.filter((entry) => entry.site && sameSecret(entry, app)).map((entry) => entry.site))
+    if (!site) {
+      const matches = []
+      for (const [domain, list] of Object.entries(tree.credentials || {})) {
+        if (list.some((cred) => isLive(cred) && sameSecret(cred, app))) matches.push(domain)
+      }
+      site = uniqueSite(matches)
+    }
+    if (site) {
+      resolved.push(Object.assign({}, app, { site }))
+      addLink(app.app, site)
+    } else {
+      open.push(Object.assign({}, app, { linkable: !existing }))
+    }
+  }
+  return { resolved, open, links: Array.from(links, ([pkg, site]) => ({ pkg, site })) }
+}
+
+async function matchImportedAppsFor(entries, apps, masterKey) {
+  return matchImportedApps(await readVaultTree(masterKey), entries, apps)
+}
+
+function newAppLinks(tree, links) {
+  const existing = tree.appLinks || {}
+  const seen = new Set()
+  const out = []
+  for (const link of links || []) {
+    if (!link || !APP_PACKAGE_PATTERN.test(link.pkg) || typeof link.site !== 'string' || !link.site) continue
+    if (existing[link.pkg] || seen.has(link.pkg)) continue
+    seen.add(link.pkg)
+    out.push(link)
+  }
+  return out
+}
+
+function isPublicSuffix(site) {
+  const host = String(site || '').toLowerCase()
+  return !host.includes('.') || MULTI_PART_SUFFIXES.has(host) || SHARED_HOST_SUFFIXES.has(host)
+}
+
+function previewLoginImport(tree, entries, links) {
+  const counts = { fresh: 0, same: 0, conflicts: 0, deleted: 0, fileDuplicates: 0, links: newAppLinks(tree, links).length }
   for (const group of groupEntries(entries).values()) {
     const distinct = Array.from(new Set(group.map((entry) => entry.password)))
     const first = group[0]
@@ -796,8 +856,8 @@ function previewLoginImport(tree, entries) {
   return counts
 }
 
-async function previewLoginImportFor(entries, masterKey) {
-  return previewLoginImport(await readVaultTree(masterKey), entries)
+async function previewLoginImportFor(entries, masterKey, links) {
+  return previewLoginImport(await readVaultTree(masterKey), entries, links)
 }
 
 function importedCredential(entry, now) {
@@ -871,7 +931,7 @@ function applyImport(tree, entries, choiceFor, now) {
   return stats
 }
 
-async function importLogins(entries, masterKey, decide) {
+async function importLogins(entries, masterKey, decide, links) {
   const now = Date.now()
   const previousUntil = now + PREVIOUS_KEEP_MS
   const dedup = await settleFileDuplicates(entries, decide)
@@ -899,6 +959,14 @@ async function importLogins(entries, masterKey, decide) {
     if (decided && decided.password === live.password) return decided.choice
     return 'current'
   }, now)
+  const fresh = newAppLinks(tree, links)
+  if (fresh.length) {
+    const appLinks = Object.assign({}, tree.appLinks || {})
+    for (const link of fresh) appLinks[link.pkg] = { id: link.pkg, site: link.site, updatedAt: IMPORTED_LINK_STAMP }
+    tree.appLinks = appLinks
+    stats.changed = true
+  }
+  stats.linked = fresh.length
   if (stats.changed) {
     tree.meta.lastAccess = now
     await writeVaultTree(tree, masterKey)
@@ -920,6 +988,9 @@ export {
   restorePreviousPassword,
   previewLoginImport,
   previewLoginImportFor,
+  matchImportedApps,
+  matchImportedAppsFor,
+  isPublicSuffix,
   importLogins,
   previousExpiresAt,
   PREVIOUS_KEEP_MS,

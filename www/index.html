@@ -358,7 +358,7 @@
         </div>
         <button id="btn-change-key-protection" class="secondary block" style="margin-top:8px;">Change Key Passphrase</button>
         <h2>Import From Another App</h2>
-        <p class="lead">Bring your logins over from another password manager's CSV export, and your bookmarks from a browser's bookmarks HTML file. Everything is encrypted into your vault as it comes in. Valid Vault never exports passwords unencrypted.</p>
+        <p class="lead">Bring your logins over from another password manager's export file, such as a CSV or a Samsung Pass file, and your bookmarks from a browser's bookmarks HTML file. Everything is encrypted into your vault as it comes in. Valid Vault never exports passwords unencrypted.</p>
         <div class="btn-row">
           <button id="btn-import-passwords" class="secondary">Import Passwords</button>
           <button id="btn-import-bookmarks" class="secondary">Import Bookmarks</button>
@@ -522,10 +522,11 @@
           <summary>Importing from another app</summary>
           <div class="body">
             <p>Sync, Import From Another App brings in logins from another password manager and bookmarks from a browser. The file is read on this phone and encrypted straight into your vault. Valid Vault never exports passwords unencrypted.</p>
-            <p>For passwords, export a CSV file from your old password manager, tap Import Passwords, choose the file, and confirm with your fingerprint or device PIN. Most password managers and browsers are recognized. For any other CSV, you pick which columns hold the website, username, and password. Check the preview, then tap Import.</p>
+            <p>For passwords, export your logins from your old password manager, tap Import Passwords, choose the file, and confirm with your fingerprint or device PIN. Valid Vault reads CSV exports from most password managers and browsers, Samsung Pass .spass files, Bitwarden JSON files, 1Password .1pux files, and Dashlane's zipped export. For a protected file, like a Samsung Pass file, enter the password you set when you exported it. It is used once to open the file and is never saved. For any other CSV, you pick which columns hold the website, username, and password. Check the preview, then tap Import.</p>
+            <p>Logins saved for apps, like those in Google Password Manager and Samsung Pass, are matched to a website. When the app's site is in the file or your vault with the same username and password, it is matched for you. Otherwise you confirm a suggested site or skip that app. Matched apps are linked, so their logins fill in the app too.</p>
             <p>When the file has a different password for a login you already have, you see both, masked, with when each was last changed and when yours was last used. Pick the one that is current. The other is kept as the previous password for 30 days, so you can switch back if you picked wrong. If the file has the same login twice with different passwords, you pick which one to import.</p>
             <p>Stop import leaves your vault exactly as it was. Logins you deleted stay deleted, unless the file shows the password was changed after you deleted it.</p>
-            <p>When the import is done, delete the CSV file. It holds your passwords unencrypted, and Valid Vault can't delete it for you.</p>
+            <p>When the import is done, delete the export file. A CSV, JSON, or zip export holds your passwords unencrypted, a protected file is only as safe as its export password, and Valid Vault can't delete it for you.</p>
             <p>For bookmarks, export them from your browser as an HTML file and tap Import Bookmarks. Folders are combined into one list, links you already have are skipped, and bookmarks you deleted stay deleted.</p>
           </div>
         </details>
@@ -11681,6 +11682,7 @@ const MULTI_PART_SUFFIXES = new Set(['co.uk', 'org.uk', 'ac.uk', 'gov.uk', 'me.u
 const SHARED_HOST_SUFFIXES = new Set(['github.io', 'gitlab.io', 'herokuapp.com', 'vercel.app', 'netlify.app', 'pages.dev', 'workers.dev', 'web.app', 'firebaseapp.com', 'appspot.com', 'blogspot.com', 'wordpress.com', 'azurewebsites.net', 'cloudfront.net', 'cloudapp.net', 'amazonaws.com', 'glitch.me', 'onrender.com', 'fly.dev', 'replit.app', 'repl.co', 'ngrok.io', 'ngrok-free.app', 'myshopify.com', 'wixsite.com', 'squarespace.com', 'substack.com', 'tumblr.com', 'neocities.org', 'carrd.co', 'duckdns.org', 'translate.goog', 'webflow.io', 'framer.website', 'notion.site', 'surge.sh', 'bitbucket.io', 'readthedocs.io', 'deno.dev', 'railway.app'])
 const IPV4_PATTERN = /^\d{1,3}(\.\d{1,3}){3}$/
 const APP_PACKAGE_PATTERN = /^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+$/
+const IMPORTED_LINK_STAMP = 1
 
 function retirePassword(cred, oldPassword, now) {
   if (!oldPassword || oldPassword === cred.password) return
@@ -12449,8 +12451,67 @@ function groupEntries(entries) {
   return groups
 }
 
-function previewLoginImport(tree, entries) {
-  const counts = { fresh: 0, same: 0, conflicts: 0, deleted: 0, fileDuplicates: 0 }
+function uniqueSite(sites) {
+  const distinct = Array.from(new Set(sites))
+  return distinct.length === 1 ? distinct[0] : null
+}
+
+function sameSecret(a, b) {
+  return a.username === b.username && a.password === b.password
+}
+
+function matchImportedApps(tree, entries, apps) {
+  const links = new Map()
+  const addLink = (pkg, site) => { if (APP_PACKAGE_PATTERN.test(pkg) && !links.has(pkg)) links.set(pkg, site) }
+  for (const entry of entries) if (entry.app && entry.site) addLink(entry.app, entry.site)
+  const resolved = []
+  const open = []
+  for (const app of apps || []) {
+    const existing = (tree.appLinks || {})[app.app]
+    let site = existing && !existing.deleted ? existing.site : null
+    if (!site) site = links.get(app.app) || null
+    if (!site) site = uniqueSite(entries.filter((entry) => entry.site && sameSecret(entry, app)).map((entry) => entry.site))
+    if (!site) {
+      const matches = []
+      for (const [domain, list] of Object.entries(tree.credentials || {})) {
+        if (list.some((cred) => isLive(cred) && sameSecret(cred, app))) matches.push(domain)
+      }
+      site = uniqueSite(matches)
+    }
+    if (site) {
+      resolved.push(Object.assign({}, app, { site }))
+      addLink(app.app, site)
+    } else {
+      open.push(Object.assign({}, app, { linkable: !existing }))
+    }
+  }
+  return { resolved, open, links: Array.from(links, ([pkg, site]) => ({ pkg, site })) }
+}
+
+async function matchImportedAppsFor(entries, apps, masterKey) {
+  return matchImportedApps(await readVaultTree(masterKey), entries, apps)
+}
+
+function newAppLinks(tree, links) {
+  const existing = tree.appLinks || {}
+  const seen = new Set()
+  const out = []
+  for (const link of links || []) {
+    if (!link || !APP_PACKAGE_PATTERN.test(link.pkg) || typeof link.site !== 'string' || !link.site) continue
+    if (existing[link.pkg] || seen.has(link.pkg)) continue
+    seen.add(link.pkg)
+    out.push(link)
+  }
+  return out
+}
+
+function isPublicSuffix(site) {
+  const host = String(site || '').toLowerCase()
+  return !host.includes('.') || MULTI_PART_SUFFIXES.has(host) || SHARED_HOST_SUFFIXES.has(host)
+}
+
+function previewLoginImport(tree, entries, links) {
+  const counts = { fresh: 0, same: 0, conflicts: 0, deleted: 0, fileDuplicates: 0, links: newAppLinks(tree, links).length }
   for (const group of groupEntries(entries).values()) {
     const distinct = Array.from(new Set(group.map((entry) => entry.password)))
     const first = group[0]
@@ -12469,8 +12530,8 @@ function previewLoginImport(tree, entries) {
   return counts
 }
 
-async function previewLoginImportFor(entries, masterKey) {
-  return previewLoginImport(await readVaultTree(masterKey), entries)
+async function previewLoginImportFor(entries, masterKey, links) {
+  return previewLoginImport(await readVaultTree(masterKey), entries, links)
 }
 
 function importedCredential(entry, now) {
@@ -12544,7 +12605,7 @@ function applyImport(tree, entries, choiceFor, now) {
   return stats
 }
 
-async function importLogins(entries, masterKey, decide) {
+async function importLogins(entries, masterKey, decide, links) {
   const now = Date.now()
   const previousUntil = now + PREVIOUS_KEEP_MS
   const dedup = await settleFileDuplicates(entries, decide)
@@ -12572,13 +12633,21 @@ async function importLogins(entries, masterKey, decide) {
     if (decided && decided.password === live.password) return decided.choice
     return 'current'
   }, now)
+  const fresh = newAppLinks(tree, links)
+  if (fresh.length) {
+    const appLinks = Object.assign({}, tree.appLinks || {})
+    for (const link of fresh) appLinks[link.pkg] = { id: link.pkg, site: link.site, updatedAt: IMPORTED_LINK_STAMP }
+    tree.appLinks = appLinks
+    stats.changed = true
+  }
+  stats.linked = fresh.length
   if (stats.changed) {
     tree.meta.lastAccess = now
     await writeVaultTree(tree, masterKey)
   }
   return Object.assign({ cancelled: false, fileDuplicates: dedup.dropped, previousUntil }, stats)
 }
-return Object.freeze({ "ensureVault": ensureVault, "saveCredential": saveCredential, "getCredentials": getCredentials, "getRelatedCredentials": getRelatedCredentials, "relatedCredentials": relatedCredentials, "siteOf": siteOf, "getAllDomains": getAllDomains, "updateCredential": updateCredential, "deleteCredential": deleteCredential, "noteCredentialUse": noteCredentialUse, "restorePreviousPassword": restorePreviousPassword, "previewLoginImport": previewLoginImport, "previewLoginImportFor": previewLoginImportFor, "importLogins": importLogins, "previousExpiresAt": previousExpiresAt, "PREVIOUS_KEEP_MS": PREVIOUS_KEEP_MS, "autofill": autofill, "getAppLink": getAppLink, "setAppLink": setAppLink, "removeAppLink": removeAppLink, "listAppLinks": listAppLinks, "mergeVaults": mergeVaults, "mergeRecordLists": mergeRecordLists, "laterRecord": laterRecord, "sameCredentials": sameCredentials, "migrateLegacyVault": migrateLegacyVault, "readVaultTree": readVaultTree, "writeVaultTree": writeVaultTree, "decryptAnyRowToTree": decryptAnyRowToTree })
+return Object.freeze({ "ensureVault": ensureVault, "saveCredential": saveCredential, "getCredentials": getCredentials, "getRelatedCredentials": getRelatedCredentials, "relatedCredentials": relatedCredentials, "siteOf": siteOf, "getAllDomains": getAllDomains, "updateCredential": updateCredential, "deleteCredential": deleteCredential, "noteCredentialUse": noteCredentialUse, "restorePreviousPassword": restorePreviousPassword, "previewLoginImport": previewLoginImport, "previewLoginImportFor": previewLoginImportFor, "matchImportedApps": matchImportedApps, "matchImportedAppsFor": matchImportedAppsFor, "isPublicSuffix": isPublicSuffix, "importLogins": importLogins, "previousExpiresAt": previousExpiresAt, "PREVIOUS_KEEP_MS": PREVIOUS_KEEP_MS, "autofill": autofill, "getAppLink": getAppLink, "setAppLink": setAppLink, "removeAppLink": removeAppLink, "listAppLinks": listAppLinks, "mergeVaults": mergeVaults, "mergeRecordLists": mergeRecordLists, "laterRecord": laterRecord, "sameCredentials": sameCredentials, "migrateLegacyVault": migrateLegacyVault, "readVaultTree": readVaultTree, "writeVaultTree": writeVaultTree, "decryptAnyRowToTree": decryptAnyRowToTree })
 })()
 
 __modules["extension/webcreds.js"] = (function () {
@@ -16752,6 +16821,7 @@ const EMAIL_HEADERS = ['email', 'e-mail', 'email address']
 const PASS_HEADERS = ['password', 'login_password', 'pass', 'pwd']
 const NOTE_HEADERS = ['note', 'notes', 'extra', 'comments', 'comment']
 const TYPE_HEADERS = ['type', 'item type']
+const LABEL_HEADERS = ['name', 'title']
 const LOGIN_TYPES = ['', 'login', 'password', 'logins', 'passwords', 'website', 'web login']
 const DATE_HEADERS = ['timepasswordchanged', 'modifytime', 'last modified', 'last_modified', 'lastmodified', 'modified', 'modified at', 'revisiondate', 'password changed', 'last modification time']
 const EPOCH_MS_THRESHOLD = 100000000000
@@ -16769,6 +16839,11 @@ const FORMATS = [
   { name: 'NordPass', has: ['cardholdername'] },
   { name: 'Chrome, Edge, Brave, or Google Password Manager', has: ['name', 'url', 'username', 'password'] }
 ]
+const APP_ADDRESS_PATTERN = /^android(?:app)?:\/\/(?:[^@\/]*@)?([A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+)\/?$/i
+const APP_PACKAGE_PATTERN = /^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+$/
+const APP_TLD_LABELS = new Set(['com', 'org', 'net', 'io', 'co', 'app', 'me', 'tv', 'gg', 'ai', 'dev', 'info', 'biz', 'xyz', 'us', 'uk', 'ca', 'au', 'de', 'fr', 'nl', 'it', 'es', 'se', 'no', 'ch', 'pl', 'jp', 'kr', 'cn', 'ru', 'br', 'in', 'ng'])
+const APP_NOISE_LABELS = new Set(['android', 'app', 'apps', 'mobile', 'client'])
+const APP_SECOND_LEVEL_LABELS = new Set(['co', 'com', 'org', 'net', 'ac', 'gov', 'or', 'ne', 'edu'])
 
 function tooLarge(text) {
   return typeof text !== 'string' || text.length > MAX_IMPORT_CHARS
@@ -16871,7 +16946,8 @@ function guessMapping(headers) {
     password: findColumn(headers, PASS_HEADERS),
     note: findColumn(headers, NOTE_HEADERS),
     type: findColumn(headers, TYPE_HEADERS),
-    date: findColumn(headers, DATE_HEADERS)
+    date: findColumn(headers, DATE_HEADERS),
+    label: findColumn(headers, LABEL_HEADERS)
   }
 }
 
@@ -16886,6 +16962,69 @@ function siteFromAddress(raw) {
   const host = url.hostname.toLowerCase().replace(/\.$/, '')
   if (!host || (!host.includes('.') && host !== 'localhost')) return { site: null, reason: 'site' }
   return { site: host, reason: null }
+}
+
+function appFromAddress(raw) {
+  const match = APP_ADDRESS_PATTERN.exec(String(raw || '').trim())
+  return match ? match[1] : null
+}
+
+function validPackage(raw) {
+  const value = String(raw || '').trim()
+  return APP_PACKAGE_PATTERN.test(value) ? value : null
+}
+
+function suggestAppSite(pkg, label) {
+  const parts = String(pkg || '').toLowerCase().split('.')
+  const named = String(label || '').trim().toLowerCase()
+  if (named && named !== parts.join('.') && named.includes('.') && !/\s/.test(named)) {
+    const where = siteFromAddress(named)
+    const hostParts = where.site ? where.site.split('.') : []
+    if (where.site && hostParts.length >= 2 && parts.includes(hostParts[hostParts.length - 2])) return where.site
+  }
+  if (parts.length >= 3 && APP_TLD_LABELS.has(parts[0]) && APP_SECOND_LEVEL_LABELS.has(parts[1]) && !APP_NOISE_LABELS.has(parts[2])) return parts[2] + '.' + parts[1] + '.' + parts[0]
+  if (parts.length >= 2 && APP_TLD_LABELS.has(parts[0]) && !APP_SECOND_LEVEL_LABELS.has(parts[1]) && !APP_NOISE_LABELS.has(parts[1])) return parts[1] + '.' + parts[0]
+  return ''
+}
+
+function newLoginResult(format) {
+  return { format, entries: [], apps: [], skipped: { notLogin: 0, app: 0, missing: 0, archived: 0 } }
+}
+
+function addLogin(result, fields) {
+  const password = typeof fields.password === 'string' ? fields.password : ''
+  const username = String(fields.username || '').trim()
+  const addresses = Array.isArray(fields.addresses) ? fields.addresses : [fields.addresses]
+  let site = null
+  let app = validPackage(fields.app)
+  let sawApp = false
+  for (const address of addresses) {
+    if (!address) continue
+    const where = siteFromAddress(address)
+    if (where.site && !site) site = where.site
+    if (where.reason === 'app') {
+      sawApp = true
+      if (!app) app = appFromAddress(address)
+    }
+  }
+  if (!site && !app) {
+    if (sawApp) result.skipped.app++
+    else result.skipped.missing++
+    return
+  }
+  if (!password) { result.skipped.missing++; return }
+  const entry = { site, username, password }
+  const note = String(fields.note || '').trim()
+  if (note) entry.note = note
+  const changedAt = fields.changedAt ? parseDate(fields.changedAt) : null
+  if (changedAt) entry.changedAt = changedAt
+  if (app) {
+    entry.app = app
+    const label = String(fields.label || '').trim()
+    if (label) entry.label = label
+  }
+  if (site) result.entries.push(entry)
+  else result.apps.push(entry)
 }
 
 function parseDate(raw) {
@@ -16914,29 +17053,24 @@ function readLoginCsv(text, mapping) {
   if (rows.length < 2) throw new Error('That file has no rows to import.')
   const headers = rows[0].map(cleanHeader)
   const map = mapping || guessMapping(headers)
-  const result = {
-    format: detectFormat(headers),
+  const result = Object.assign(newLoginResult(detectFormat(headers)), {
     headers: rows[0].map((value) => String(value || '').trim()),
     mapping: map,
-    needsMapping: map.site < 0 || map.password < 0,
-    entries: [],
-    skipped: { notLogin: 0, app: 0, missing: 0 }
-  }
+    needsMapping: map.site < 0 || map.password < 0
+  })
   if (result.needsMapping) return result
   for (const row of rows.slice(1)) {
     if (map.type >= 0 && !LOGIN_TYPES.includes(cleanHeader(cell(row, map.type)))) { result.skipped.notLogin++; continue }
-    const password = cell(row, map.password)
-    const where = siteFromAddress(cell(row, map.site))
-    if (where.reason === 'app') { result.skipped.app++; continue }
-    if (!where.site || !password) { result.skipped.missing++; continue }
     let username = cell(row, map.username).trim()
     if (!username && map.email >= 0) username = cell(row, map.email).trim()
-    const entry = { site: where.site, username, password }
-    const note = cell(row, map.note).trim()
-    if (note) entry.note = note
-    const changedAt = map.date >= 0 ? parseDate(cell(row, map.date)) : null
-    if (changedAt) entry.changedAt = changedAt
-    result.entries.push(entry)
+    addLogin(result, {
+      addresses: cell(row, map.site).split(/[\s,]+(?=[a-z][a-z0-9+.-]*:\/\/)/i),
+      username,
+      password: cell(row, map.password),
+      note: cell(row, map.note),
+      changedAt: map.date >= 0 ? cell(row, map.date) : '',
+      label: typeof map.label === 'number' ? cell(row, map.label) : ''
+    })
   }
   return result
 }
@@ -16979,19 +17113,392 @@ function readBookmarkTree(nodes) {
   }
   return result
 }
-return Object.freeze({ "MAX_IMPORT_CHARS": MAX_IMPORT_CHARS, "parseCsv": parseCsv, "guessMapping": guessMapping, "detectFormat": detectFormat, "siteFromAddress": siteFromAddress, "parseDate": parseDate, "readLoginCsv": readLoginCsv, "readBookmarkHtml": readBookmarkHtml, "readBookmarkTree": readBookmarkTree })
+return Object.freeze({ "MAX_IMPORT_CHARS": MAX_IMPORT_CHARS, "parseCsv": parseCsv, "guessMapping": guessMapping, "detectFormat": detectFormat, "siteFromAddress": siteFromAddress, "appFromAddress": appFromAddress, "validPackage": validPackage, "suggestAppSite": suggestAppSite, "newLoginResult": newLoginResult, "addLogin": addLogin, "stripBom": stripBom, "parseDate": parseDate, "readLoginCsv": readLoginCsv, "readBookmarkHtml": readBookmarkHtml, "readBookmarkTree": readBookmarkTree })
+})()
+
+__modules["extension/exportfiles.js"] = (function () {
+const { readLoginCsv, newLoginResult, addLogin, stripBom, MAX_IMPORT_CHARS } = __modules["extension/fileimport.js"]
+const MAX_FILE_BYTES = 64 * 1024 * 1024
+const MAX_ENTRY_BYTES = MAX_IMPORT_CHARS
+const ZIP_LOCAL_SIGNATURE = 0x04034b50
+const ZIP_CENTRAL_SIGNATURE = 0x02014b50
+const ZIP_END_SIGNATURE = 0x06054b50
+const ZIP_END_MIN_BYTES = 22
+const ZIP_COMMENT_MAX_BYTES = 65535
+const ZIP_CENTRAL_BYTES = 46
+const ZIP_LOCAL_BYTES = 30
+const ZIP_STORED = 0
+const ZIP_DEFLATED = 8
+const ZIP_ENCRYPTED_FLAG = 1
+const ZIP_FULL_SIZE = 0xFFFFFFFF
+const SPASS_SALT_BYTES = 20
+const SPASS_IV_BYTES = 16
+const SPASS_ITERATIONS = 70000
+const SPASS_MIN_CHARS = 64
+const SPASS_TABLE_MARKER = 'next_table'
+const SPASS_CSV_VERSION = 'spass_export_v1'
+const SPASS_TABLE_VERSION = '31'
+const SPASS_TABLE_HEADER = '_id;origin_url;'
+const SPASS_ABSENT = '&&&NULL&&&'
+const SPASS_FORMAT = 'Samsung Pass'
+const AES_BLOCK_BYTES = 16
+const BITWARDEN_FORMAT = 'Bitwarden'
+const BITWARDEN_LOGIN_TYPE = 1
+const BITWARDEN_PBKDF2 = 0
+const BITWARDEN_MAX_ITERATIONS = 10000000
+const BITWARDEN_ENC_STRING = /^2\.([A-Za-z0-9+/=]+)\|([A-Za-z0-9+/=]+)\|([A-Za-z0-9+/=]+)$/
+const ONEPASSWORD_FORMAT = '1Password'
+const ONEPASSWORD_LOGIN_CATEGORY = '001'
+const ONEPASSWORD_DATA_FILE = 'export.data'
+const DASHLANE_FORMAT = 'Dashlane'
+const DASHLANE_LOGINS_FILE = /(^|\/)credentials\.csv$/i
+const WRONG_PASSWORD = 'That password did not open the file. Use the password you set when you exported it.'
+const UNREADABLE_ZIP = 'That zip file could not be read.'
+const UNKNOWN_ZIP = 'That zip file has no password list Valid Vault recognizes.'
+const UNKNOWN_SPASS = 'This Samsung Pass file uses a newer layout Valid Vault does not know yet. Nothing was imported.'
+const UNKNOWN_JSON = 'Valid Vault does not recognize this file. Export from your password manager as CSV, or as a Bitwarden JSON, 1Password 1PUX, or Samsung Pass file.'
+const TOO_LARGE = 'That file is too large to import.'
+
+const UTF8 = new TextDecoder('utf-8')
+const UTF8_ENCODER = new TextEncoder()
+
+function utf8(bytes) {
+  return UTF8.decode(bytes)
+}
+
+function base64Bytes(text) {
+  const clean = String(text || '').replace(/\s+/g, '')
+  const binary = atob(clean)
+  const out = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i)
+  return out
+}
+
+function u16(bytes, at) {
+  return bytes[at] | (bytes[at + 1] << 8)
+}
+
+function u32(bytes, at) {
+  return (bytes[at] | (bytes[at + 1] << 8) | (bytes[at + 2] << 16) | (bytes[at + 3] << 24)) >>> 0
+}
+
+function isZip(bytes) {
+  return bytes.length >= ZIP_LOCAL_BYTES && u32(bytes, 0) === ZIP_LOCAL_SIGNATURE
+}
+
+function zipEntries(bytes) {
+  const lowest = Math.max(0, bytes.length - ZIP_END_MIN_BYTES - ZIP_COMMENT_MAX_BYTES)
+  let end = -1
+  for (let at = bytes.length - ZIP_END_MIN_BYTES; at >= lowest; at--) {
+    if (u32(bytes, at) === ZIP_END_SIGNATURE) { end = at; break }
+  }
+  if (end < 0) throw new Error(UNREADABLE_ZIP)
+  const count = u16(bytes, end + 10)
+  let at = u32(bytes, end + 16)
+  const entries = []
+  for (let n = 0; n < count; n++) {
+    if (at + ZIP_CENTRAL_BYTES > bytes.length || u32(bytes, at) !== ZIP_CENTRAL_SIGNATURE) throw new Error(UNREADABLE_ZIP)
+    const nameLength = u16(bytes, at + 28)
+    const entry = {
+      flags: u16(bytes, at + 8),
+      method: u16(bytes, at + 10),
+      compressed: u32(bytes, at + 20),
+      size: u32(bytes, at + 24),
+      local: u32(bytes, at + 42),
+      name: utf8(bytes.subarray(at + ZIP_CENTRAL_BYTES, at + ZIP_CENTRAL_BYTES + nameLength))
+    }
+    if (!entry.name.endsWith('/')) entries.push(entry)
+    at += ZIP_CENTRAL_BYTES + nameLength + u16(bytes, at + 30) + u16(bytes, at + 32)
+  }
+  return entries
+}
+
+async function inflate(data) {
+  const stream = new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate-raw'))
+  const reader = stream.getReader()
+  const chunks = []
+  let total = 0
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    total += value.length
+    if (total > MAX_ENTRY_BYTES) {
+      try { await reader.cancel() } catch (e) {}
+      throw new Error(TOO_LARGE)
+    }
+    chunks.push(value)
+  }
+  const out = new Uint8Array(total)
+  let at = 0
+  for (const chunk of chunks) { out.set(chunk, at); at += chunk.length }
+  return out
+}
+
+async function zipRead(bytes, entry) {
+  if (entry.flags & ZIP_ENCRYPTED_FLAG) throw new Error('That zip file has its own password. Export it again without a zip password.')
+  if (entry.compressed === ZIP_FULL_SIZE || entry.size === ZIP_FULL_SIZE || entry.size > MAX_ENTRY_BYTES) throw new Error(TOO_LARGE)
+  const at = entry.local
+  if (at + ZIP_LOCAL_BYTES > bytes.length || u32(bytes, at) !== ZIP_LOCAL_SIGNATURE) throw new Error(UNREADABLE_ZIP)
+  const start = at + ZIP_LOCAL_BYTES + u16(bytes, at + 26) + u16(bytes, at + 28)
+  const data = bytes.subarray(start, start + entry.compressed)
+  if (data.length !== entry.compressed) throw new Error(UNREADABLE_ZIP)
+  if (entry.method === ZIP_STORED) return data
+  if (entry.method !== ZIP_DEFLATED) throw new Error(UNREADABLE_ZIP)
+  try { return await inflate(data) } catch (e) { throw new Error(e && e.message === TOO_LARGE ? TOO_LARGE : UNREADABLE_ZIP) }
+}
+
+function csvResult(text, format) {
+  const result = readLoginCsv(text)
+  result.csvText = text
+  if (format) result.format = format
+  return result
+}
+
+function parseJson(text, message) {
+  try { return JSON.parse(text) } catch (e) { throw new Error(message) }
+}
+
+function read1pux(data) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error(UNREADABLE_ZIP)
+  const result = newLoginResult(ONEPASSWORD_FORMAT)
+  for (const account of Array.isArray(data.accounts) ? data.accounts : []) {
+    for (const vault of Array.isArray(account && account.vaults) ? account.vaults : []) {
+      for (const item of Array.isArray(vault && vault.items) ? vault.items : []) {
+        if (!item || typeof item !== 'object') continue
+        if (item.state === 'archived') { result.skipped.archived++; continue }
+        if (item.categoryUuid !== ONEPASSWORD_LOGIN_CATEGORY) { result.skipped.notLogin++; continue }
+        const details = item.details && typeof item.details === 'object' ? item.details : {}
+        const overview = item.overview && typeof item.overview === 'object' ? item.overview : {}
+        const fields = Array.isArray(details.loginFields) ? details.loginFields.filter((f) => f && typeof f.value === 'string') : []
+        const user = fields.find((f) => f.designation === 'username') || fields.find((f) => f.fieldType === 'E' || f.fieldType === 'T')
+        const pass = fields.find((f) => f.designation === 'password') || fields.find((f) => f.fieldType === 'P')
+        const addresses = [overview.url].concat((Array.isArray(overview.urls) ? overview.urls : []).map((u) => (u && typeof u.url === 'string' ? u.url : '')))
+        addLogin(result, {
+          addresses,
+          username: user ? user.value : '',
+          password: pass ? pass.value : '',
+          note: typeof details.notesPlain === 'string' ? details.notesPlain : '',
+          changedAt: item.updatedAt ? String(item.updatedAt) : '',
+          label: typeof overview.title === 'string' ? overview.title : ''
+        })
+      }
+    }
+  }
+  return result
+}
+
+function readBitwardenItems(data) {
+  const result = newLoginResult(BITWARDEN_FORMAT)
+  for (const item of Array.isArray(data.items) ? data.items : []) {
+    if (!item || item.type !== BITWARDEN_LOGIN_TYPE || !item.login || typeof item.login !== 'object') { result.skipped.notLogin++; continue }
+    const login = item.login
+    const addresses = (Array.isArray(login.uris) ? login.uris : []).map((u) => (u && typeof u.uri === 'string' ? u.uri : ''))
+    addLogin(result, {
+      addresses,
+      username: typeof login.username === 'string' ? login.username : '',
+      password: typeof login.password === 'string' ? login.password : '',
+      note: typeof item.notes === 'string' ? item.notes : '',
+      changedAt: login.passwordRevisionDate || item.revisionDate || '',
+      label: typeof item.name === 'string' ? item.name : ''
+    })
+  }
+  return result
+}
+
+async function hmacKey(raw, usage) {
+  return crypto.subtle.importKey('raw', raw, { name: 'HMAC', hash: 'SHA-256' }, false, [usage])
+}
+
+async function hkdfExpand(prk, info) {
+  const label = UTF8_ENCODER.encode(info)
+  const message = new Uint8Array(label.length + 1)
+  message.set(label)
+  message[label.length] = 1
+  return new Uint8Array(await crypto.subtle.sign('HMAC', await hmacKey(prk, 'sign'), message))
+}
+
+async function openEncString(value, keys) {
+  const match = BITWARDEN_ENC_STRING.exec(String(value || ''))
+  if (!match) throw new Error(UNKNOWN_JSON)
+  const iv = base64Bytes(match[1])
+  const data = base64Bytes(match[2])
+  const mac = base64Bytes(match[3])
+  const signed = new Uint8Array(iv.length + data.length)
+  signed.set(iv)
+  signed.set(data, iv.length)
+  if (!(await crypto.subtle.verify('HMAC', keys.mac, mac, signed))) throw new Error(WRONG_PASSWORD)
+  try { return new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-CBC', iv }, keys.enc, data)) } catch (e) { throw new Error(WRONG_PASSWORD) }
+}
+
+async function openBitwarden(data, password) {
+  const iterations = Number(data.kdfIterations)
+  if (!Number.isInteger(iterations) || iterations < 1 || iterations > BITWARDEN_MAX_ITERATIONS || typeof data.salt !== 'string') throw new Error(UNKNOWN_JSON)
+  const base = await crypto.subtle.importKey('raw', UTF8_ENCODER.encode(password), 'PBKDF2', false, ['deriveBits'])
+  const master = new Uint8Array(await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt: UTF8_ENCODER.encode(data.salt), iterations }, base, 256))
+  const keys = {
+    enc: await crypto.subtle.importKey('raw', await hkdfExpand(master, 'enc'), { name: 'AES-CBC' }, false, ['decrypt']),
+    mac: await hmacKey(await hkdfExpand(master, 'mac'), 'verify')
+  }
+  await openEncString(data.encKeyValidation_DO_NOT_EDIT, keys)
+  const inner = parseJson(utf8(await openEncString(data.data, keys)), UNKNOWN_JSON)
+  if (!inner || typeof inner !== 'object' || !Array.isArray(inner.items)) throw new Error(UNKNOWN_JSON)
+  return readBitwardenItems(inner)
+}
+
+async function readJson(text, askPassword) {
+  const data = parseJson(text, UNKNOWN_JSON)
+  if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error(UNKNOWN_JSON)
+  if (data.encrypted === true) {
+    if (data.passwordProtected !== true) throw new Error('This Bitwarden file is locked to your Bitwarden account, so only Bitwarden can open it. Export again and choose JSON with a file password, or plain JSON or CSV.')
+    if (data.kdfType !== undefined && data.kdfType !== BITWARDEN_PBKDF2) throw new Error('This Bitwarden file is locked with Argon2, which Valid Vault can\'t open. Export again as plain JSON or CSV, then delete the file after importing.')
+    return markEncrypted(await askPassword(BITWARDEN_FORMAT, (password) => openBitwarden(data, password)))
+  }
+  if (Array.isArray(data.items)) return readBitwardenItems(data)
+  if (Array.isArray(data.accounts)) return read1pux(data)
+  throw new Error(UNKNOWN_JSON)
+}
+
+function looksLikeSpass(name, text) {
+  if (/\.spass$/i.test(name || '')) return true
+  if (/\.(csv|txt|json)$/i.test(name || '')) return false
+  return text.length >= SPASS_MIN_CHARS && /^[A-Za-z0-9+/\s]+=*\s*$/.test(text)
+}
+
+function spassSections(text) {
+  const sections = [[]]
+  for (const line of text.split(/\r?\n/)) {
+    if (line.trim() === SPASS_TABLE_MARKER) sections.push([])
+    else sections[sections.length - 1].push(line)
+  }
+  return sections
+}
+
+function spassValue(field) {
+  if (!field) return ''
+  const value = utf8(base64Bytes(field))
+  return value === SPASS_ABSENT ? '' : value
+}
+
+function readSpassTable(lines) {
+  const rows = lines.filter((line) => line.trim() !== '')
+  const result = newLoginResult(SPASS_FORMAT)
+  if (rows.length === 0) return result
+  const header = rows[0].trim().split(';').map((name) => name.trim().toLowerCase())
+  const at = (name) => header.indexOf(name)
+  const column = {
+    origin: at('origin_url'),
+    host: at('host_url'),
+    username: at('username_value'),
+    password: at('password_value'),
+    modified: at('modified_time'),
+    created: at('created_time'),
+    title: at('title'),
+    appName: at('app_name'),
+    pkg: at('package_name'),
+    memo: at('credential_memo'),
+    blocked: at('blacklisted_by_user')
+  }
+  if (column.origin < 0 || column.username < 0 || column.password < 0) throw new Error(UNKNOWN_SPASS)
+  for (const row of rows.slice(1)) {
+    const fields = row.trim().split(';')
+    if (fields.length !== header.length) throw new Error(UNKNOWN_SPASS)
+    const read = (index) => (index >= 0 ? spassValue(fields[index]) : '')
+    const blocked = read(column.blocked).trim().toLowerCase()
+    if (blocked === '1' || blocked === 'true') { result.skipped.notLogin++; continue }
+    addLogin(result, {
+      addresses: [read(column.origin), read(column.host)],
+      app: read(column.pkg),
+      username: read(column.username),
+      password: read(column.password),
+      note: read(column.memo),
+      changedAt: read(column.modified) || read(column.created),
+      label: read(column.appName) || read(column.title)
+    })
+  }
+  return result
+}
+
+function readSpassText(text) {
+  const sections = spassSections(text)
+  const head = sections[0].map((line) => line.trim())
+  const version = head[0] || ''
+  if (version === SPASS_CSV_VERSION) {
+    if (sections.length < 2) throw new Error(UNKNOWN_SPASS)
+    return csvResult(sections[1].join('\n'), SPASS_FORMAT)
+  }
+  if (!/^\d+$/.test(version)) throw new Error(WRONG_PASSWORD)
+  const table = sections.length > 1 ? sections[1].filter((line) => line.trim() !== '') : []
+  const knownTable = table.length > 0 && table[0].trim().toLowerCase().startsWith(SPASS_TABLE_HEADER)
+  if (version !== SPASS_TABLE_VERSION && !knownTable) throw new Error(UNKNOWN_SPASS)
+  const modules = (head[1] || '').split(';').map((value) => value.trim())
+  if (modules[0] !== 'true') {
+    if (version === SPASS_TABLE_VERSION && (modules[0] === 'false')) return newLoginResult(SPASS_FORMAT)
+    throw new Error(UNKNOWN_SPASS)
+  }
+  if (!knownTable) throw new Error(UNKNOWN_SPASS)
+  try {
+    return readSpassTable(sections[1])
+  } catch (e) {
+    throw new Error(UNKNOWN_SPASS)
+  }
+}
+
+async function openSpass(text, password) {
+  let raw
+  try { raw = base64Bytes(text) } catch (e) { throw new Error(UNKNOWN_SPASS) }
+  const bodyLength = raw.length - SPASS_SALT_BYTES - SPASS_IV_BYTES
+  if (bodyLength < AES_BLOCK_BYTES || bodyLength % AES_BLOCK_BYTES !== 0) throw new Error(UNKNOWN_SPASS)
+  const salt = raw.subarray(0, SPASS_SALT_BYTES)
+  const iv = raw.subarray(SPASS_SALT_BYTES, SPASS_SALT_BYTES + SPASS_IV_BYTES)
+  const body = raw.subarray(SPASS_SALT_BYTES + SPASS_IV_BYTES)
+  const base = await crypto.subtle.importKey('raw', UTF8_ENCODER.encode(password), 'PBKDF2', false, ['deriveKey'])
+  const key = await crypto.subtle.deriveKey({ name: 'PBKDF2', hash: 'SHA-256', salt, iterations: SPASS_ITERATIONS }, base, { name: 'AES-CBC', length: 256 }, false, ['decrypt'])
+  let plain
+  try { plain = new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-CBC', iv }, key, body)) } catch (e) { throw new Error(WRONG_PASSWORD) }
+  return readSpassText(utf8(plain))
+}
+
+async function readZip(bytes) {
+  const entries = zipEntries(bytes)
+  const data = entries.find((entry) => entry.name === ONEPASSWORD_DATA_FILE)
+  if (data) return read1pux(parseJson(utf8(await zipRead(bytes, data)), UNREADABLE_ZIP))
+  const dashlane = entries.find((entry) => DASHLANE_LOGINS_FILE.test(entry.name))
+  if (dashlane) return csvResult(stripBom(utf8(await zipRead(bytes, dashlane))), DASHLANE_FORMAT)
+  const lists = entries.filter((entry) => /\.csv$/i.test(entry.name))
+  if (lists.length === 1) return csvResult(stripBom(utf8(await zipRead(bytes, lists[0]))))
+  throw new Error(UNKNOWN_ZIP)
+}
+
+function markEncrypted(result) {
+  if (result) result.encrypted = true
+  return result
+}
+
+async function readLoginFile(file, askPassword) {
+  const bytes = file && file.bytes instanceof Uint8Array ? file.bytes : new Uint8Array(0)
+  if (bytes.length > MAX_FILE_BYTES) throw new Error(TOO_LARGE)
+  if (isZip(bytes)) return readZip(bytes)
+  const text = stripBom(utf8(bytes))
+  const trimmed = text.trim()
+  if (trimmed.startsWith('{')) return readJson(trimmed, askPassword)
+  if (looksLikeSpass(file.name, trimmed)) return markEncrypted(await askPassword(SPASS_FORMAT, (password) => openSpass(trimmed, password)))
+  return csvResult(text)
+}
+return Object.freeze({ "readLoginFile": readLoginFile, "readSpassText": readSpassText, "zipEntries": zipEntries, "zipRead": zipRead, "MAX_FILE_BYTES": MAX_FILE_BYTES })
 })()
 
 __modules["extension/importflow.js"] = (function () {
-const { readLoginCsv, readBookmarkHtml, readBookmarkTree } = __modules["extension/fileimport.js"]
+const { readLoginCsv, readBookmarkHtml, readBookmarkTree, siteFromAddress, suggestAppSite } = __modules["extension/fileimport.js"]
+const { readLoginFile, MAX_FILE_BYTES } = __modules["extension/exportfiles.js"]
 const passwords = __modules["extension/passwords.js"]
 const bookmarks = __modules["extension/bookmarks.js"]
 const { formDialog, confirmDialog, choiceDialog } = __modules["extension/dialogs.js"]
-const CSV_ACCEPT = '.csv,text/csv,text/comma-separated-values,application/vnd.ms-excel,text/plain'
+const ANY_FILE_ACCEPT = ''
 const HTML_ACCEPT = '.html,.htm,text/html'
 const HEADER_PREVIEW_CHARS = 28
 
-function pickFile(accept) {
+function pickFile(accept, options) {
+  const settings = options || {}
   return new Promise((resolve) => {
     const input = document.createElement('input')
     input.type = 'file'
@@ -17007,10 +17514,15 @@ function pickFile(accept) {
     input.onchange = () => {
       const f = input.files && input.files[0]
       if (!f) { done(null); return }
+      if (settings.maxBytes && f.size > settings.maxBytes) { done({ tooLarge: true, name: f.name || '' }); return }
       const reader = new FileReader()
-      reader.onload = () => done(typeof reader.result === 'string' ? { text: reader.result, name: f.name || '' } : null)
+      reader.onload = () => {
+        if (!(reader.result instanceof ArrayBuffer)) { done(null); return }
+        const bytes = new Uint8Array(reader.result)
+        done(settings.binary ? { bytes, name: f.name || '' } : { bytes, text: new TextDecoder('utf-8').decode(bytes), name: f.name || '' })
+      }
       reader.onerror = () => done(null)
-      reader.readAsText(f)
+      reader.readAsArrayBuffer(f)
     }
     input.addEventListener('cancel', () => done(null))
     document.body.appendChild(input)
@@ -17034,8 +17546,75 @@ function fileLabel(file) {
   return file && file.name ? file.name : 'the file you imported'
 }
 
-function deleteReminder(file) {
+function deleteReminder(file, encrypted) {
+  if (encrypted) return 'Delete ' + fileLabel(file) + ' now. Anyone who has it and its export password can read your passwords, and Valid Vault can\'t delete it for you.'
   return 'Delete ' + fileLabel(file) + ' now. It holds your passwords unencrypted, and Valid Vault can\'t delete it for you.'
+}
+
+function askFilePassword(label, open) {
+  return formDialog({
+    title: 'Open your ' + label + ' file',
+    text: 'Enter the password you set when you exported this file. It is used once to open the file on this device and is never saved.',
+    fields: [{ label: 'Export password', secret: true }],
+    okLabel: 'Open',
+    busyLabel: 'Opening...',
+    validate: async (values) => {
+      if (!values[0]) return { error: 'Enter the export password.', focus: 0 }
+      try { return { value: await open(values[0]) } } catch (e) { return { error: e && e.message ? e.message : 'That file could not be opened.', focus: 0 } }
+    }
+  })
+}
+
+function appName(app) {
+  return app.label && app.label !== app.app ? app.label : app.app
+}
+
+function askAppSite(app, position, total) {
+  return formDialog({
+    title: 'Which website is ' + appName(app) + ' for?',
+    text: (total > 1 ? 'App ' + position + ' of ' + total + '. ' : '') + 'The file has a login for the app ' + app.app + ' with no website. Enter the site it belongs to. The login is saved under that site' + (app.linkable === false ? '. You removed this app\'s link before, so it stays unlinked.' : ', and the app is linked to it so it fills in the app too.'),
+    fields: [{ label: 'Website', value: suggestAppSite(app.app, app.label), placeholder: 'example.com' }],
+    okLabel: 'Use this site',
+    cancelLabel: 'Skip this app',
+    validate: (values) => {
+      const where = siteFromAddress(values[0])
+      if (!where.site) return { error: 'Enter a website, like example.com.', focus: 0 }
+      if (where.site === app.app.toLowerCase()) return { error: 'That is the app\'s package name. Enter its website, like example.com.', focus: 0 }
+      if (passwords.isPublicSuffix(where.site)) return { error: 'That is a shared domain ending. Enter the app\'s own website, like example.co.uk.', focus: 0 }
+      return { value: where.site }
+    }
+  })
+}
+
+async function settleApps(parsed, masterKey) {
+  const match = await passwords.matchImportedAppsFor(parsed.entries, parsed.apps || [], masterKey)
+  const entries = parsed.entries.concat(match.resolved)
+  const links = match.links.slice()
+  let skippedApps = 0
+  if (match.open.length === 0) return { entries, links, skippedApps }
+  const groups = new Map()
+  for (const app of match.open) {
+    if (!groups.has(app.app)) groups.set(app.app, [])
+    groups.get(app.app).push(app)
+  }
+  const choice = await choiceDialog({
+    title: 'Match app logins to websites',
+    text: count(match.open.length, 'login in the file belongs', 'logins in the file belong') + ' to ' + count(groups.size, 'app', 'apps') + ' with no website. Valid Vault keeps every login under a website, so each app needs its site. You can skip any of them.',
+    choices: [
+      { label: 'Skip them', value: 'skip', className: 'secondary' },
+      { label: 'Match them', value: 'match' }
+    ]
+  })
+  if (choice !== 'match') return { entries, links, skippedApps: match.open.length }
+  let position = 0
+  for (const [pkg, apps] of groups) {
+    position++
+    const site = await askAppSite(apps[0], position, groups.size)
+    if (!site) { skippedApps += apps.length; continue }
+    for (const app of apps) entries.push(Object.assign({}, app, { site }))
+    if (apps[0].linkable !== false) links.push({ pkg, site })
+  }
+  return { entries, links, skippedApps }
 }
 
 async function askMapping(headers, guess) {
@@ -17060,7 +17639,7 @@ async function askMapping(headers, guess) {
       if (username === site || username === password) return { error: 'The username must be its own column.', focus: 1 }
       const chosen = [site, username, password]
       const mapping = Object.assign({}, guess, { site, username, password })
-      for (const name of ['email', 'note', 'type', 'date']) {
+      for (const name of ['email', 'note', 'type', 'date', 'label']) {
         if (typeof mapping[name] !== 'number' || chosen.includes(mapping[name])) mapping[name] = -1
       }
       return { value: mapping }
@@ -17124,10 +17703,12 @@ function conflictDialog(conflict) {
   return conflict.kind === 'file' ? fileConflictDialog(conflict) : vaultConflictDialog(conflict)
 }
 
-function skippedText(skipped, deleted) {
+function skippedText(skipped, deleted, skippedApps) {
   const parts = []
   if (skipped.notLogin) parts.push(count(skipped.notLogin, 'item that isn\'t a login', 'items that aren\'t logins'))
-  if (skipped.app) parts.push(count(skipped.app, 'app entry', 'app entries'))
+  if (skipped.archived) parts.push(count(skipped.archived, 'archived item', 'archived items'))
+  if (skipped.app) parts.push(count(skipped.app, 'app entry with no app name', 'app entries with no app name'))
+  if (skippedApps) parts.push(count(skippedApps, 'app login you didn\'t match to a website', 'app logins you didn\'t match to a website'))
   if (skipped.missing) parts.push(count(skipped.missing, 'row missing a website or password', 'rows missing a website or password'))
   if (deleted) parts.push(count(deleted, 'login you deleted from your vault', 'logins you deleted from your vault'))
   return parts.length ? 'Skipped: ' + parts.join(', ') + '.' : ''
@@ -17139,38 +17720,52 @@ async function finishDialog(title, text) {
 
 async function runPasswordImport({ masterKey, authorize, notify }) {
   if (!masterKey) { notify('Unlock first', 'error'); return null }
-  const file = await pickFile(CSV_ACCEPT)
+  const file = await pickFile(ANY_FILE_ACCEPT, { maxBytes: MAX_FILE_BYTES, binary: true })
   if (!file) { notify('No file selected', 'error'); return null }
+  if (file.tooLarge) { notify('That file is too large to import.', 'error'); return null }
   let parsed
-  try { parsed = readLoginCsv(file.text) } catch (e) { notify(e && e.message ? e.message : 'That file could not be read.', 'error'); return null }
+  try { parsed = await readLoginFile(file, askFilePassword) } catch (e) { notify(e && e.message ? e.message : 'That file could not be read.', 'error'); return null }
+  if (!parsed) { notify('Import cancelled. Nothing changed.', 'info'); return null }
+  const encrypted = !!parsed.encrypted
+  const reminder = deleteReminder(file, encrypted)
   if (parsed.needsMapping) {
     const mapping = await askMapping(parsed.headers, parsed.mapping)
-    if (!mapping) { notify('Import cancelled. Nothing changed. ' + deleteReminder(file), 'info'); return null }
-    parsed = readLoginCsv(file.text, mapping)
+    if (!mapping) { notify('Import cancelled. Nothing changed. ' + reminder, 'info'); return null }
+    const format = parsed.format
+    parsed = readLoginCsv(parsed.csvText, mapping)
+    if (format && !parsed.format) parsed.format = format
   }
-  if (parsed.entries.length === 0) {
-    notify('No logins found in ' + fileLabel(file) + '. ' + deleteReminder(file), 'error')
+  if (parsed.entries.length === 0 && (parsed.apps || []).length === 0) {
+    notify('No logins found in ' + fileLabel(file) + '. ' + reminder, 'error')
     return null
   }
   if (!(await authorize())) return null
-  const preview = await passwords.previewLoginImportFor(parsed.entries, masterKey)
+  const settled = await settleApps(parsed, masterKey)
+  if (settled.entries.length === 0) {
+    const skipped = skippedText(parsed.skipped, 0, settled.skippedApps)
+    await finishDialog('Nothing to import', (skipped ? skipped + '\n\n' : '') + reminder)
+    notify('Nothing imported. ' + reminder, 'info')
+    return null
+  }
+  const preview = await passwords.previewLoginImportFor(settled.entries, masterKey, settled.links)
   const lines = []
   if (parsed.format) lines.push('This looks like a ' + parsed.format + ' export.')
   lines.push(count(preview.fresh, 'new login', 'new logins') + ', ' + count(preview.same, 'already saved', 'already saved') + ', ' + count(preview.conflicts, 'with a different password', 'with a different password') + '.')
-  const skipped = skippedText(parsed.skipped, preview.deleted)
+  if (preview.links) lines.push(count(preview.links, 'app gets', 'apps get') + ' linked to its website, so its login fills in the app too.')
+  const skipped = skippedText(parsed.skipped, preview.deleted, settled.skippedApps)
   if (skipped) lines.push(skipped)
   if (preview.fileDuplicates) lines.push(count(preview.fileDuplicates, 'login appears', 'logins appear') + ' in the file more than once with different passwords.')
   if (preview.conflicts || preview.fileDuplicates) lines.push('For each login with a different password, you\'ll see both and pick the current one.')
-  if (preview.fresh === 0 && preview.conflicts === 0) {
-    await finishDialog('Nothing new to import', lines.join(' ') + '\n\n' + deleteReminder(file))
-    notify('Nothing new to import. ' + deleteReminder(file), 'info')
+  if (preview.fresh === 0 && preview.conflicts === 0 && preview.links === 0) {
+    await finishDialog('Nothing new to import', lines.join(' ') + '\n\n' + reminder)
+    notify('Nothing new to import. ' + reminder, 'info')
     return null
   }
   const go = await confirmDialog({ title: 'Import passwords?', text: lines.join(' '), okLabel: 'Import' })
-  if (!go) { notify('Import cancelled. Nothing changed. ' + deleteReminder(file), 'info'); return null }
-  const result = await passwords.importLogins(parsed.entries, masterKey, conflictDialog)
+  if (!go) { notify('Import cancelled. Nothing changed. ' + reminder, 'info'); return null }
+  const result = await passwords.importLogins(settled.entries, masterKey, conflictDialog, settled.links)
   if (result.cancelled) {
-    notify('Import stopped. Nothing was saved. ' + deleteReminder(file), 'info')
+    notify('Import stopped. Nothing was saved. ' + reminder, 'info')
     return result
   }
   const summary = []
@@ -17178,12 +17773,13 @@ async function runPasswordImport({ masterKey, authorize, notify }) {
   if (result.replaced) summary.push('Switched ' + count(result.replaced, 'login', 'logins') + ' to the file\'s password.')
   if (result.kept) summary.push('Kept your password for ' + count(result.kept, 'login', 'logins') + '.')
   if (result.replaced || result.kept) summary.push('The passwords you didn\'t pick are kept as previous passwords until ' + day(result.previousUntil) + '.')
+  if (result.linked) summary.push('Linked ' + count(result.linked, 'app', 'apps') + ' to ' + (result.linked === 1 ? 'its website' : 'their websites') + '.')
   if (result.fileDuplicates) summary.push('Left out ' + count(result.fileDuplicates, 'repeated entry', 'repeated entries') + ' from the file that you didn\'t pick.')
   if (result.same) summary.push(count(result.same, 'login was', 'logins were') + ' already saved.')
-  const skippedAfter = skippedText(parsed.skipped, result.deleted)
+  const skippedAfter = skippedText(parsed.skipped, result.deleted, settled.skippedApps)
   if (skippedAfter) summary.push(skippedAfter)
-  await finishDialog('Import complete', summary.join(' ') + '\n\n' + deleteReminder(file))
-  notify((summary[0] || 'Import complete.') + ' ' + deleteReminder(file), 'success')
+  await finishDialog('Import complete', summary.join(' ') + '\n\n' + reminder)
+  notify((summary[0] || 'Import complete.') + ' ' + reminder, 'success')
   return result
 }
 
@@ -19551,7 +20147,16 @@ async function runFill(req, mk) {
   }
   if (site && linkable) {
     const link = (tree.appLinks || {})[req.packageName]
-    if (link && !link.cert && req.appCert) { try { await passwords.setAppLink(req.packageName, site, mk, req.appCert) } catch (e) {} }
+    if (link && !link.cert) {
+      const app = req.appLabel || req.packageName
+      fillHeader('Fill ' + site + ' into ' + app + '?', req.appCert
+        ? 'This app is linked to ' + site + ', but Valid Vault has not checked who signed it yet. Fill only if this is the app you expect. After this, Valid Vault fills ' + site + ' only into this same app.'
+        : 'This app is linked to ' + site + ', but Android did not say who signed it, so Valid Vault asks every time. Fill only if this is the app you expect.')
+      const trusted = await fillConfirm('Fill')
+      clearFillBody()
+      if (!trusted) { platform.autofillClose(); return }
+      if (req.appCert) { try { await passwords.setAppLink(req.packageName, site, mk, req.appCert) } catch (e) {} }
+    }
   }
   if (!site && req.domain) {
     const groups = passwords.relatedCredentials(tree, req.domain)

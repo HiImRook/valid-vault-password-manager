@@ -457,11 +457,14 @@
 
       <h3>Passwords</h3>
       <ol>
-        <li>In your old password manager, export your passwords as a CSV file. Exports from Chrome, Edge, Brave, Firefox, Bitwarden, LastPass, Proton Pass, Dashlane, Apple Passwords, 1Password, KeePassXC, and NordPass are recognized. For any other CSV, Valid Vault asks which columns hold the website, username, and password.</li>
-        <li>Click <strong>Import Passwords</strong>, choose the file, and confirm with fingerprint, device PIN, or password.</li>
+        <li>In your old password manager, export your passwords. CSV exports from Chrome, Edge, Brave, Firefox, Bitwarden, LastPass, Proton Pass, Dashlane, Apple Passwords, 1Password, KeePassXC, and NordPass are recognized. Valid Vault also reads Samsung Pass .spass files, Bitwarden JSON files (plain, or protected with a file password), 1Password .1pux files, and Dashlane's zipped export. For any other CSV, Valid Vault asks which columns hold the website, username, and password.</li>
+        <li>Click <strong>Import Passwords</strong> and choose the file. If the file is protected with a password, such as a Samsung Pass file, enter the password you set when you exported it. It is used once to open the file and is never saved. Then confirm with fingerprint, device PIN, or password.</li>
         <li>Check the preview of what is new and what is already saved, then click <strong>Import</strong>.</li>
-        <li><strong>Delete the CSV file.</strong> It holds your passwords unencrypted, and Valid Vault can't delete it for you.</li>
+        <li><strong>Delete the export file.</strong> A CSV, JSON, or zip export holds your passwords unencrypted, a protected file is only as safe as its export password, and Valid Vault can't delete it for you.</li>
       </ol>
+
+      <h3>Logins for apps</h3>
+      <p>Some exports, like Google Password Manager and Samsung Pass, include logins saved for phone apps. Valid Vault keeps every login under a website, so each app login is matched to one. When the app's website is in the file or your vault with the same username and password, it is matched for you. Otherwise Valid Vault suggests a site and you confirm it, or skip that app. Matched apps are linked to their website, so on the phone the login fills in the app and on the site.</p>
 
       <h3>When a password is different</h3>
       <p>A login matches when the website and username are the same. When the file has a different password for a login you already have, Valid Vault shows both, masked, with when each was last changed and when yours was last used, and marks the newer one when the file has dates. Pick the one that is current. The other is kept as the previous password for 30 days, so you can switch back from the login picker if you picked wrong.</p>

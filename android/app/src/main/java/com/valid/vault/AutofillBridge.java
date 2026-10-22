@@ -112,7 +112,7 @@ public class AutofillBridge extends Plugin {
         AutofillId passwordId = intent.getParcelableExtra(ValidAutofillService.EXTRA_PASSWORD_ID);
         String username = call.getString("username");
         String password = call.getString("password");
-        RemoteViews view = ValidAutofillService.presentation(getContext(), ValidAutofillService.BRAND);
+        RemoteViews view = ValidAutofillService.presentation(getContext(), ValidAutofillService.BRAND, "");
         Dataset.Builder dataset = new Dataset.Builder(view);
         boolean any = false;
         if (usernameId != null && username != null && !username.isEmpty()) {

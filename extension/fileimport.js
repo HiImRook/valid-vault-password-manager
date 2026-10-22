@@ -6,6 +6,7 @@ const EMAIL_HEADERS = ['email', 'e-mail', 'email address']
 const PASS_HEADERS = ['password', 'login_password', 'pass', 'pwd']
 const NOTE_HEADERS = ['note', 'notes', 'extra', 'comments', 'comment']
 const TYPE_HEADERS = ['type', 'item type']
+const LABEL_HEADERS = ['name', 'title']
 const LOGIN_TYPES = ['', 'login', 'password', 'logins', 'passwords', 'website', 'web login']
 const DATE_HEADERS = ['timepasswordchanged', 'modifytime', 'last modified', 'last_modified', 'lastmodified', 'modified', 'modified at', 'revisiondate', 'password changed', 'last modification time']
 const EPOCH_MS_THRESHOLD = 100000000000
@@ -23,6 +24,11 @@ const FORMATS = [
   { name: 'NordPass', has: ['cardholdername'] },
   { name: 'Chrome, Edge, Brave, or Google Password Manager', has: ['name', 'url', 'username', 'password'] }
 ]
+const APP_ADDRESS_PATTERN = /^android(?:app)?:\/\/(?:[^@\/]*@)?([A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+)\/?$/i
+const APP_PACKAGE_PATTERN = /^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+$/
+const APP_TLD_LABELS = new Set(['com', 'org', 'net', 'io', 'co', 'app', 'me', 'tv', 'gg', 'ai', 'dev', 'info', 'biz', 'xyz', 'us', 'uk', 'ca', 'au', 'de', 'fr', 'nl', 'it', 'es', 'se', 'no', 'ch', 'pl', 'jp', 'kr', 'cn', 'ru', 'br', 'in', 'ng'])
+const APP_NOISE_LABELS = new Set(['android', 'app', 'apps', 'mobile', 'client'])
+const APP_SECOND_LEVEL_LABELS = new Set(['co', 'com', 'org', 'net', 'ac', 'gov', 'or', 'ne', 'edu'])
 
 function tooLarge(text) {
   return typeof text !== 'string' || text.length > MAX_IMPORT_CHARS
@@ -125,7 +131,8 @@ function guessMapping(headers) {
     password: findColumn(headers, PASS_HEADERS),
     note: findColumn(headers, NOTE_HEADERS),
     type: findColumn(headers, TYPE_HEADERS),
-    date: findColumn(headers, DATE_HEADERS)
+    date: findColumn(headers, DATE_HEADERS),
+    label: findColumn(headers, LABEL_HEADERS)
   }
 }
 
@@ -140,6 +147,69 @@ function siteFromAddress(raw) {
   const host = url.hostname.toLowerCase().replace(/\.$/, '')
   if (!host || (!host.includes('.') && host !== 'localhost')) return { site: null, reason: 'site' }
   return { site: host, reason: null }
+}
+
+function appFromAddress(raw) {
+  const match = APP_ADDRESS_PATTERN.exec(String(raw || '').trim())
+  return match ? match[1] : null
+}
+
+function validPackage(raw) {
+  const value = String(raw || '').trim()
+  return APP_PACKAGE_PATTERN.test(value) ? value : null
+}
+
+function suggestAppSite(pkg, label) {
+  const parts = String(pkg || '').toLowerCase().split('.')
+  const named = String(label || '').trim().toLowerCase()
+  if (named && named !== parts.join('.') && named.includes('.') && !/\s/.test(named)) {
+    const where = siteFromAddress(named)
+    const hostParts = where.site ? where.site.split('.') : []
+    if (where.site && hostParts.length >= 2 && parts.includes(hostParts[hostParts.length - 2])) return where.site
+  }
+  if (parts.length >= 3 && APP_TLD_LABELS.has(parts[0]) && APP_SECOND_LEVEL_LABELS.has(parts[1]) && !APP_NOISE_LABELS.has(parts[2])) return parts[2] + '.' + parts[1] + '.' + parts[0]
+  if (parts.length >= 2 && APP_TLD_LABELS.has(parts[0]) && !APP_SECOND_LEVEL_LABELS.has(parts[1]) && !APP_NOISE_LABELS.has(parts[1])) return parts[1] + '.' + parts[0]
+  return ''
+}
+
+function newLoginResult(format) {
+  return { format, entries: [], apps: [], skipped: { notLogin: 0, app: 0, missing: 0, archived: 0 } }
+}
+
+function addLogin(result, fields) {
+  const password = typeof fields.password === 'string' ? fields.password : ''
+  const username = String(fields.username || '').trim()
+  const addresses = Array.isArray(fields.addresses) ? fields.addresses : [fields.addresses]
+  let site = null
+  let app = validPackage(fields.app)
+  let sawApp = false
+  for (const address of addresses) {
+    if (!address) continue
+    const where = siteFromAddress(address)
+    if (where.site && !site) site = where.site
+    if (where.reason === 'app') {
+      sawApp = true
+      if (!app) app = appFromAddress(address)
+    }
+  }
+  if (!site && !app) {
+    if (sawApp) result.skipped.app++
+    else result.skipped.missing++
+    return
+  }
+  if (!password) { result.skipped.missing++; return }
+  const entry = { site, username, password }
+  const note = String(fields.note || '').trim()
+  if (note) entry.note = note
+  const changedAt = fields.changedAt ? parseDate(fields.changedAt) : null
+  if (changedAt) entry.changedAt = changedAt
+  if (app) {
+    entry.app = app
+    const label = String(fields.label || '').trim()
+    if (label) entry.label = label
+  }
+  if (site) result.entries.push(entry)
+  else result.apps.push(entry)
 }
 
 function parseDate(raw) {
@@ -168,29 +238,24 @@ function readLoginCsv(text, mapping) {
   if (rows.length < 2) throw new Error('That file has no rows to import.')
   const headers = rows[0].map(cleanHeader)
   const map = mapping || guessMapping(headers)
-  const result = {
-    format: detectFormat(headers),
+  const result = Object.assign(newLoginResult(detectFormat(headers)), {
     headers: rows[0].map((value) => String(value || '').trim()),
     mapping: map,
-    needsMapping: map.site < 0 || map.password < 0,
-    entries: [],
-    skipped: { notLogin: 0, app: 0, missing: 0 }
-  }
+    needsMapping: map.site < 0 || map.password < 0
+  })
   if (result.needsMapping) return result
   for (const row of rows.slice(1)) {
     if (map.type >= 0 && !LOGIN_TYPES.includes(cleanHeader(cell(row, map.type)))) { result.skipped.notLogin++; continue }
-    const password = cell(row, map.password)
-    const where = siteFromAddress(cell(row, map.site))
-    if (where.reason === 'app') { result.skipped.app++; continue }
-    if (!where.site || !password) { result.skipped.missing++; continue }
     let username = cell(row, map.username).trim()
     if (!username && map.email >= 0) username = cell(row, map.email).trim()
-    const entry = { site: where.site, username, password }
-    const note = cell(row, map.note).trim()
-    if (note) entry.note = note
-    const changedAt = map.date >= 0 ? parseDate(cell(row, map.date)) : null
-    if (changedAt) entry.changedAt = changedAt
-    result.entries.push(entry)
+    addLogin(result, {
+      addresses: cell(row, map.site).split(/[\s,]+(?=[a-z][a-z0-9+.-]*:\/\/)/i),
+      username,
+      password: cell(row, map.password),
+      note: cell(row, map.note),
+      changedAt: map.date >= 0 ? cell(row, map.date) : '',
+      label: typeof map.label === 'number' ? cell(row, map.label) : ''
+    })
   }
   return result
 }
@@ -240,6 +305,12 @@ export {
   guessMapping,
   detectFormat,
   siteFromAddress,
+  appFromAddress,
+  validPackage,
+  suggestAppSite,
+  newLoginResult,
+  addLogin,
+  stripBom,
   parseDate,
   readLoginCsv,
   readBookmarkHtml,

@@ -58,7 +58,8 @@ public class ValidAutofillService extends AutofillService {
     static final String MODE_SAVE = "save";
     static final String BRAND = "Valid Vault";
 
-    private static final String SEPARATOR = " · ";
+    private static final String FILL_PROMPT = "Fill from your vault";
+    private static final String LOGIN_PROMPT = "Log in to ";
     private static final int REQUEST_CODE_SPAN = 1 << 30;
     private static final AtomicInteger REQUEST_CODES = new AtomicInteger(new SecureRandom().nextInt(REQUEST_CODE_SPAN));
     private static final Set<String> TRUSTED_BROWSERS = new HashSet<>(Arrays.asList(
@@ -212,9 +213,15 @@ public class ValidAutofillService extends AutofillService {
         return form;
     }
 
-    static RemoteViews presentation(Context context, String text) {
-        RemoteViews views = new RemoteViews(context.getPackageName(), android.R.layout.simple_list_item_1);
-        views.setTextViewText(android.R.id.text1, text);
+    static RemoteViews presentation(Context context, String title, String subtitle) {
+        RemoteViews views = new RemoteViews(context.getPackageName(), R.layout.vv_autofill_item);
+        views.setTextViewText(R.id.vv_autofill_title, title);
+        if (subtitle == null || subtitle.isEmpty()) {
+            views.setViewVisibility(R.id.vv_autofill_sub, View.GONE);
+        } else {
+            views.setTextViewText(R.id.vv_autofill_sub, subtitle);
+            views.setViewVisibility(R.id.vv_autofill_sub, View.VISIBLE);
+        }
         return views;
     }
 
@@ -289,7 +296,9 @@ public class ValidAutofillService extends AutofillService {
             IntentSender sender = PendingIntent.getActivity(this, REQUEST_CODES.getAndIncrement(), intent, pendingFlags()).getIntentSender();
 
             String domain = form.trustedDomain();
-            RemoteViews view = presentation(this, domain.isEmpty() ? BRAND : BRAND + SEPARATOR + domain);
+            String label = appLabel(form.packageName);
+            String target = !domain.isEmpty() ? domain : (label.equals(form.packageName) ? "" : label);
+            RemoteViews view = presentation(this, BRAND, target.isEmpty() ? FILL_PROMPT : LOGIN_PROMPT + target);
             Dataset.Builder dataset = new Dataset.Builder(view);
             if (username != null) dataset.setValue(username.id, null, view);
             if (password != null) dataset.setValue(password.id, null, view);

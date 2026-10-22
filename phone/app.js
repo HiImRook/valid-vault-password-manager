@@ -2312,7 +2312,16 @@ async function runFill(req, mk) {
   }
   if (site && linkable) {
     const link = (tree.appLinks || {})[req.packageName]
-    if (link && !link.cert && req.appCert) { try { await passwords.setAppLink(req.packageName, site, mk, req.appCert) } catch (e) {} }
+    if (link && !link.cert) {
+      const app = req.appLabel || req.packageName
+      fillHeader('Fill ' + site + ' into ' + app + '?', req.appCert
+        ? 'This app is linked to ' + site + ', but Valid Vault has not checked who signed it yet. Fill only if this is the app you expect. After this, Valid Vault fills ' + site + ' only into this same app.'
+        : 'This app is linked to ' + site + ', but Android did not say who signed it, so Valid Vault asks every time. Fill only if this is the app you expect.')
+      const trusted = await fillConfirm('Fill')
+      clearFillBody()
+      if (!trusted) { platform.autofillClose(); return }
+      if (req.appCert) { try { await passwords.setAppLink(req.packageName, site, mk, req.appCert) } catch (e) {} }
+    }
   }
   if (!site && req.domain) {
     const groups = passwords.relatedCredentials(tree, req.domain)
