@@ -5,6 +5,34 @@ All notable changes to Valid Vault will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0] - 2026-10-22
+
+Import Passwords now reads Samsung Pass, Bitwarden JSON, 1Password, and Dashlane files, and brings over logins saved for phone apps. The autofill button in other apps is redrawn.
+
+### Added
+
+* **Samsung Pass files.** Import Passwords opens the .spass file Samsung Pass exports. Enter the password you set when you exported it. It opens the file once, on the device, and is never saved. A wrong password says so and lets you try again.
+* **Bitwarden JSON.** Plain JSON exports, and JSON exports protected with a file password, are read directly. Exports locked to a Bitwarden account or protected with Argon2 are refused with an explanation of how to export instead.
+* **1Password and Dashlane files.** 1Password .1pux files and Dashlane's zipped CSV export are read without unzipping them first. Archived 1Password items are left out.
+* **Logins for apps.** Logins that Google Password Manager, Samsung Pass, and Bitwarden saved for phone apps are imported instead of skipped. Each one is matched to a website from the same entry, from a login in the file or your vault with the same username and password, or from a site you confirm, with a suggestion filled in. Matched apps are linked to their site, so the login fills in the app and on the site. Any app can be skipped.
+
+### Changed
+
+* **A branded autofill button.** The Valid Vault suggestion that appears under a login field in other apps showed as a blank white box on some phones. It is now a dark button with the Valid Vault logo, the name in green, and the site or app it fills, like Log in to Capital One.
+* **Every file shows in the picker.** Import Passwords lists all files instead of only CSV files and works out the format from what is inside. This is why a .spass file didn't show before.
+* **The delete reminder fits the file.** After a protected file, the reminder says anyone with the file and its export password can read it. An unencrypted file is still called out as unencrypted.
+
+### Security
+
+* **A linked app asks before its first fill.** An app linked without its signature, such as one linked by an import, asks to fill that site into that app the first time. Once you confirm, Valid Vault records the app's signing certificate and fills only into that exact app from then on. If Android doesn't report who signed the app, it asks every time. Declining fills nothing.
+* **Imported links never override your devices.** A link made by an import gives way to any link or removed link already on another device when the two sync. An app whose link you removed stays unlinked, and a suggested site can't be the app's package name or a shared ending like co.uk.
+* **Files are opened on the device.** Protected files are decrypted in memory with the device's built-in cryptography, and no new libraries were added. Zip contents are size-capped, and a Samsung Pass layout Valid Vault doesn't know stops the import instead of guessing.
+
+### Notes
+
+* Update the extension too. It reads the same files, and app links made there reach the phone through sync.
+* Cards, addresses, and notes in a Samsung Pass file are not imported, in keeping with card storage being held back.
+
 ## [0.8.8] - 2026-10-20
 
 The vault QR is about twice as fast and much less fussy about aim, on the phone and the extension.

@@ -56,6 +56,10 @@ A local, encrypted, QR code portable password manager. No cloud, accounts, or sy
 >
 > Sharing the vault by QR is about twice as fast, and much less fussy about aim. Each frame carries its data as raw bytes, so it holds a third more at the same density, and frames change twice as often. The scanner reads frames on several processor cores at once and also looks at the whole camera image, so a code that drifts off center keeps reading. A live readout shows pieces received, the share of frames caught, and reads per second. The extension draws the QR as large as the window allows, and the phone goes to full brightness while it shows one. Master Key Name is now Key and Vault Name, so key and vault files always carry the same name. Update the phone and the extension together, since older scanners can't read the new QR. See [CHANGELOG.md](CHANGELOG.md) for full details.
 
+> ✅ **Import From More Apps - v0.9.0**
+>
+> Import Passwords now reads Samsung Pass .spass files, Bitwarden JSON exports, including ones protected with a file password, 1Password .1pux files, and Dashlane's zipped export, alongside CSV. Every file shows in the picker, and the format is worked out from what is inside. For a protected file, enter its export password once. It opens the file on the device and is never saved. Logins saved for phone apps come over too, matched to their website from the file or your vault, or from a site you confirm, and the app is linked so the login fills there. A linked app asks once before its first fill, then fills only into that exact app, and the autofill button in other apps is redrawn with the logo and the site or app it fills. See [CHANGELOG.md](CHANGELOG.md) for full details.
+
 ---
 
 ## What is Valid Vault?
@@ -169,7 +173,7 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 * Bookmarks and Crypto Wallets travel inside the encrypted vault file (Export Vault / Import Vault) with the same tombstoned-delete merge; seed phrases are kept out of the live QR share, and a bookmarks QR share is planned with the v0.8.x QR transport work
 * Every import is checked in full before anything is written: a file made with a different key, a damaged section, or a file from a newer version is refused and nothing changes, the same login is never saved twice, deletes stay deleted, and importing the same file again changes nothing
 * Syncing requires both devices to share the same master key; a mismatched key fails with a clear error
-* Import From Another App - logins from another password manager's CSV export and bookmarks from a browser's HTML export or, on the extension, straight from the browser it runs in, read on the device and encrypted straight into the vault; Valid Vault never exports passwords unencrypted
+* Import From Another App - logins from another password manager's CSV export, Samsung Pass .spass file, Bitwarden JSON, 1Password .1pux, or Dashlane zip, and bookmarks from a browser's HTML export or, on the extension, straight from the browser it runs in, read on the device and encrypted straight into the vault; Valid Vault never exports passwords unencrypted
 * A login in the file with a different password shows both, masked, with when each was last changed and when yours was last used; the one you don't pick is kept as the previous password for 30 days, stopping an import saves nothing, and deleted logins and bookmarks stay deleted
 * Importing a master key onto a browser whose vault uses a different key warns first, clears that vault on confirmation, and saves the imported key under that device's unlock methods, on the extension and the phone
 * Key import offers fingerprint or device PIN first, with a master password as the fallback; a password on that browser becomes an optional backup
@@ -192,7 +196,7 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 * Android via Capacitor, with native plugins for biometric auth, file saving, autofill, sharing, and the private browser
 * Vendored, self-contained code only, no Google SDKs in the scan path
 
-## Current Status: v0.8.8 - Active Testing
+## Current Status: v0.9.0 - Active Testing
 
 **Completed:**
 
@@ -243,6 +247,7 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 * ✅ Valid Vault autofill inside the private browser, with V tags, Fill login, and save prompts
 * ✅ Private browser autofill matching the extension: Personal Info, the password generator, and emails on login fields
 * ✅ Vault QR about twice as fast and tolerant of off-center aim, with a live readout while scanning
+* ✅ Import from Samsung Pass, Bitwarden JSON, 1Password, and Dashlane files, with logins for phone apps matched to their websites
 
 **In Development:**
 

@@ -1,10 +1,20 @@
 # Valid Vault - Development Roadmap
 
-**Current Version:** v0.8.8 - **Status: Active Testing**
+**Current Version:** v0.9.0 - **Status: Active Testing**
 
 ---
 
 ## Version History (Completed)
+
+### v0.9.0 - Import From More Apps (Oct 2026)
+
+* ✅ Import Passwords lists every file and works out the format from its contents
+* ✅ Samsung Pass .spass files, opened with the export password, which is used once and never saved
+* ✅ Bitwarden JSON, plain and protected with a file password, with account-locked and Argon2 files refused and explained
+* ✅ 1Password .1pux files and Dashlane's zipped export
+* ✅ Logins saved for phone apps matched to a website from the file, the vault, or a site you confirm, and linked so they fill in the app
+* ✅ A linked app asks once before its first fill, then fills only into that exact app
+* ✅ Autofill button in other apps redrawn with the logo and the site or app it fills, replacing a blank white box
 
 ### v0.8.8 - Faster Vault QR (Oct 2026)
 
@@ -278,11 +288,11 @@
 
 ---
 
-## Upcoming After v0.8.8
+## Upcoming After v0.9.0
 
 ### v0.8.x - The Phone App
 
-Built in this order, each step shipping as its own v0.8 release. The phone de-drift shipped in v0.8.0, the vault QR rebuild in v0.8.1, Android Autofill with Share to Bookmarks in v0.8.2, the private browser core in v0.8.3, importing from other managers in v0.8.4, the browser's Tor mode and downloads in v0.8.5, tabs with a start page in v0.8.6, Valid Vault autofill in the browser in v0.8.7, autofill matching the extension in v0.8.7.1, and the faster vault QR in v0.8.8.
+Built in this order, each step shipping as its own release. The phone de-drift shipped in v0.8.0, the vault QR rebuild in v0.8.1, Android Autofill with Share to Bookmarks in v0.8.2, the private browser core in v0.8.3, importing from other managers in v0.8.4, the browser's Tor mode and downloads in v0.8.5, tabs with a start page in v0.8.6, Valid Vault autofill in the browser in v0.8.7, autofill matching the extension in v0.8.7.1, the faster vault QR in v0.8.8, and importing from more apps in v0.9.0.
 
 **1. Android Autofill** - shipped in v0.8.2
 
@@ -312,6 +322,7 @@ Encrypted files on a USB drive remain a dependable device-to-device path, alread
 
 **5. Importing from other managers** - shipped in v0.8.4
 
+* Samsung Pass, Bitwarden JSON, 1Password, Dashlane, and logins for phone apps shipped in v0.9.0
 * Confirm imports from more password managers on phones and computers, and add formats from what testing shows
 
 ### v0.9.x - Hardening and Polish
@@ -357,7 +368,7 @@ Encrypted files on a USB drive remain a dependable device-to-device path, alread
 
 ⚠️ **The private browser and widgets are new** - the first browser build runs on a Samsung phone, and the v0.8.3 layout and widgets are being tested on phones now. The browser needs Android 9 or newer
 
-⚠️ **Imports read CSV and bookmark HTML files only** - Samsung Pass has no export Valid Vault can read. Delete the CSV file after importing, since it holds your passwords unencrypted
+⚠️ **Delete export files after importing** - CSV, JSON, and zip exports hold your passwords unencrypted, and a protected file like a Samsung Pass export is only as safe as its export password. Cards, addresses, and notes in a Samsung Pass file are not imported
 
 ⚠️ **Phones upgraded from an older version may need fingerprint re-enrolled once** - unlock with your password, which removes the old fingerprint setting, and re-enroll in Manage, or use Can't unlock? on the lock screen with your key file
 
@@ -383,4 +394,4 @@ MIT License - See LICENSE file for details
 
 ---
 
-**Last Updated:** Oct 20, 2026
+**Last Updated:** Oct 22, 2026
