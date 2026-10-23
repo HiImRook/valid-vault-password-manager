@@ -1,10 +1,16 @@
 # Valid Vault - Development Roadmap
 
-**Current Version:** v0.9.0 - **Status: Active Testing**
+**Current Version:** v0.9.1 - **Status: Active Testing**
 
 ---
 
 ## Version History (Completed)
+
+### v0.9.1 - Bookmarks in the Vault QR (Oct 2026)
+
+* ✅ Share Vault carries bookmarks along with logins, misc credentials, and personal info, with crypto wallets still kept to vault files
+* ✅ Extension password generator no longer stalls on empty password rules, and fits a site's required pattern like the phone browser does
+* ✅ Code left over from retired features cleaned out
 
 ### v0.9.0 - Import From More Apps (Oct 2026)
 
@@ -288,7 +294,7 @@
 
 ---
 
-## Upcoming After v0.9.0
+## Upcoming After v0.9.1
 
 ### v0.8.x - The Phone App
 
@@ -310,8 +316,8 @@ Built in this order, each step shipping as its own release. The phone de-drift s
 **3. QR transport**
 
 * Faster vault QR, off-center scanning, and a live readout shipped in v0.8.8
+* Bookmarks in the vault QR shipped in v0.9.1
 * Scanner reliability across more phones and cameras, tuned from what the readout shows
-* Bookmarks QR share
 * Unlock behavior quirks reported by community testing
 
 Encrypted files on a USB drive remain a dependable device-to-device path, already verified in use.
@@ -328,6 +334,7 @@ Encrypted files on a USB drive remain a dependable device-to-device path, alread
 ### v0.9.x - Hardening and Polish
 
 * Security hardening across the extension and the phone app
+* Visual overhaul: matching border weights across the app and widgets, more legible text, and brighter screens
 * Final features and fixes before 1.0
 * Polish throughout
 
@@ -394,4 +401,4 @@ MIT License - See LICENSE file for details
 
 ---
 
-**Last Updated:** Oct 22, 2026
+**Last Updated:** Oct 23, 2026

@@ -5,6 +5,25 @@ All notable changes to Valid Vault will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.1] - 2026-10-23
+
+Bookmarks now travel in the vault QR, and the extension's password generator handles strict site rules.
+
+### Added
+
+* **Bookmarks in the vault QR.** Share Vault carries your bookmarks along with logins, misc credentials, and personal info, on the extension and the phone. They merge the same way as from a vault file, with no duplicates and deleted bookmarks staying deleted.
+
+### Changed
+
+* **Extension generator on strict sites.** A site whose password rules list an empty character set no longer stalls the generator. When a site requires a pattern the usual password can't meet, like 6 to 8 lowercase letters or a short PIN, the generator steps down to simpler character sets until the pattern fits, the same way the phone browser does. If a site's rules leave no room at all, it says so instead of filling nothing.
+* **Older code removed.** Code left over from retired features is cleaned out, and settings they left behind are removed. A vault is never left without a way to unlock.
+
+### Notes
+
+* Crypto wallets still travel only in vault files, so seed phrases never go over a QR.
+* A device on 0.9.0 that scans a 0.9.1 vault QR keeps the bookmarks too.
+* Update the extension too. It shares both changes.
+
 ## [0.9.0] - 2026-10-22
 
 Import Passwords now reads Samsung Pass, Bitwarden JSON, 1Password, and Dashlane files, and brings over logins saved for phone apps. The autofill button in other apps is redrawn.

@@ -60,6 +60,10 @@ A local, encrypted, QR code portable password manager. No cloud, accounts, or sy
 >
 > Import Passwords now reads Samsung Pass .spass files, Bitwarden JSON exports, including ones protected with a file password, 1Password .1pux files, and Dashlane's zipped export, alongside CSV. Every file shows in the picker, and the format is worked out from what is inside. For a protected file, enter its export password once. It opens the file on the device and is never saved. Logins saved for phone apps come over too, matched to their website from the file or your vault, or from a site you confirm, and the app is linked so the login fills there. A linked app asks once before its first fill, then fills only into that exact app, and the autofill button in other apps is redrawn with the logo and the site or app it fills. See [CHANGELOG.md](CHANGELOG.md) for full details.
 
+> ✅ **Bookmarks in the Vault QR - v0.9.1**
+>
+> Share Vault now carries your bookmarks along with logins, misc credentials, and personal info, on the extension and the phone. Crypto wallets still travel only in vault files, so seed phrases never go over a QR. The extension's password generator no longer stalls on sites with empty password rules, and fits a site's required pattern, like a short PIN, the same way the phone browser does. Code left over from retired features is cleaned out. See [CHANGELOG.md](CHANGELOG.md) for full details.
+
 ---
 
 ## What is Valid Vault?
@@ -170,7 +174,7 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 * Set once, reused after - the protection is set on the first key share or export, then Share Master Key and Export Key are one click; Change Key Passphrase replaces it
 * Common passwords are refused as a key passphrase, and the form recommends four or more random words
 * Logins, Web Credentials, and Personal Info all travel together through the same export/import/QR flow, merged by timestamp with tombstoned deletes
-* Bookmarks and Crypto Wallets travel inside the encrypted vault file (Export Vault / Import Vault) with the same tombstoned-delete merge; seed phrases are kept out of the live QR share, and a bookmarks QR share is planned with the v0.8.x QR transport work
+* Bookmarks and Crypto Wallets travel inside the encrypted vault file (Export Vault / Import Vault) with the same tombstoned-delete merge; bookmarks also travel in the vault QR, and seed phrases are kept out of the live QR share
 * Every import is checked in full before anything is written: a file made with a different key, a damaged section, or a file from a newer version is refused and nothing changes, the same login is never saved twice, deletes stay deleted, and importing the same file again changes nothing
 * Syncing requires both devices to share the same master key; a mismatched key fails with a clear error
 * Import From Another App - logins from another password manager's CSV export, Samsung Pass .spass file, Bitwarden JSON, 1Password .1pux, or Dashlane zip, and bookmarks from a browser's HTML export or, on the extension, straight from the browser it runs in, read on the device and encrypted straight into the vault; Valid Vault never exports passwords unencrypted
@@ -196,7 +200,7 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 * Android via Capacitor, with native plugins for biometric auth, file saving, autofill, sharing, and the private browser
 * Vendored, self-contained code only, no Google SDKs in the scan path
 
-## Current Status: v0.9.0 - Active Testing
+## Current Status: v0.9.1 - Active Testing
 
 **Completed:**
 
@@ -248,10 +252,11 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 * ✅ Private browser autofill matching the extension: Personal Info, the password generator, and emails on login fields
 * ✅ Vault QR about twice as fast and tolerant of off-center aim, with a live readout while scanning
 * ✅ Import from Samsung Pass, Bitwarden JSON, 1Password, and Dashlane files, with logins for phone apps matched to their websites
+* ✅ Bookmarks travel in the vault QR alongside logins, misc credentials, and personal info
 
 **In Development:**
 
-* 📋 QR transport (v0.8.x): scanner reliability across more phones and cameras, and a bookmarks QR share
+* 📋 QR transport (v0.8.x): scanner reliability across more phones and cameras
 * 📋 Continued field testing of sync, backup, and native file saving across Android versions
 
 ## Sync and Backup Model
