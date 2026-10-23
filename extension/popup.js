@@ -12,7 +12,6 @@ const WEBSITE_URL = 'https://hiimrook.github.io/valid-vault-password-manager/'
 const viewSetup = document.getElementById('view-setup')
 const viewLocked = document.getElementById('view-locked')
 const viewUnlocked = document.getElementById('view-unlocked')
-const viewSoftlock = document.getElementById('view-softlock')
 
 const setupStateFp = document.getElementById('setup-state-fp')
 const btnSetupFp = document.getElementById('btn-setup-fp')
@@ -29,13 +28,7 @@ const btnPassword = document.getElementById('btn-password')
 const inputPassword = document.getElementById('input-password')
 const msgLocked = document.getElementById('msg-locked')
 
-const inputSoftpin = document.getElementById('input-softpin')
-const btnSoftpin = document.getElementById('btn-softpin')
-const btnSoftFingerprint = document.getElementById('btn-soft-fingerprint')
 const setupFpNote = document.getElementById('setup-fp-note')
-const inputSoftpassword = document.getElementById('input-softpassword')
-const btnSoftPassword = document.getElementById('btn-soft-password')
-const msgSoftlock = document.getElementById('msg-softlock')
 
 const btnLock = document.getElementById('btn-lock')
 const btnExpand = document.getElementById('btn-expand')
@@ -58,7 +51,7 @@ const bookmarkRemoveName = document.getElementById('bookmark-remove-name')
 const btnBookmarkRemove = document.getElementById('btn-bookmark-remove')
 const btnBookmarkRemoveCancel = document.getElementById('btn-bookmark-remove-cancel')
 
-const setupState = { hasFp: false, hasPin: false, hasPw: false }
+const setupState = { hasFp: false, hasPw: false }
 const pageState = { tabUrl: '', tabTitle: '', windowId: null, bookmark: null, busy: false }
 let masterKey = null
 
@@ -85,7 +78,6 @@ async function restoreSessionKey() {
 
 function showView(view) {
   viewSetup.classList.add('hidden')
-  viewSoftlock.classList.add('hidden')
   viewLocked.classList.add('hidden')
   viewUnlocked.classList.add('hidden')
   view.classList.remove('hidden')
@@ -143,7 +135,6 @@ async function updateStatus() {
   if (statusFp) statusFp.className = 'status' + (status.hasFingerprint ? ' active' : '')
   if (statusPw) statusPw.className = 'status' + (status.hasPassword ? ' active' : '')
   btnFingerprint.classList.toggle('hidden', !status.hasFingerprint)
-  btnSoftFingerprint.classList.toggle('hidden', !status.hasFingerprint)
   return status
 }
 
@@ -214,15 +205,12 @@ async function init() {
   const tabLoad = loadActiveTab()
   const status = await updateStatus()
   setupState.hasFp = !!status.hasFingerprint
-  setupState.hasPin = !!status.hasPIN
   setupState.hasPw = !!status.hasPassword
   await tabLoad
 
   if (session.hasMasterKey() || await restoreSessionKey()) {
     await enterUnlocked()
-  } else if (await session.isSoftLocked()) {
-    showView(viewSoftlock)
-  } else if (status.hasFingerprint || status.hasPIN || status.hasPassword) {
+  } else if (status.hasVault) {
     showView(viewLocked)
   } else {
     showView(viewSetup)
@@ -337,35 +325,6 @@ btnPassword.onclick = async () => {
   }
 }
 
-btnSoftpin.onclick = async () => {
-  const result = await auth.authenticatePIN(inputSoftpin.value)
-  if (result.success) {
-    inputSoftpin.value = ''
-    await completeUnlock(result.masterKey)
-  } else {
-    showMsg(msgSoftlock, result.error || 'Incorrect PIN', 'error')
-  }
-}
-
-btnSoftFingerprint.onclick = async () => {
-  const result = await auth.authenticateFingerprint()
-  if (result.success) {
-    await completeUnlock(result.masterKey)
-  } else {
-    showMsg(msgSoftlock, result.error, 'error')
-  }
-}
-
-btnSoftPassword.onclick = async () => {
-  const result = await auth.authenticatePassword(inputSoftpassword.value)
-  if (result.success) {
-    inputSoftpassword.value = ''
-    await completeUnlock(result.masterKey)
-  } else {
-    showMsg(msgSoftlock, result.error, 'error')
-  }
-}
-
 btnLock.onclick = async () => {
   await session.lockAll()
   try { await chrome.storage.session.remove(['masterKeyBytes', 'softLocked']) } catch (e) {}
@@ -470,8 +429,6 @@ document.addEventListener('click', (e) => {
 })
 
 inputPassword.onkeydown = (e) => { if (e.key === 'Enter') btnPassword.click() }
-inputSoftpin.onkeydown = (e) => { if (e.key === 'Enter') btnSoftpin.click() }
-inputSoftpassword.onkeydown = (e) => { if (e.key === 'Enter') btnSoftPassword.click() }
 setupPassword.onkeydown = (e) => { if (e.key === 'Enter') btnSetupPw.click() }
 
 chrome.storage.onChanged.addListener((changes, area) => {

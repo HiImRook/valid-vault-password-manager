@@ -341,7 +341,7 @@
       <div id="tab-sync" class="panel">
         <h1>Sync</h1>
         <h2>Share</h2>
-        <p class="lead">Show a QR for another device to scan. The vault stays encrypted under your master key, and the master key is wrapped under your passphrase and three security answers, so the receiving device must enter them before it can use the key. Bookmarks and crypto wallets travel in vault files, not the vault QR.</p>
+        <p class="lead">Show a QR for another device to scan. The vault stays encrypted under your master key, and the master key is wrapped under your passphrase and three security answers, so the receiving device must enter them before it can use the key. The vault QR carries bookmarks too. Crypto wallets travel only in vault files, so seed phrases never go over a QR.</p>
         <div class="btn-row">
           <button id="btn-share-vault">Share Vault</button>
           <button id="btn-share-key" class="secondary">Share Master Key</button>
@@ -507,7 +507,7 @@
             <p>Both devices need the same master key before vaults can merge. Do it in this order:</p>
             <p>1. On the device that already has your vault, use Share Master Key, or Export Key to make a key file.</p>
             <p>2. On the new device, scan that key or open the file, then enter the passphrase and three answers.</p>
-            <p>3. Then move the vault: Share Vault and scan it, or Export Vault and import the file. Vault files carry everything, including bookmarks and crypto wallets. The vault QR carries logins, misc credentials, and personal info.</p>
+            <p>3. Then move the vault: Share Vault and scan it, or Export Vault and import the file. Vault files carry everything, including bookmarks and crypto wallets. The vault QR carries logins, misc credentials, personal info, and bookmarks. Crypto wallets travel only in vault files.</p>
             <p>Importing a vault merges it. The newest edit of each item wins, deleted items stay deleted, and the same login never shows up twice. Importing the same file again changes nothing.</p>
           </div>
         </details>
@@ -10717,7 +10717,7 @@ self.onmessage = (event) => {
 <script>
 (function () {
 'use strict'
-const VALID_VAULT_VERSION = "0.8.8"
+const VALID_VAULT_VERSION = "0.9.0"
 const __modules = Object.create(null)
 __modules["extension/crypto.js"] = (function () {
 const SALT_LENGTH = 16
@@ -11203,7 +11203,8 @@ function hasWrappedKeys(auth) {
 
 async function purgeLegacyPin() {
   const auth = await getAuth()
-  if (auth && (auth.pinWrappedKey || auth.pinSalt || auth.pinHash || auth.pinKdfIterations)) {
+  if (!auth || !(auth.fingerprintWrappedKey || auth.passwordWrappedKey || hasNativeFingerprint(auth))) return
+  if (auth.pinWrappedKey || auth.pinSalt || auth.pinHash || auth.pinKdfIterations) {
     delete auth.pinWrappedKey
     delete auth.pinSalt
     delete auth.pinHash
@@ -11250,12 +11251,11 @@ async function upgradeWrap(auth, method, secret, masterKey) {
 }
 
 async function initAuth() {
+  try { await purgeLegacyPin() } catch (e) {}
   const auth = await getAuth()
   return {
     hasFingerprint: !!(auth && ((auth.fingerprintEnabled && auth.fingerprintWrappedKey) || hasNativeFingerprint(auth))),
-    hasPIN: !!(auth && auth.pinWrappedKey),
     hasPassword: !!(auth && auth.passwordWrappedKey),
-    hasLegacyPIN: !!(auth && auth.pinWrappedKey),
     hasVault: hasWrappedKeys(auth),
     isNew: !auth || !hasWrappedKeys(auth)
   }
@@ -11438,87 +11438,6 @@ async function authenticateFingerprint() {
   }
 }
 
-function startPINCreation() {
-  return startCreationTimer('pin')
-}
-
-async function setPIN(pin, existingMasterKey) {
-  const timerCheck = checkCreationTimer('pin')
-  if (!timerCheck.valid) {
-    return { success: false, error: timerCheck.error }
-  }
-
-  if (pin.length < 4 || pin.length > 6 || !/^\d+$/.test(pin)) {
-    return { success: false, error: 'PIN must be 4-6 digits' }
-  }
-
-  const auth = await getAuth() || {}
-  const resolved = await resolveMasterKeyBytes(existingMasterKey, auth)
-  if (resolved.error) {
-    return { success: false, error: 'Vault exists. Unlock first to add PIN.' }
-  }
-
-  const salt = await generateSalt()
-  const wrappingKey = await deriveKeyFromSecret(pin, salt)
-
-  auth.pinWrappedKey = await wrapMasterKey(resolved.bytes, wrappingKey)
-  auth.pinSalt = Array.from(salt)
-  auth.pinKdfIterations = PBKDF2_ITERATIONS
-  delete auth.pinHash
-
-  await setAuth(auth)
-
-  cancelCreationTimer('pin')
-
-  const masterKey = await masterKeyToCryptoKey(resolved.bytes)
-  return { success: true, masterKey, isNewVault: resolved.isNewVault }
-}
-
-async function authenticatePIN(pin) {
-  const rateCheck = await checkRateLimit('pin')
-  if (!rateCheck.allowed) {
-    return { success: false, error: `Too many attempts. Wait ${rateCheck.remaining}s` }
-  }
-
-  const auth = await getAuth()
-  if (!auth || !auth.pinWrappedKey) {
-    return { success: false, error: 'No PIN set' }
-  }
-
-  try {
-    const salt = new Uint8Array(auth.pinSalt)
-    const iterations = auth.pinKdfIterations || LEGACY_PBKDF2_ITERATIONS
-    const unwrappingKey = await deriveKeyFromSecret(pin, salt, iterations)
-    const masterKey = await unwrapMasterKey(auth.pinWrappedKey, unwrappingKey)
-
-    await upgradeWrap(auth, 'pin', pin, masterKey)
-    await migrateLegacyMasterKey()
-
-    await clearAttempts('pin')
-    return { success: true, masterKey }
-  } catch (error) {
-    await recordFailedAttempt('pin')
-    return { success: false, error: 'Invalid PIN' }
-  }
-}
-
-async function removePIN() {
-  const auth = await getAuth()
-  if (!auth) return { success: false, error: 'No auth configured' }
-
-  if (!auth.fingerprintEnabled && !auth.passwordWrappedKey) {
-    return { success: false, error: 'Cannot remove PIN without fingerprint or password backup' }
-  }
-
-  delete auth.pinWrappedKey
-  delete auth.pinSalt
-  delete auth.pinKdfIterations
-  delete auth.pinHash
-  await setAuth(auth)
-
-  return { success: true }
-}
-
 async function rewrapFingerprint(newMasterKey) {
   try {
     const auth = await getAuth()
@@ -11606,34 +11525,6 @@ async function authenticatePassword(password) {
   }
 }
 
-async function authenticateLegacyPIN(pin) {
-  const rateCheck = await checkRateLimit('pin')
-  if (!rateCheck.allowed) {
-    return { success: false, error: `Too many attempts. Wait ${rateCheck.remaining}s` }
-  }
-
-  const auth = await getAuth()
-  if (!auth || !auth.pinWrappedKey) {
-    return { success: false, error: 'No legacy PIN vault to migrate' }
-  }
-
-  try {
-    const salt = new Uint8Array(auth.pinSalt)
-    const iterations = auth.pinKdfIterations || LEGACY_PBKDF2_ITERATIONS
-    const unwrappingKey = await deriveKeyFromSecret(pin, salt, iterations)
-    const masterKey = await unwrapMasterKey(auth.pinWrappedKey, unwrappingKey)
-
-    await migrateLegacyMasterKey()
-
-    await clearAttempts('pin')
-    const requiresAuthSetup = !auth.passwordWrappedKey && !auth.fingerprintWrappedKey
-    return { success: true, masterKey, requiresAuthSetup }
-  } catch (error) {
-    await recordFailedAttempt('pin')
-    return { success: false, error: 'Invalid PIN' }
-  }
-}
-
 async function removeFingerprint() {
   const auth = await getAuth()
   if (!auth) return { success: false, error: 'No auth configured' }
@@ -11669,7 +11560,7 @@ async function removePassword() {
 
   return { success: true }
 }
-return Object.freeze({ "initAuth": initAuth, "startFingerprintEnrollment": startFingerprintEnrollment, "enrollFingerprint": enrollFingerprint, "rewrapFingerprint": rewrapFingerprint, "authenticateFingerprint": authenticateFingerprint, "startPINCreation": startPINCreation, "setPIN": setPIN, "authenticatePIN": authenticatePIN, "removePIN": removePIN, "startPasswordCreation": startPasswordCreation, "setPassword": setPassword, "authenticatePassword": authenticatePassword, "authenticateLegacyPIN": authenticateLegacyPIN, "removeFingerprint": removeFingerprint, "removePassword": removePassword, "checkRateLimit": checkRateLimit, "checkCreationTimer": checkCreationTimer })
+return Object.freeze({ "initAuth": initAuth, "startFingerprintEnrollment": startFingerprintEnrollment, "enrollFingerprint": enrollFingerprint, "rewrapFingerprint": rewrapFingerprint, "authenticateFingerprint": authenticateFingerprint, "startPasswordCreation": startPasswordCreation, "setPassword": setPassword, "authenticatePassword": authenticatePassword, "removeFingerprint": removeFingerprint, "removePassword": removePassword, "checkRateLimit": checkRateLimit, "checkCreationTimer": checkCreationTimer })
 })()
 
 __modules["extension/passwords.js"] = (function () {
@@ -14606,19 +14497,16 @@ return Object.freeze({ "init": init, "lock": lock, "onTabHidden": onTabHidden, "
 })()
 
 __modules["extension/session.js"] = (function () {
-const { getAuth } = __modules["extension/store.js"]
 const session = {
   masterKey: null,
   unlockedDomains: new Set(),
   lastActivity: 0,
-  timeoutId: null,
-  softLocked: false
+  timeoutId: null
 }
 
 const DEFAULT_AUTOLOCK_SEC = 60
 const TIMEOUT_CHECK_MS = 2000
-const PIN_KEY = 'sessionPin'
-const SOFT_KEY = 'softLocked'
+const LEGACY_SOFT_KEY = 'softLocked'
 const SHARED_ACTIVITY_KEY = 'lastActivity'
 const lockListeners = new Set()
 let autoLockProvider = null
@@ -14649,32 +14537,11 @@ async function getTimeouts() {
       if (r.autoLockTimeout) seconds = r.autoLockTimeout
     }
   } catch (e) {}
-  return { softMs: seconds * 1000 + 1, hardMs: seconds * 1000 }
+  return { hardMs: seconds * 1000 }
 }
 
 function haveStorage() {
   return typeof chrome !== 'undefined' && chrome.storage && chrome.storage.session
-}
-
-async function readPin() {
-  if (!haveStorage()) return null
-  try {
-    const r = await chrome.storage.session.get(PIN_KEY)
-    return r && r[PIN_KEY] ? r[PIN_KEY] : null
-  } catch (e) { return null }
-}
-
-async function writeSoftFlag(v) {
-  if (!haveStorage()) return
-  try {
-    if (v) await chrome.storage.session.set({ [SOFT_KEY]: true })
-    else await chrome.storage.session.remove(SOFT_KEY)
-  } catch (e) {}
-}
-
-async function readSoftFlag() {
-  if (!haveStorage()) return false
-  try { const r = await chrome.storage.session.get(SOFT_KEY); return !!(r && r[SOFT_KEY]) } catch (e) { return false }
 }
 
 async function readSharedActivity() {
@@ -14688,8 +14555,6 @@ async function readSharedActivity() {
 function setMasterKey(key) {
   session.masterKey = key
   session.lastActivity = Date.now()
-  session.softLocked = false
-  writeSoftFlag(false)
   startTimeout()
 }
 
@@ -14699,13 +14564,6 @@ function getMasterKey() {
 
 function hasMasterKey() {
   return session.masterKey !== null
-}
-
-async function isSoftLocked() {
-  const soft = await readSoftFlag()
-  if (!soft) return false
-  const pin = await readPin()
-  return pin !== null
 }
 
 function unlockDomain(domain) { session.unlockedDomains.add(domain) }
@@ -14720,24 +14578,11 @@ async function checkTimeout() {
   const shared = await readSharedActivity()
   if (shared > session.lastActivity) session.lastActivity = shared
   const elapsed = Date.now() - session.lastActivity
-  const { softMs, hardMs } = await getTimeouts()
+  const { hardMs } = await getTimeouts()
   if (elapsed >= hardMs) {
     await lockAll()
     return true
   }
-  if (elapsed >= softMs) {
-    const status = await getAuthPinPresent()
-    if (status) { await softLock() } else { await lockAll() }
-    return true
-  }
-  return false
-}
-
-async function getAuthPinPresent() {
-  try {
-    const auth = await getAuth()
-    return !!(auth && auth.pinWrappedKey)
-  } catch (e) {}
   return false
 }
 
@@ -14753,41 +14598,39 @@ function stopTimeout() {
   }
 }
 
-async function softLock() {
-  session.masterKey = null
-  session.unlockedDomains.clear()
-  session.lastActivity = 0
-  session.softLocked = true
-  await writeSoftFlag(true)
-  stopTimeout()
-}
-
 async function lockAll() {
   const wasUnlocked = session.masterKey !== null
   session.masterKey = null
   session.unlockedDomains.clear()
   session.lastActivity = 0
-  session.softLocked = false
   stopTimeout()
-  await writeSoftFlag(false)
   await clearStorageSession()
   if (wasUnlocked) notifyLock()
 }
 
 async function clearStorageSession() {
   if (!haveStorage()) return
-  try { await chrome.storage.session.remove('masterKeyBytes') } catch (e) {}
+  try { await chrome.storage.session.remove(['masterKeyBytes', LEGACY_SOFT_KEY]) } catch (e) {}
 }
 
 async function getState() {
   return {
     hasMasterKey: hasMasterKey(),
-    softLocked: await isSoftLocked(),
     unlockedDomains: getUnlockedDomains(),
     lastActivity: session.lastActivity
   }
 }
-return Object.freeze({ "setAutoLockProvider": setAutoLockProvider, "onLock": onLock, "setMasterKey": setMasterKey, "getMasterKey": getMasterKey, "hasMasterKey": hasMasterKey, "isSoftLocked": isSoftLocked, "unlockDomain": unlockDomain, "lockDomain": lockDomain, "isDomainUnlocked": isDomainUnlocked, "getUnlockedDomains": getUnlockedDomains, "resetActivity": resetActivity, "checkTimeout": checkTimeout, "softLock": softLock, "lockAll": lockAll, "clearStorageSession": clearStorageSession, "getState": getState })
+
+function watchSharedLock() {
+  if (!haveStorage() || !chrome.storage.onChanged) return
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== 'session' || !changes.masterKeyBytes || changes.masterKeyBytes.newValue) return
+    if (session.masterKey) lockAll()
+  })
+}
+
+watchSharedLock()
+return Object.freeze({ "setAutoLockProvider": setAutoLockProvider, "onLock": onLock, "setMasterKey": setMasterKey, "getMasterKey": getMasterKey, "hasMasterKey": hasMasterKey, "unlockDomain": unlockDomain, "lockDomain": lockDomain, "isDomainUnlocked": isDomainUnlocked, "getUnlockedDomains": getUnlockedDomains, "resetActivity": resetActivity, "checkTimeout": checkTimeout, "lockAll": lockAll, "clearStorageSession": clearStorageSession, "getState": getState })
 })()
 
 __modules["extension/keypackage.js"] = (function () {
@@ -15043,7 +14886,7 @@ function bundleFromPayload(payload) {
 }
 
 function payloadFromBundle(bundle) {
-  return { kind: 'vault', vault: bundle.vault || null, webcreds: bundle.webcreds || null, personalInfo: bundle.personalInfo || null }
+  return { kind: 'vault', vault: bundle.vault || null, webcreds: bundle.webcreds || null, personalInfo: bundle.personalInfo || null, bookmarks: bundle.bookmarks || null }
 }
 
 async function rowOpensWith(row, key) {
@@ -19687,8 +19530,8 @@ async function shareVault() {
   if (!key()) { showMsg('msg-sync', 'Unlock your vault first', 'error'); return }
   if (!(await requireTransferAuth('msg-sync'))) return
   const payload = vaultFile.payloadFromBundle(await vaultFile.buildBundle())
-  if (!payload.vault && !payload.webcreds && !payload.personalInfo) { showMsg('msg-sync', 'Nothing to sync yet', 'error'); return }
-  streamShare(JSON.stringify(payload), 'Scan this with your other device to receive your logins, misc credentials, and personal info.')
+  if (!payload.vault && !payload.webcreds && !payload.personalInfo && !payload.bookmarks) { showMsg('msg-sync', 'Nothing to sync yet', 'error'); return }
+  streamShare(JSON.stringify(payload), 'Scan this with your other device to receive your logins, misc credentials, personal info, and bookmarks.')
 }
 
 async function shareKey() {

@@ -341,7 +341,7 @@
       <div id="tab-sync" class="panel">
         <h1>Sync</h1>
         <h2>Share</h2>
-        <p class="lead">Show a QR for another device to scan. The vault stays encrypted under your master key, and the master key is wrapped under your passphrase and three security answers, so the receiving device must enter them before it can use the key. Bookmarks and crypto wallets travel in vault files, not the vault QR.</p>
+        <p class="lead">Show a QR for another device to scan. The vault stays encrypted under your master key, and the master key is wrapped under your passphrase and three security answers, so the receiving device must enter them before it can use the key. The vault QR carries bookmarks too. Crypto wallets travel only in vault files, so seed phrases never go over a QR.</p>
         <div class="btn-row">
           <button id="btn-share-vault">Share Vault</button>
           <button id="btn-share-key" class="secondary">Share Master Key</button>
@@ -507,7 +507,7 @@
             <p>Both devices need the same master key before vaults can merge. Do it in this order:</p>
             <p>1. On the device that already has your vault, use Share Master Key, or Export Key to make a key file.</p>
             <p>2. On the new device, scan that key or open the file, then enter the passphrase and three answers.</p>
-            <p>3. Then move the vault: Share Vault and scan it, or Export Vault and import the file. Vault files carry everything, including bookmarks and crypto wallets. The vault QR carries logins, misc credentials, and personal info.</p>
+            <p>3. Then move the vault: Share Vault and scan it, or Export Vault and import the file. Vault files carry everything, including bookmarks and crypto wallets. The vault QR carries logins, misc credentials, personal info, and bookmarks. Crypto wallets travel only in vault files.</p>
             <p>Importing a vault merges it. The newest edit of each item wins, deleted items stay deleted, and the same login never shows up twice. Importing the same file again changes nothing.</p>
           </div>
         </details>

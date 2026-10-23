@@ -124,7 +124,8 @@ function hasWrappedKeys(auth) {
 
 async function purgeLegacyPin() {
   const auth = await getAuth()
-  if (auth && (auth.pinWrappedKey || auth.pinSalt || auth.pinHash || auth.pinKdfIterations)) {
+  if (!auth || !(auth.fingerprintWrappedKey || auth.passwordWrappedKey || hasNativeFingerprint(auth))) return
+  if (auth.pinWrappedKey || auth.pinSalt || auth.pinHash || auth.pinKdfIterations) {
     delete auth.pinWrappedKey
     delete auth.pinSalt
     delete auth.pinHash
@@ -171,12 +172,11 @@ async function upgradeWrap(auth, method, secret, masterKey) {
 }
 
 async function initAuth() {
+  try { await purgeLegacyPin() } catch (e) {}
   const auth = await getAuth()
   return {
     hasFingerprint: !!(auth && ((auth.fingerprintEnabled && auth.fingerprintWrappedKey) || hasNativeFingerprint(auth))),
-    hasPIN: !!(auth && auth.pinWrappedKey),
     hasPassword: !!(auth && auth.passwordWrappedKey),
-    hasLegacyPIN: !!(auth && auth.pinWrappedKey),
     hasVault: hasWrappedKeys(auth),
     isNew: !auth || !hasWrappedKeys(auth)
   }
@@ -359,87 +359,6 @@ async function authenticateFingerprint() {
   }
 }
 
-function startPINCreation() {
-  return startCreationTimer('pin')
-}
-
-async function setPIN(pin, existingMasterKey) {
-  const timerCheck = checkCreationTimer('pin')
-  if (!timerCheck.valid) {
-    return { success: false, error: timerCheck.error }
-  }
-
-  if (pin.length < 4 || pin.length > 6 || !/^\d+$/.test(pin)) {
-    return { success: false, error: 'PIN must be 4-6 digits' }
-  }
-
-  const auth = await getAuth() || {}
-  const resolved = await resolveMasterKeyBytes(existingMasterKey, auth)
-  if (resolved.error) {
-    return { success: false, error: 'Vault exists. Unlock first to add PIN.' }
-  }
-
-  const salt = await generateSalt()
-  const wrappingKey = await deriveKeyFromSecret(pin, salt)
-
-  auth.pinWrappedKey = await wrapMasterKey(resolved.bytes, wrappingKey)
-  auth.pinSalt = Array.from(salt)
-  auth.pinKdfIterations = PBKDF2_ITERATIONS
-  delete auth.pinHash
-
-  await setAuth(auth)
-
-  cancelCreationTimer('pin')
-
-  const masterKey = await masterKeyToCryptoKey(resolved.bytes)
-  return { success: true, masterKey, isNewVault: resolved.isNewVault }
-}
-
-async function authenticatePIN(pin) {
-  const rateCheck = await checkRateLimit('pin')
-  if (!rateCheck.allowed) {
-    return { success: false, error: `Too many attempts. Wait ${rateCheck.remaining}s` }
-  }
-
-  const auth = await getAuth()
-  if (!auth || !auth.pinWrappedKey) {
-    return { success: false, error: 'No PIN set' }
-  }
-
-  try {
-    const salt = new Uint8Array(auth.pinSalt)
-    const iterations = auth.pinKdfIterations || LEGACY_PBKDF2_ITERATIONS
-    const unwrappingKey = await deriveKeyFromSecret(pin, salt, iterations)
-    const masterKey = await unwrapMasterKey(auth.pinWrappedKey, unwrappingKey)
-
-    await upgradeWrap(auth, 'pin', pin, masterKey)
-    await migrateLegacyMasterKey()
-
-    await clearAttempts('pin')
-    return { success: true, masterKey }
-  } catch (error) {
-    await recordFailedAttempt('pin')
-    return { success: false, error: 'Invalid PIN' }
-  }
-}
-
-async function removePIN() {
-  const auth = await getAuth()
-  if (!auth) return { success: false, error: 'No auth configured' }
-
-  if (!auth.fingerprintEnabled && !auth.passwordWrappedKey) {
-    return { success: false, error: 'Cannot remove PIN without fingerprint or password backup' }
-  }
-
-  delete auth.pinWrappedKey
-  delete auth.pinSalt
-  delete auth.pinKdfIterations
-  delete auth.pinHash
-  await setAuth(auth)
-
-  return { success: true }
-}
-
 async function rewrapFingerprint(newMasterKey) {
   try {
     const auth = await getAuth()
@@ -527,34 +446,6 @@ async function authenticatePassword(password) {
   }
 }
 
-async function authenticateLegacyPIN(pin) {
-  const rateCheck = await checkRateLimit('pin')
-  if (!rateCheck.allowed) {
-    return { success: false, error: `Too many attempts. Wait ${rateCheck.remaining}s` }
-  }
-
-  const auth = await getAuth()
-  if (!auth || !auth.pinWrappedKey) {
-    return { success: false, error: 'No legacy PIN vault to migrate' }
-  }
-
-  try {
-    const salt = new Uint8Array(auth.pinSalt)
-    const iterations = auth.pinKdfIterations || LEGACY_PBKDF2_ITERATIONS
-    const unwrappingKey = await deriveKeyFromSecret(pin, salt, iterations)
-    const masterKey = await unwrapMasterKey(auth.pinWrappedKey, unwrappingKey)
-
-    await migrateLegacyMasterKey()
-
-    await clearAttempts('pin')
-    const requiresAuthSetup = !auth.passwordWrappedKey && !auth.fingerprintWrappedKey
-    return { success: true, masterKey, requiresAuthSetup }
-  } catch (error) {
-    await recordFailedAttempt('pin')
-    return { success: false, error: 'Invalid PIN' }
-  }
-}
-
 async function removeFingerprint() {
   const auth = await getAuth()
   if (!auth) return { success: false, error: 'No auth configured' }
@@ -597,14 +488,9 @@ export {
   enrollFingerprint,
   rewrapFingerprint,
   authenticateFingerprint,
-  startPINCreation,
-  setPIN,
-  authenticatePIN,
-  removePIN,
   startPasswordCreation,
   setPassword,
   authenticatePassword,
-  authenticateLegacyPIN,
   removeFingerprint,
   removePassword,
   checkRateLimit,

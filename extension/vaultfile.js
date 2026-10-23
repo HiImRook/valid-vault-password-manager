@@ -78,7 +78,7 @@ function bundleFromPayload(payload) {
 }
 
 function payloadFromBundle(bundle) {
-  return { kind: 'vault', vault: bundle.vault || null, webcreds: bundle.webcreds || null, personalInfo: bundle.personalInfo || null }
+  return { kind: 'vault', vault: bundle.vault || null, webcreds: bundle.webcreds || null, personalInfo: bundle.personalInfo || null, bookmarks: bundle.bookmarks || null }
 }
 
 async function rowOpensWith(row, key) {

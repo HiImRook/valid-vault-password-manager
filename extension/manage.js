@@ -117,6 +117,7 @@ async function checkAndShowLockOverlay() {
   if (restored) { hideLockOverlay() } else { showLockOverlay(); loginCredsUnlocked = false; webCredsUnlocked = false; personalInfoUnlocked = false; walletsTab.lock() }
 }
 setInterval(checkAndShowLockOverlay, 5000)
+session.onLock(() => { checkAndShowLockOverlay() })
 
 const tabs = document.querySelectorAll('.sidebar-tab')
 const tabManage = document.getElementById('tab-manage')
@@ -190,10 +191,6 @@ async function loadAuthStatus() {
   }
   if (btnManageUnlockFp) btnManageUnlockFp.classList.toggle('hidden', !status.hasFingerprint)
   applyEnrollBtn(btnEditFp, status.hasFingerprint)
-
-  if (status.hasPIN) {
-  } else {
-  }
 
   if (status.hasPassword) {
     cardPw.classList.add('active'); statusPw.textContent = 'Enrolled'
@@ -1170,8 +1167,8 @@ const _btnShareVault = document.getElementById('btn-share-vault'); if (_btnShare
   if (!session.getMasterKey()) { syncMsg('Unlock your vault first', 'error'); return }
   if (!(await requireTransferAuth())) return
   const payload = vaultFile.payloadFromBundle(await vaultFile.buildBundle())
-  if (!payload.vault && !payload.webcreds && !payload.personalInfo) { syncMsg('Nothing to sync yet', 'error'); return }
-  streamShare(JSON.stringify(payload), 'Scan this with your other device to receive your logins')
+  if (!payload.vault && !payload.webcreds && !payload.personalInfo && !payload.bookmarks) { syncMsg('Nothing to sync yet', 'error'); return }
+  streamShare(JSON.stringify(payload), 'Scan this with your other device to receive your logins, misc credentials, personal info, and bookmarks')
 }
 const _btnShareKey = document.getElementById('btn-share-key'); if (_btnShareKey) _btnShareKey.onclick = async function () {
   if (!session.getMasterKey()) { syncMsg('Unlock your vault first', 'error'); return }

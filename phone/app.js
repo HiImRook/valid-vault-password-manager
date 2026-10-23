@@ -1852,8 +1852,8 @@ async function shareVault() {
   if (!key()) { showMsg('msg-sync', 'Unlock your vault first', 'error'); return }
   if (!(await requireTransferAuth('msg-sync'))) return
   const payload = vaultFile.payloadFromBundle(await vaultFile.buildBundle())
-  if (!payload.vault && !payload.webcreds && !payload.personalInfo) { showMsg('msg-sync', 'Nothing to sync yet', 'error'); return }
-  streamShare(JSON.stringify(payload), 'Scan this with your other device to receive your logins, misc credentials, and personal info.')
+  if (!payload.vault && !payload.webcreds && !payload.personalInfo && !payload.bookmarks) { showMsg('msg-sync', 'Nothing to sync yet', 'error'); return }
+  streamShare(JSON.stringify(payload), 'Scan this with your other device to receive your logins, misc credentials, personal info, and bookmarks.')
 }
 
 async function shareKey() {

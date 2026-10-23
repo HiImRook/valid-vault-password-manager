@@ -1,17 +1,13 @@
-import { getAuth } from './store.js'
-
 const session = {
   masterKey: null,
   unlockedDomains: new Set(),
   lastActivity: 0,
-  timeoutId: null,
-  softLocked: false
+  timeoutId: null
 }
 
 const DEFAULT_AUTOLOCK_SEC = 60
 const TIMEOUT_CHECK_MS = 2000
-const PIN_KEY = 'sessionPin'
-const SOFT_KEY = 'softLocked'
+const LEGACY_SOFT_KEY = 'softLocked'
 const SHARED_ACTIVITY_KEY = 'lastActivity'
 const lockListeners = new Set()
 let autoLockProvider = null
@@ -42,32 +38,11 @@ async function getTimeouts() {
       if (r.autoLockTimeout) seconds = r.autoLockTimeout
     }
   } catch (e) {}
-  return { softMs: seconds * 1000 + 1, hardMs: seconds * 1000 }
+  return { hardMs: seconds * 1000 }
 }
 
 function haveStorage() {
   return typeof chrome !== 'undefined' && chrome.storage && chrome.storage.session
-}
-
-async function readPin() {
-  if (!haveStorage()) return null
-  try {
-    const r = await chrome.storage.session.get(PIN_KEY)
-    return r && r[PIN_KEY] ? r[PIN_KEY] : null
-  } catch (e) { return null }
-}
-
-async function writeSoftFlag(v) {
-  if (!haveStorage()) return
-  try {
-    if (v) await chrome.storage.session.set({ [SOFT_KEY]: true })
-    else await chrome.storage.session.remove(SOFT_KEY)
-  } catch (e) {}
-}
-
-async function readSoftFlag() {
-  if (!haveStorage()) return false
-  try { const r = await chrome.storage.session.get(SOFT_KEY); return !!(r && r[SOFT_KEY]) } catch (e) { return false }
 }
 
 async function readSharedActivity() {
@@ -81,8 +56,6 @@ async function readSharedActivity() {
 function setMasterKey(key) {
   session.masterKey = key
   session.lastActivity = Date.now()
-  session.softLocked = false
-  writeSoftFlag(false)
   startTimeout()
 }
 
@@ -92,13 +65,6 @@ function getMasterKey() {
 
 function hasMasterKey() {
   return session.masterKey !== null
-}
-
-async function isSoftLocked() {
-  const soft = await readSoftFlag()
-  if (!soft) return false
-  const pin = await readPin()
-  return pin !== null
 }
 
 function unlockDomain(domain) { session.unlockedDomains.add(domain) }
@@ -113,24 +79,11 @@ async function checkTimeout() {
   const shared = await readSharedActivity()
   if (shared > session.lastActivity) session.lastActivity = shared
   const elapsed = Date.now() - session.lastActivity
-  const { softMs, hardMs } = await getTimeouts()
+  const { hardMs } = await getTimeouts()
   if (elapsed >= hardMs) {
     await lockAll()
     return true
   }
-  if (elapsed >= softMs) {
-    const status = await getAuthPinPresent()
-    if (status) { await softLock() } else { await lockAll() }
-    return true
-  }
-  return false
-}
-
-async function getAuthPinPresent() {
-  try {
-    const auth = await getAuth()
-    return !!(auth && auth.pinWrappedKey)
-  } catch (e) {}
   return false
 }
 
@@ -146,40 +99,38 @@ function stopTimeout() {
   }
 }
 
-async function softLock() {
-  session.masterKey = null
-  session.unlockedDomains.clear()
-  session.lastActivity = 0
-  session.softLocked = true
-  await writeSoftFlag(true)
-  stopTimeout()
-}
-
 async function lockAll() {
   const wasUnlocked = session.masterKey !== null
   session.masterKey = null
   session.unlockedDomains.clear()
   session.lastActivity = 0
-  session.softLocked = false
   stopTimeout()
-  await writeSoftFlag(false)
   await clearStorageSession()
   if (wasUnlocked) notifyLock()
 }
 
 async function clearStorageSession() {
   if (!haveStorage()) return
-  try { await chrome.storage.session.remove('masterKeyBytes') } catch (e) {}
+  try { await chrome.storage.session.remove(['masterKeyBytes', LEGACY_SOFT_KEY]) } catch (e) {}
 }
 
 async function getState() {
   return {
     hasMasterKey: hasMasterKey(),
-    softLocked: await isSoftLocked(),
     unlockedDomains: getUnlockedDomains(),
     lastActivity: session.lastActivity
   }
 }
+
+function watchSharedLock() {
+  if (!haveStorage() || !chrome.storage.onChanged) return
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== 'session' || !changes.masterKeyBytes || changes.masterKeyBytes.newValue) return
+    if (session.masterKey) lockAll()
+  })
+}
+
+watchSharedLock()
 
 export {
   setAutoLockProvider,
@@ -187,14 +138,12 @@ export {
   setMasterKey,
   getMasterKey,
   hasMasterKey,
-  isSoftLocked,
   unlockDomain,
   lockDomain,
   isDomainUnlocked,
   getUnlockedDomains,
   resetActivity,
   checkTimeout,
-  softLock,
   lockAll,
   clearStorageSession,
   getState

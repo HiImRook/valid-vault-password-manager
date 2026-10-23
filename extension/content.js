@@ -184,6 +184,9 @@
     })
   } catch (e) {}
   const GEN_MAX_PATTERN_TRIES = 200
+  const GEN_FALLBACK_TRIES = 12
+  const GEN_FALLBACK_MIN = 4
+  const GEN_FALLBACK_SETS = [['upper', 'lower', 'digit'], ['lower', 'digit'], ['upper', 'digit'], ['lower'], ['digit']]
   const GEN_CLASSES = {
     upper: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ',
     lower: 'abcdefghijklmnopqrstuvwxyz',
@@ -195,6 +198,7 @@
   const NEW_SIGNAL = /new|create|choose|set.?password|sign.?up|register/
 
   function randomInt(limit) {
+    if (!(limit >= 1)) return 0
     const range = 0x100000000
     const cap = range - (range % limit)
     const buf = new Uint32Array(1)
@@ -229,7 +233,7 @@
         for (const item of value.split(',')) {
           const token = item.trim()
           const custom = token.match(/^\[(.*)\]$/)
-          if (custom) wanted.push({ required: name === 'required', chars: custom[1].replace(/\]/g, ']') })
+          if (custom && custom[1]) wanted.push({ required: name === 'required', chars: custom[1] })
           else if (token === 'ascii-printable') wanted.push({ required: name === 'required', chars: GEN_CLASSES.upper + GEN_CLASSES.lower + GEN_CLASSES.digit + GEN_CLASSES.special })
           else if (GEN_CLASSES[token]) wanted.push({ required: name === 'required', chars: GEN_CLASSES[token] })
         }
@@ -284,11 +288,27 @@
     return shuffleChars(chars).join('')
   }
 
+  function fitPattern(plan) {
+    for (const set of GEN_FALLBACK_SETS) {
+      const classes = set.map((k) => ({ required: true, chars: GEN_CLASSES[k] }))
+      for (let length = Math.max(plan.hi, GEN_FALLBACK_MIN); length >= GEN_FALLBACK_MIN; length--) {
+        const trial = { lo: length, hi: length, classes }
+        for (let i = 0; i < GEN_FALLBACK_TRIES; i++) {
+          const value = generateOnce(trial)
+          if (plan.pattern.test(value)) return value
+        }
+      }
+    }
+    return null
+  }
+
   function generatePassword(fields, style) {
     const plan = generationPlan(fields, style)
+    if (plan.hi < 1) return ''
     let candidate = generateOnce(plan)
     if (!plan.pattern) return candidate
     for (let i = 0; i < GEN_MAX_PATTERN_TRIES && !plan.pattern.test(candidate); i++) candidate = generateOnce(plan)
+    if (!plan.pattern.test(candidate)) candidate = fitPattern(plan) || candidate
     return candidate
   }
 
@@ -543,8 +563,8 @@
         busy = false
       }
     }
-    shadow.getElementById('sp-cancel').onclick = close
-    saveBtn.onclick = doSave
+    shadow.getElementById('sp-cancel').onclick = (e) => { if (e.isTrusted) close() }
+    saveBtn.onclick = (e) => { if (e.isTrusted) doSave() }
     shadow.getElementById('backdrop').onclick = null
   }
 
@@ -1129,6 +1149,7 @@
     tag.onclick = (e) => {
       e.preventDefault()
       e.stopPropagation()
+      if (!e.isTrusted) return
       pingActivity()
       const currentType = tagTypeByEl.get(el)
       if (currentType === 'generate' && credentialFormByEl.has(el)) showGeneratePicker(el, credentialFormByEl.get(el))
@@ -1229,7 +1250,7 @@
     const item = document.createElement('div')
     item.className = 'item'
     item.textContent = text
-    item.onclick = () => { onPick(); hideFieldPicker() }
+    item.onclick = (e) => { if (!e.isTrusted) return; onPick(); hideFieldPicker() }
     container.appendChild(item)
   }
 
@@ -1384,6 +1405,12 @@
   function fillGeneratedPassword(field, record, style) {
     const confirm = record.plan.confirm
     const password = generatePassword([field, confirm], style)
+    if (!password) {
+      const notice = openPicker(field, 'Valid Vault: New password')
+      addPickerEmpty(notice, 'This site\'s password rules leave no room for a password. Type one yourself.')
+      pickerAutoHideTimer = setTimeout(hideFieldPicker, GENERATE_NOTE_MS)
+      return
+    }
     fillFieldValue(field, password)
     if (confirm) fillFieldValue(confirm, password)
     const itemsContainer = openPicker(field, 'Valid Vault: New password')

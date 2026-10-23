@@ -260,6 +260,7 @@ chrome.windows.onRemoved.addListener(async function (windowId) {
 
 const PENDING_SAVE_TTL_MS = 45000
 const PENDING_SAVE_MAX_PER_TAB = 5
+const PENDING_SAVE_PREFIX = 'pendingSave_'
 
 const tabPendingSaveLocks = new Map()
 function withPendingSaveLock(tabId, fn) {
@@ -329,6 +330,50 @@ async function resolvePendingSave(sender, id) {
   })
 }
 
+async function pendingSaveTabIds() {
+  try {
+    const all = await chrome.storage.session.get(null)
+    return Object.keys(all || {}).filter((key) => key.startsWith(PENDING_SAVE_PREFIX)).map((key) => Number(key.slice(PENDING_SAVE_PREFIX.length)))
+  } catch (e) {
+    return []
+  }
+}
+
+function dropPendingSaves(tabId) {
+  return withPendingSaveLock(tabId, async () => {
+    try { await chrome.storage.session.remove(PENDING_SAVE_PREFIX + tabId) } catch (e) {}
+  }).then(() => {
+    const tail = tabPendingSaveLocks.get(tabId)
+    if (tail) tail.then(() => { if (tabPendingSaveLocks.get(tabId) === tail) tabPendingSaveLocks.delete(tabId) })
+  })
+}
+
+async function clearAllPendingSaves() {
+  const tabIds = await pendingSaveTabIds()
+  await Promise.all(tabIds.map((tabId) => dropPendingSaves(tabId)))
+}
+
+async function sweepPendingSaves() {
+  const tabIds = await pendingSaveTabIds()
+  await Promise.all(tabIds.map((tabId) => withPendingSaveLock(tabId, async () => {
+    const key = PENDING_SAVE_PREFIX + tabId
+    try {
+      const stored = await chrome.storage.session.get(key)
+      const map = (stored && stored[key]) || {}
+      const now = Date.now()
+      let changed = false
+      for (const id of Object.keys(map)) {
+        if (!map[id] || typeof map[id].ts !== 'number' || now - map[id].ts > PENDING_SAVE_TTL_MS) { delete map[id]; changed = true }
+      }
+      if (Object.keys(map).length === 0) await chrome.storage.session.remove(key)
+      else if (changed) await chrome.storage.session.set({ [key]: map })
+    } catch (e) {}
+  })))
+}
+
+chrome.tabs.onRemoved.addListener(function (tabId) {
+  dropPendingSaves(tabId)
+})
 
 const DEFAULT_AUTOLOCK_SEC = 60
 const AUTOLOCK_ALARM = 'autoLock'
@@ -394,6 +439,11 @@ chrome.alarms.create(INACTIVITY_ALARM, { periodInMinutes: 0.5 })
 chrome.alarms.onAlarm.addListener(function (alarm) {
   if (alarm.name === INACTIVITY_ALARM || alarm.name === AUTOLOCK_ALARM) checkInactivity()
   if (alarm.name === INACTIVITY_ALARM) backgroundUniVaultSync()
+  if (alarm.name === INACTIVITY_ALARM) sweepPendingSaves()
+})
+
+chrome.storage.onChanged.addListener(function (changes, area) {
+  if (area === 'session' && changes.masterKeyBytes && changes.masterKeyBytes.oldValue && !changes.masterKeyBytes.newValue) clearAllPendingSaves()
 })
 
 chrome.storage.onChanged.addListener(function (changes, area) {
