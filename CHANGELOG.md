@@ -31,6 +31,7 @@ A new look across the phone app, the private browser, and the home screen, with 
 * **Uni-Vault saves merged changes back.** When a linked file brings in changes from another browser, the merged vault is written back to the file right away, so every linked browser ends up with the same vault.
 * **Saves confirmed when written.** A change is only reported as saved once it is fully written to storage.
 * **Older code removed.** More code left over from retired features is cleaned out.
+* **Unique background names.** The night versions of the logo, fractal, and bokeh backgrounds are named nightmetal, nightfractal, and nightbulbs, so a saved background's file name points to exactly one style. Every background draws exactly as before.
 
 ### Notes
 

@@ -4,9 +4,9 @@
 
 # Valid Vault Password Manager
 
-A local, encrypted, QR code portable password manager. No cloud, accounts, or sync servers used. Your credentials live on your device, encrypted under keys only you can produce, and move between devices over a fully local QR stream or an encrypted backup file.
+A local, encrypted, QR code portable password manager that works without a cloud service, an account, or a sync server. Your credentials live on your device, encrypted under keys only you can produce, and move between devices over a fully local QR stream or an encrypted backup file.
 
-**Status: Active testing.** Core functionality works end to end, and the project is being hardened through physical device testing use before a wider release. See [ROADMAP.md](ROADMAP.md) for what's tested and what's still in progress.
+**Status: Late beta.** Every feature works end to end, and the remaining work is final bug fixes and polish before 1.0. See [ROADMAP.md](ROADMAP.md) for what's left.
 
 **Chrome Web Store:** install the extension from [Valid Vault on the Chrome Web Store](https://chromewebstore.google.com/detail/valid-vault-password-mana/fkpfaemmphmakebhejhaegjgcnieeoab).
 
@@ -43,11 +43,11 @@ Valid Vault is a self-hosted password manager built on a master key wrap archite
 * Password - wrapping key derived via PBKDF2-SHA256 at 600,000 iterations with a per-wrap salt, minimum 12 characters with a letter, a number, and a symbol
 * Device unlock (Android) - the master key is wrapped by a hardware-backed Android Keystore key that requires device authentication (fingerprint or system PIN) to use
 * Device unlock (extension) - the platform authenticator via WebAuthn, covering fingerprint and the device's own PIN
-* Wrong credential means the unwrap fails. There is no stored hash to attack, no shortcut, no oracle.
+* A wrong credential makes the unwrap fail, and nothing is stored that a guess could be checked against
 
-No cloud service holds your data. No company can be subpoenaed for it or breached for it, and there is never any data for anyone to sell. You cannot leak what you never sent anywhere.
+Your data stays on your own devices, so there is nothing on a company's server to be subpoenaed, breached, or sold.
 
-**One vault, many surfaces.** The same master key that unlocks your vault on one browser unlocks the same vault file on another browser, or on the phone. Import a key once and it becomes that browser's key going forward. On one computer, Uni-Vault links every browser to a single encrypted vault file and keeps them in sync automatically. Between devices, moving the vault is a manual Export and Import or QR share, merged by the same timestamp-based logic, no server involved.
+**One vault, many surfaces.** The same master key that unlocks your vault on one browser unlocks the same vault file on another browser, or on the phone. Import a key once and it becomes that browser's key going forward. On one computer, Uni-Vault links every browser to a single encrypted vault file and keeps them in sync automatically. Between devices, moving the vault is a manual Export and Import or QR share, merged by the same timestamp-based logic without any server.
 
 ---
 
@@ -59,13 +59,13 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 * Verify-by-unwrap - the GCM auth tag is the verifier, nothing cheaper exists in storage
 * Android: hardware-backed Keystore key gated by device authentication
 * Extension: platform authenticator (fingerprint / device PIN) via WebAuthn
-* Importing a key re-wraps it under the browser's own unlock methods, so it persists across lock and unlock rather than silently reverting
+* Importing a key re-wraps it under the browser's own unlock methods, so it keeps working through every lock and unlock
 
 **Unlock and Locking:**
 
 * Fingerprint, device PIN, and password all fully unlock the vault
 * Auto-lock inactivity timer in seconds, up to 2 hours, shown next to the setting as hours, minutes, and seconds; locks the vault and returns to the lock screen
-* Both surfaces show an inline unlock overlay on session timeout instead of a dead end
+* Both surfaces show an inline unlock overlay when the session times out, so you can pick up where you left off
 * Website Credentials, Web Credentials, and Personal Info each require their own explicit re-unlock inside Manage; every unlock and Personal Info edit tries fingerprint or device PIN first, with the master password as the fallback in a masked dialog
 * Clicking a tagged field or a save prompt while locked opens a small Valid Vault unlock window with Windows Hello (fingerprint or device PIN) or password; the unlock runs in the extension's own origin, never in the visited page
 * Crypto Wallets requires its own explicit unlock inside Manage, and locks itself again when you switch Manage tabs or browser tabs, or after the auto-lock time
@@ -74,9 +74,9 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 
 **Autofill (Extension):**
 
-* Personal Info fields (name, phone, address) get a V tag; clicking it opens a picker with the saved value and fills only on click, including `<select>` and `<textarea>` fields (a state/country dropdown is matched by its actual option, never a blind value assignment)
+* Personal Info fields (name, phone, address) get a V tag; clicking it opens a picker with the saved value and fills only on click, including `<select>` and `<textarea>` fields (a state or country dropdown is matched to its actual option)
 * Email fields are click-to-pick from a small on-field picker listing every saved, ranked email, never auto-filled silently
-* Login email/username and password fields get a V tag listing saved logins for the current site (and saved emails on email fields); injection only, no password reveal - that's the site's own UI if it has one
+* Login email/username and password fields get a V tag listing saved logins for the current site (and saved emails on email fields); the password is filled and never shown, and showing it is left to the site's own show button if it has one
 * New password and change password fields get an inverted V that generates a random password and fills both the new and confirm boxes; the current password field on a change form keeps the normal V and fills the saved login
 * Generated passwords always include upper, lower, digit, and symbol, follow any `maxlength`, `minlength`, `pattern`, or `passwordrules` the site declares, and land in the length range chosen in Settings (minimum to 24, 25 to 32, 33 to 48, or 49 to 64)
 * Changing a password keeps the old one as a previous password, shown as a labeled second choice in the login picker with one-click restore; it is kept for 30 days from the day it was replaced, and the picker shows until when
@@ -142,7 +142,7 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 * The extension keeps an encrypted backup copy of the vault in its own storage; if the browser clears site data, the vault is restored at the next start and a linked Uni-Vault file is reconnected after you unlock
 * Renaming the key and vault offers a key file and a vault file under the new name right away, on the extension and the phone
 * Live QR sync - stream your vault or your protected key as a one-way fountain QR, scan it on the other device; frames carry raw bytes, change every 0.2 seconds, and any frame the camera catches helps, in any order
-* Sovereign scanner - the standard web camera plus a vendored jsQR decoder, no Google dependency; it reads on several processor cores at once, checks the whole camera image as well as the scan box, and shows pieces received, frames caught, and reads per second while it works
+* Sovereign scanner - the standard web camera plus a vendored jsQR decoder, without Google libraries; it reads on several processor cores at once, checks the whole camera image as well as the scan box, and shows pieces received, frames caught, and reads per second while it works
 * Encrypted vault backup - save directly to Downloads or share the file, inert without the matching master key
 * USB cold storage - Export Vault and Export Key to a USB drive for an offline backup you hold yourself; both files are encrypted, Valid Vault has no plaintext export, and the drive restores through the same import path as a QR share
 * Protected key transfer - the master key only leaves a device wrapped under a passphrase and three security questions you pick, stretched with 1,000,000 PBKDF2 rounds; the same package goes into the key QR and the key file, and the receiving device must enter all of them to accept it
@@ -167,15 +167,15 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 * Personal Info - one profile per vault: name, phone, address, and ranked emails, used as an autofill source only, never stored per-site
 * Crypto Wallets - seed phrases organized by wallet and account, 1 to 24 numbered words per account plus one optional note (for example a wallet password), stored as one sealed AES-GCM blob
 * Bookmarks - saved from the popup's bookmark icon or shared from any app on the phone, listed in a side panel with search, rename, remove, and drag reorder, stored as one sealed AES-GCM blob
-* IndexedDB persistence - no external database or server
+* IndexedDB persistence - stored on the device itself, without an outside database or server
 
 **Platform:**
 
 * Single-file web bundle - build.js bundles the phone app from the extension's own modules into one self-contained HTML file, so both clients share one copy of the core code
 * Android via Capacitor, with native plugins for biometric auth, file saving, autofill, sharing, and the private browser
-* Vendored, self-contained code only, no Google SDKs in the scan path
+* Every library is vendored into the bundle, and the scan path runs without Google SDKs
 
-## Current Status: v0.9.2 - Active Testing
+## Current Status: v0.9.2 - Final Bug Fixes and Polish
 
 **Completed:**
 
@@ -184,7 +184,7 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 * ✅ 12+ character password rule with letter, number, and symbol enforced everywhere
 * ✅ Persistent key import - the real fix behind using one vault across multiple browsers
 * ✅ Phone and extension QR sync, encrypted vault/key backup and restore, native file saving
-* ✅ Website Credentials, Web Credentials, and Personal Info, all encrypted, all synced together
+* ✅ Website Credentials, Web Credentials, and Personal Info, encrypted and synced together
 * ✅ Sovereign QR scanner, inline unlock overlays, seconds-based auto-lock
 * ✅ Autofill injection foundation - Personal Info and Website Credentials autofill working end to end
 * ✅ Website Credentials reliably saves new logins from real signup flows, including cross-domain and multi-step ones
@@ -208,7 +208,7 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 * ✅ Published on the Chrome Web Store
 * ✅ Clear password-only setup path on computers without Windows Hello
 * ✅ Fingerprint in every browser on one computer, each with its own passkey (Chrome, Brave, and Edge)
-* ✅ Encrypted vault and key carried device to device on a USB drive, no network involved
+* ✅ Encrypted vault and key carried device to device on a USB drive, without touching a network
 * ✅ Setup and unlock show only the unlock methods a browser can use, so computers without a fingerprint reader get a clean password setup
 * ✅ Three-try unlock limit shared across every Valid Vault window, and the Manage page closed to websites
 * ✅ Phone app rebuilt on the extension's own modules, with every extension tab, the protected key transfer, and re-authentication before transfers
@@ -231,16 +231,17 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 * ✅ New look on the phone: day and night modes, the striped V, raised and recessed design, redrawn start page backgrounds, and day and night widgets
 * ✅ Encrypted backup copy in the extension that restores the vault after the browser clears site data
 
-**In Development:**
+**Before 1.0:**
 
-* 📋 QR transport (v0.8.x): scanner reliability across more phones and cameras
-* 📋 Continued field testing of sync, backup, and native file saving across Android versions
+* 📋 The new look brought to the extension, the User Guide, and the website
+* 📋 Filling apps that Android Autofill can't reach
+* 📋 Final bug fixes and polish
 
 ## Sync and Backup Model
 
 Master key transport is deliberate. The primary path is a live QR stream: one device shows its vault or its protected key as a fountain QR, the other scans it. The key is always wrapped under a passphrase plus three security questions the owner picks, stretched with 1,000,000 PBKDF2 rounds, and the receiving device has to enter all of them before the key can be used, so a captured QR is as useless as a stolen file. For disaster recovery there is an offline path: Export Vault saves the encrypted vault directly to Downloads or through the native share sheet, and Export Key saves the same protected key package as a file. Both files can live on a USB drive as encrypted cold storage, and carrying that drive to another device is a complete transfer that never touches a network. Keeping the key file on a different drive from the vault file adds one more layer.
 
-Because importing a key persists, the same vault file works the same way everywhere. On one computer, Uni-Vault does the rest: link Chrome and Edge to the same vault file, add a credential in either, and the other picks it up on its own. Between devices, export the vault and import it on the other side, or share it over QR. No server, no account, just timestamp-based merge.
+Because importing a key persists, the same vault file works the same way everywhere. On one computer, Uni-Vault does the rest: link Chrome and Edge to the same vault file, add a credential in either, and the other picks it up on its own. Between devices, export the vault and import it on the other side, or share it over QR, and the timestamp-based merge does the rest without a server or an account.
 
 Merging requires both devices to hold the same master key. If the keys don't match, sync stops with a clear error and nothing is merged.
 
@@ -257,7 +258,7 @@ Recovery follows from the same model. As long as any device still unlocks the va
 * Exporting, importing, or sharing a key or vault requires fingerprint, device PIN, or password first, even while the vault is unlocked
 * Website Credentials, Crypto Wallets, and Bookmarks are each sealed as a single encrypted blob, so no domain name, username, password, seed word, saved address, or metadata is readable from storage
 
-**No Google in the scan path.** The scanner uses the web camera and a vendored jsQR decoder, which runs entirely on device.
+**The scanner is self-contained.** It uses the web camera and a vendored jsQR decoder that runs entirely on the device, without Google's scanning libraries.
 
 **Locking is enforced end to end.** A manual or timeout lock clears the shared session key everywhere it was stored, so a locked session cannot silently resume.
 
@@ -267,7 +268,7 @@ Recovery follows from the same model. As long as any device still unlocks the va
 
 **Seed phrases and bookmarks never reach web pages.** No background message handler serves wallet or bookmark data to a content script. They are decrypted only inside extension pages (Manage, the popup, and the bookmarks side panel).
 
-**No competitor-targeting logic exists or is planned.** Autofill competes on being fully local and already-unlocked in memory, not on hiding another password manager's UI.
+**Valid Vault never targets other password managers.** Autofill competes by being fully local and already unlocked in memory, and it never hides another password manager's UI.
 
 **Design choices:**
 
@@ -284,17 +285,17 @@ Seed phrases are the highest-value secret most people own, and the common places
 **What is stored, and how:**
 
 * The entire Crypto Wallets section (wallet names, account names, seed words, notes, timestamps, and ordering) is serialized once, deflate-compressed, and encrypted as a single AES-256-GCM blob under the vault master key, with a fresh random 96-bit IV on every write. The IndexedDB row holds only `{schemaVersion, blob: {iv, data}}`.
-* Nothing about the contents is readable at rest: no wallet names, no account names, no count of wallets or accounts, no word counts. The ciphertext length does reveal the approximate total size of the section, as with any encryption.
+* Nothing about the contents is readable at rest, including wallet and account names, how many wallets or accounts there are, and word counts. The ciphertext length does reveal the approximate total size of the section, as with any encryption.
 * Bookmarks use the identical construction in their own row, so saved addresses and titles are not readable at rest either, unlike browser bookmarks, which sit in plain text in the browser profile.
 * AES-GCM authenticates every blob. Any modification fails decryption. A row with an unrecognized `schemaVersion` or an unexpected shape throws instead of being treated as empty, so bad data can never be silently written over real data.
-* Compression happens before encryption, entirely on the user's own data. Compression side channels (CRIME/BREACH) need an attacker to inject chosen content alongside the secret and watch ciphertext sizes across many requests; here there is no attacker-controlled input and no network channel, so that class of attack does not apply.
+* Compression happens before encryption, entirely on the user's own data. Compression side channels (CRIME/BREACH) need an attacker to inject chosen content alongside the secret and watch ciphertext sizes across many requests; here nothing an attacker controls goes into the data and nothing travels over a network, so that class of attack does not apply.
 
 **Who can decrypt it:**
 
 * The same master key wrap architecture as the rest of the vault: one random 256-bit master key, wrapped separately under the password (PBKDF2-SHA256, 600,000 iterations) and Windows Hello (WebAuthn PRF), with verify-by-unwrap and no stored hashes.
 * While unlocked, the session key lives only in `chrome.storage.session`, which is memory-only and cleared when the browser closes. Locking, manually or by the inactivity timer, clears it everywhere.
 * Crypto Wallets asks for its own unlock inside Manage even when the vault is already open.
-* Seed words are never autofilled, never injected into a page, and never passed to a content script. No background message handler returns wallet data at all.
+* Seed words stay out of autofill, page injection, and content scripts entirely, and no background message handler returns wallet data.
 
 **On screen:**
 
@@ -347,7 +348,7 @@ npx cap open android
 There are no stored password hashes. Authentication is the act of deriving a wrapping key and attempting the AES-GCM unwrap. The auth tag rejects wrong keys, so the cheapest offline attack is the full KDF.
 
 **Persistent Key Import:**
-Importing a master key re-wraps it under the browser's existing password (and fingerprint, if enrolled), so it becomes that browser's key going forward instead of reverting on the next unlock. This is the piece that makes the same vault file usable across Chrome, Firefox, and other browsers with one shared master key.
+Importing a master key re-wraps it under the browser's existing password (and fingerprint, if enrolled), so it stays that browser's key from then on. This is the piece that makes the same vault file usable across Chrome, Firefox, and other browsers with one shared master key.
 
 **Single-Blob Vault Encryption:**
 The Website Credentials tree (meta plus every domain's credentials) is serialized and encrypted as one AES-GCM blob. Any change to the storage format runs as a verified migration: the data is first backed up encrypted in a short-lived journal, then converted, then checked with a full-tree fingerprint against what was written back, with automatic rollback from the encrypted backup on any mismatch.
@@ -359,7 +360,7 @@ background.js holds the session key and does all decryption; content.js, running
 Passwords are drawn from `crypto.getRandomValues` with rejection sampling, so every character is equally likely, and shuffled with a Fisher-Yates pass after the required character classes are placed. Generation runs in the content script and needs no vault access; only saving the new login goes through background.js.
 
 **Uni-Vault:**
-linkedvault.js links a browser to one vault file the user picks, through the browser's File System Access API. Each sync reads the file, refuses anything that is not a readable vault under the current master key, merges it into the local copy with the existing merge logic, and writes back only when this browser has changes of its own, so linked browsers never ping-pong writes. The browser saves through a temporary copy and swaps it in only when complete, and the local copy always stays intact, so an unreachable or bad file never costs data.
+linkedvault.js links a browser to one vault file the user picks, through the browser's File System Access API. Each sync reads the file, refuses anything that is not a readable vault under the current master key, merges it into the local copy with the existing merge logic, and writes back when this browser has changes of its own or the merge brought something in, so every linked browser settles on the same vault. The browser saves through a temporary copy and swaps it in only when complete, and the local copy always stays intact, so an unreachable or bad file never costs data.
 
 **Protected Key Transport:**
 The master key is wrapped once under a passphrase and three chosen security answers (PBKDF2-SHA256, 1,000,000 iterations, AES-GCM), and that package is what the key QR and the key file carry. The package is saved on the device alongside a SHA-256 key identifier so it is reused only while it matches the current key. A receiving device verifies the answers by unwrapping, the same verify-by-unwrap rule as every other unlock, and keeps the package so it can share onward.
@@ -386,10 +387,28 @@ Autofill in the browser goes through the same Valid Vault screen as Android Auto
 Tor mode uses the WebView proxy override to send every request, including hostname lookups, to Orbot's SOCKS port with no direct rule, so a stopped Orbot means failed requests. Turning it on first checks that Orbot answers as a SOCKS proxy. Every tab's page view is destroyed before the proxy changes and a new one is created after the wipe, so nothing from one mode carries into the other. A script at the start of every frame removes WebRTC, downloads are refused, and the proxy only applies to the browser's own process, never the vault's.
 
 **Sovereign QR Scanner:**
-Scanning uses the web camera through getUserMedia. Each new camera frame is handed to a vendored jsQR decoder running in background workers, up to three at a time, alternating between the square shown in the scan box and the whole camera image, so a code off center still reads. No native scanning plugin, no Google SDK. The stream itself is a fountain code: the payload is compressed, split into small pieces shown once in order, then followed by mixes of pieces, and the receiver solves for any pieces it missed. Each frame is a short text header followed by raw bytes in the QR's byte mode, at medium error correction, which holds up to blur from a camera filming a screen.
+Scanning uses the web camera through getUserMedia. Each new camera frame is handed to a vendored jsQR decoder running in background workers, up to three at a time, alternating between the square shown in the scan box and the whole camera image, so a code off center still reads, all without a native scanning plugin or a Google SDK. The stream itself is a fountain code: the payload is compressed, split into small pieces shown once in order, then followed by mixes of pieces, and the receiver solves for any pieces it missed. Each frame is a short text header followed by raw bytes in the QR's byte mode, at medium error correction, which holds up to blur from a camera filming a screen.
 
 **Single-File Bundle:**
-build.js bundles the phone app from the extension's own modules and the phone screens in phone/ into one self-contained HTML file. No module loader, no CDN, no external requests at runtime. The extension and the phone run the same vault, crypto, unlock, key, and merge code.
+build.js bundles the phone app from the extension's own modules and the phone screens in phone/ into one self-contained HTML file, which runs without a module loader or CDN and makes no outside requests. The extension and the phone run the same vault, crypto, unlock, key, and merge code.
+
+## Valid Backgrounds
+
+Every new tab in the phone's private browser opens on a background drawn right on your phone, the moment the tab opens. Nothing is downloaded, and the page that draws it has no network access at all. Each tab starts from its own random seed, so no two tabs get the same picture.
+
+Day mode draws from 11 styles, including ink on paper bamboo, mountains, and cherry blossoms, a pastel meadow, a beach, open water, dandelions, a winter sky, champagne bokeh, Valid Vault black metal logo(day version), and fractals. Night mode draws from 12, including a galaxy, a storm, moonlit waves, a coral seafloor, glowing mushrooms, bokeh lights, a circuit board, a Christmas tree farm, ferns, the city, the Valid black metal logo(night version), and fractals.
+
+Some are rare:
+
+* Cherry blossoms come up less often than the other styles, and about 1 in 8 of those is the full cherry tree
+* About 1 in 8 Christmas farms has one tree lit, about 1 in 33 has every tree lit, and Santa flies over about 1 in 7, on top of either
+* About 1 in 12 moonlit seas has a UFO over the water, and about 1 in 40 has glowing ones beneath it
+* Open water can bring jellyfish, dolphins, a manta ray, a shark, or, about 1 in 33, a whale
+* About 1 in 8 dandelion skies has a sun, and the city sometimes has hover cars or a pixel moon
+
+Like one? Tap Save it to Downloads under the start page tiles. The file is named with its style and seed, like valid-vault-underwater-1a2b3c4d.png. Styles that come in both modes have a night version named with night in front, like nightfractal, so every name points to exactly one style. Share and import by seed, using the 8 or so digits at the end of th filename. Collecting them is encouraged, so share your collections and your rarest finds on the [Valid Vault Discord](https://discord.gg/2SP383cJs9). They also make great, unique backgrounds for your phone.
+
+**What a saved background carries:** only the picture. The file holds the image size and the pixels, without EXIF data, a date, device or app details, a location, or text fields. To keep a design private, remove the seed from the file name before you share it. The image is drawn at your screen's size, which is the one hint about what kind of phone made it. Android notes the save in your phone's own Downloads list, and that record stays on the phone.
 
 ## Using Valid Vault on Microsoft Edge
 
@@ -408,7 +427,7 @@ Edge keeps Chrome Web Store extensions updated automatically, the same as Chrome
 
 Publishing on Edge Add-ons requires registering through Microsoft Partner Center, and its registration form demands a street address, phone number, and contact details, presenting the address as one "customers view in your developer profile." It asks this of a single person publishing a free extension, using a form written for companies, and offers no address-free path for individuals.
 
-Valid Vault exists to keep personal data off other people's servers. Requiring a developer to file a home address in a corporate database, tied to a public publisher name, as the price of listing a free privacy tool runs directly against that. So the answer is no. Edge users lose nothing: the Chrome Web Store version is the same extension, reviewed and updated through Google's store, and it installs in Edge via Chrome Store rather than the Edge add-ons extension storefront.
+Valid Vault exists to keep personal data off other people's servers. Requiring a developer to file a home address in a corporate database, tied to a public publisher name, as the price of listing a free privacy tool runs directly against that. So the answer is **no**. Edge users lose nothing: the Chrome Web Store version is the same extension, reviewed and updated through Google's store, and it installs in Edge via Chrome Store rather than the Edge add-ons extension storefront.
 
 ## Community
 
@@ -443,7 +462,7 @@ https://discord.gg/2SP383cJs9
 Report security issues via GitHub Security Advisories.
 
 **Audit Status:**
-Pre-1.0, under active testing. Community review welcome. auth.js, crypto.js, session.js, keypackage.js, sealed.js, vaultfile.js, wallets.js, linkedvault.js, and the native plugins are the surfaces that matter.
+Pre-1.0, in final bug fixes and polish. Community review welcome. auth.js, crypto.js, session.js, keypackage.js, sealed.js, vaultfile.js, wallets.js, linkedvault.js, and the native plugins are the surfaces that matter.
 
 ## License
 
