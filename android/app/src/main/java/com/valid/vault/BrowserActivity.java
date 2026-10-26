@@ -17,6 +17,8 @@ import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.LayerDrawable;
+import android.graphics.drawable.RippleDrawable;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -92,17 +94,51 @@ public class BrowserActivity extends Activity {
 
     private static final String DATA_SUFFIX = "browser";
     private static final String TASK_LABEL = "Search";
-    private static final int COLOR_BG = Color.parseColor("#0A0E0A");
-    private static final int COLOR_BAR = Color.parseColor("#0D130D");
-    private static final int COLOR_GREEN = Color.parseColor("#33FF66");
-    private static final int COLOR_DIM = Color.parseColor("#6FAE7F");
-    private static final int COLOR_BORDER = Color.parseColor("#1F9E40");
-    private static final int COLOR_TEXT = Color.parseColor("#B8F0C4");
-    private static final int COLOR_GLASS = Color.argb(205, 10, 14, 10);
-    private static final int COLOR_SHADOW = Color.argb(230, 0, 0, 0);
-    private static final int COLOR_TOR_BAR = Color.parseColor("#1C1030");
-    private static final int COLOR_TOR_ACCENT = Color.parseColor("#C29BFF");
-    private static final int COLOR_TOR_BORDER = Color.parseColor("#7A4FD0");
+    private static final int NIGHT_BG = Color.parseColor("#16181B");
+    private static final int NIGHT_BAR = Color.parseColor("#1E2125");
+    private static final int NIGHT_TEXT = Color.parseColor("#E9EBEE");
+    private static final int NIGHT_DIM = Color.parseColor("#9AA0A6");
+    private static final int NIGHT_INK = Color.parseColor("#E6E9ED");
+    private static final int NIGHT_FAINT = Color.parseColor("#33383E");
+    private static final int NIGHT_RIM_START = Color.parseColor("#F4F6F8");
+    private static final int NIGHT_RIM_END = Color.parseColor("#8A9098");
+    private static final int NIGHT_BODY_TOP = Color.parseColor("#16181B");
+    private static final int NIGHT_BODY_BOTTOM = Color.parseColor("#22262B");
+    private static final int NIGHT_INNER = Color.parseColor("#59000000");
+    private static final int NIGHT_DROP = Color.parseColor("#59000000");
+    private static final int NIGHT_ICON = Color.parseColor("#DFE2E6");
+    private static final int NIGHT_ICON_HIGH = Color.parseColor("#4DFFFFFF");
+    private static final int NIGHT_ICON_LOW = Color.parseColor("#B3000000");
+    private static final int NIGHT_HALO = Color.argb(230, 0, 0, 0);
+    private static final int DAY_BG = Color.parseColor("#F4F1EA");
+    private static final int DAY_BAR = Color.parseColor("#FBFAF7");
+    private static final int DAY_TEXT = Color.parseColor("#1D1E21");
+    private static final int DAY_DIM = Color.parseColor("#66645F");
+    private static final int DAY_INK = Color.parseColor("#1D1E21");
+    private static final int DAY_FAINT = Color.parseColor("#DDD7CC");
+    private static final int DAY_RIM_START = Color.parseColor("#4A4C52");
+    private static final int DAY_RIM_END = Color.parseColor("#0E0F11");
+    private static final int DAY_BODY_TOP = Color.parseColor("#E9E5DC");
+    private static final int DAY_BODY_BOTTOM = Color.parseColor("#FBFAF7");
+    private static final int DAY_INNER = Color.parseColor("#40000000");
+    private static final int DAY_DROP = Color.parseColor("#4D000000");
+    private static final int DAY_ICON = Color.parseColor("#2A2C30");
+    private static final int DAY_ICON_HIGH = Color.parseColor("#40000000");
+    private static final int DAY_ICON_LOW = Color.parseColor("#CCFFFFFF");
+    private static final int DAY_HALO = Color.argb(235, 251, 250, 247);
+    private static final int TOR_NIGHT_BAR = Color.parseColor("#1C1030");
+    private static final int TOR_NIGHT_ACCENT = Color.parseColor("#C29BFF");
+    private static final int TOR_NIGHT_RIM_START = Color.parseColor("#E2D2FF");
+    private static final int TOR_NIGHT_RIM_END = Color.parseColor("#6A44B8");
+    private static final int TOR_DAY_BAR = Color.parseColor("#EFE9F8");
+    private static final int TOR_DAY_ACCENT = Color.parseColor("#5B3A9E");
+    private static final int TOR_DAY_RIM_START = Color.parseColor("#7A55C8");
+    private static final int TOR_DAY_RIM_END = Color.parseColor("#2E1A5C");
+    private static final float ICON_HIGH_SHIFT_DP = 0.6f;
+    private static final float ICON_LOW_SHIFT_DP = 0.7f;
+    private static final int RIM_DP = 2;
+    private static final int TILE_RADIUS_DP = 14;
+    private static final int THEME_BUTTON_DP = 40;
     private static final int TOP_ROW_DP = 60;
     private static final int PROGRESS_DP = 3;
     private static final int BOTTOM_BAR_DP = 56;
@@ -140,6 +176,8 @@ public class BrowserActivity extends Activity {
     private static final int MENU_FILL = 12;
     private static final int MENU_ABOUT = 13;
     private static final int FRAME_STROKE_DP = 2;
+    private static final String FONT_UI = "sans-serif";
+    private static final String FONT_MEDIUM = "sans-serif-medium";
     private static final int TAB_EAR_DP = 9;
     private static final int TAB_RADIUS_DP = 7;
     private static final int REQUEST_STORAGE = 41;
@@ -187,9 +225,15 @@ public class BrowserActivity extends Activity {
     private FrameLayout switcher;
     private LinearLayout switcherList;
     private TextView switcherTitle;
+    private TextView switcherCloseAll;
+    private TextView switcherAdd;
     private EditText address;
     private ProgressBar progress;
     private TextView tabButton;
+    private ImageButton themeButton;
+    private TextView saveLink;
+    private final Map<ImageButton, Integer> chromeIcons = new HashMap<>();
+    private boolean dayMode = true;
     private ImageButton backButton;
     private ImageButton forwardButton;
     private ValueAnimator barAnimator;
@@ -244,32 +288,135 @@ public class BrowserActivity extends Activity {
         return (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, value, getResources().getDisplayMetrics());
     }
 
+    private float dpf(float value) {
+        return TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, value, getResources().getDisplayMetrics());
+    }
+
+    private int bgColor() {
+        return dayMode ? DAY_BG : NIGHT_BG;
+    }
+
     private int barColor() {
-        return torMode ? COLOR_TOR_BAR : COLOR_BAR;
+        if (torMode) return dayMode ? TOR_DAY_BAR : TOR_NIGHT_BAR;
+        return dayMode ? DAY_BAR : NIGHT_BAR;
+    }
+
+    private int textColor() {
+        return dayMode ? DAY_TEXT : NIGHT_TEXT;
+    }
+
+    private int dimColor() {
+        return dayMode ? DAY_DIM : NIGHT_DIM;
+    }
+
+    private int faintColor() {
+        return dayMode ? DAY_FAINT : NIGHT_FAINT;
+    }
+
+    private int haloColor() {
+        return dayMode ? DAY_HALO : NIGHT_HALO;
     }
 
     private int accentColor() {
-        return torMode ? COLOR_TOR_ACCENT : COLOR_GREEN;
+        if (torMode) return dayMode ? TOR_DAY_ACCENT : TOR_NIGHT_ACCENT;
+        return dayMode ? DAY_INK : NIGHT_INK;
     }
 
     private int borderColor() {
-        return torMode ? COLOR_TOR_BORDER : COLOR_BORDER;
+        return accentColor();
+    }
+
+    private int rimStart() {
+        if (torMode) return dayMode ? TOR_DAY_RIM_START : TOR_NIGHT_RIM_START;
+        return dayMode ? DAY_RIM_START : NIGHT_RIM_START;
+    }
+
+    private int rimEnd() {
+        if (torMode) return dayMode ? TOR_DAY_RIM_END : TOR_NIGHT_RIM_END;
+        return dayMode ? DAY_RIM_END : NIGHT_RIM_END;
+    }
+
+    private int bodyTop() {
+        return dayMode ? DAY_BODY_TOP : NIGHT_BODY_TOP;
+    }
+
+    private int bodyBottom() {
+        return dayMode ? DAY_BODY_BOTTOM : NIGHT_BODY_BOTTOM;
+    }
+
+    private int iconColor() {
+        return dayMode ? DAY_ICON : NIGHT_ICON;
+    }
+
+    private int iconHigh() {
+        return dayMode ? DAY_ICON_HIGH : NIGHT_ICON_HIGH;
+    }
+
+    private int iconLow() {
+        return dayMode ? DAY_ICON_LOW : NIGHT_ICON_LOW;
     }
 
     private GradientDrawable box(int fill, int radiusDp) {
         return box(fill, radiusDp, borderColor());
     }
 
-    private GradientDrawable frame() {
-        GradientDrawable shape = new GradientDrawable();
-        shape.setColor(COLOR_BG);
-        shape.setStroke(dp(FRAME_STROKE_DP), accentColor());
-        shape.setCornerRadius(dp(BOX_RADIUS_DP));
+    private GradientDrawable rounded(int radiusPx, GradientDrawable.Orientation orientation, int... colors) {
+        GradientDrawable shape = colors.length == 1 ? new GradientDrawable() : new GradientDrawable(orientation, colors);
+        if (colors.length == 1) shape.setColor(colors[0]);
+        shape.setCornerRadius(radiusPx);
         return shape;
     }
 
+    private LayerDrawable bevel(int radiusDp, boolean pressed) {
+        int rim = dp(RIM_DP);
+        int radius = dp(radiusDp);
+        int inner = Math.max(0, radius - rim);
+        int shade = dayMode ? DAY_INNER : NIGHT_INNER;
+        int clear = Color.TRANSPARENT;
+        GradientDrawable drop = rounded(radius + dp(1), null, dayMode ? DAY_DROP : NIGHT_DROP);
+        GradientDrawable edge = rounded(radius, GradientDrawable.Orientation.TL_BR, rimStart(), rimEnd());
+        GradientDrawable body = pressed
+            ? rounded(inner, GradientDrawable.Orientation.TOP_BOTTOM, bodyBottom(), bodyTop())
+            : rounded(inner, GradientDrawable.Orientation.TOP_BOTTOM, bodyTop(), bodyBottom());
+        GradientDrawable sunk = pressed
+            ? rounded(inner, GradientDrawable.Orientation.TOP_BOTTOM, shade, shade, clear, clear)
+            : rounded(inner, GradientDrawable.Orientation.TOP_BOTTOM, shade, clear, clear, clear, clear);
+        LayerDrawable layers = new LayerDrawable(new android.graphics.drawable.Drawable[] { drop, edge, body, sunk });
+        layers.setLayerInset(0, dp(1), rim, dp(1), 0);
+        layers.setLayerInset(1, 0, 0, 0, rim);
+        layers.setLayerInset(2, rim, rim, rim, rim * 2);
+        layers.setLayerInset(3, rim, rim, rim, rim * 2);
+        return layers;
+    }
+
+    private LayerDrawable frame() {
+        return bevel(BOX_RADIUS_DP, false);
+    }
+
     private BrowserTabIcon tabFrame() {
-        return new BrowserTabIcon(COLOR_BG, accentColor(), dp(FRAME_STROKE_DP), dp(TAB_RADIUS_DP), dp(TAB_EAR_DP));
+        return new BrowserTabIcon(bodyTop(), bodyBottom(), rimStart(), rimEnd(), dayMode ? DAY_DROP : NIGHT_DROP, dp(FRAME_STROKE_DP), dp(TAB_RADIUS_DP), dp(TAB_EAR_DP), dpf(1.5f));
+    }
+
+    private BrowserEmboss emboss(int res) {
+        return new BrowserEmboss(this, res, iconColor(), iconHigh(), iconLow(), dpf(ICON_HIGH_SHIFT_DP), dpf(ICON_LOW_SHIFT_DP));
+    }
+
+    private void embossText(TextView view, int color) {
+        view.setTextColor(color);
+        view.setShadowLayer(0.01f, dpf(0.8f), dpf(0.8f), iconLow());
+    }
+
+    private void haloText(TextView view, int color) {
+        view.setTextColor(color);
+        view.setShadowLayer(dp(3), 0, 0, haloColor());
+    }
+
+    private AlertDialog.Builder dialog() {
+        return new AlertDialog.Builder(this, dayMode ? android.R.style.Theme_Material_Light_Dialog_Alert : android.R.style.Theme_Material_Dialog_Alert);
+    }
+
+    private android.content.Context menuContext() {
+        return new android.view.ContextThemeWrapper(this, dayMode ? android.R.style.Theme_Material_Light : android.R.style.Theme_Material);
     }
 
     private GradientDrawable box(int fill, int radiusDp, int stroke) {
@@ -282,21 +429,29 @@ public class BrowserActivity extends Activity {
 
     private ImageButton iconButton(int icon, String label, View.OnClickListener onClick) {
         ImageButton b = new ImageButton(this);
-        b.setImageResource(icon);
+        b.setImageDrawable(emboss(icon));
         b.setContentDescription(label);
         b.setScaleType(ImageView.ScaleType.CENTER);
-        TypedValue ripple = new TypedValue();
-        getTheme().resolveAttribute(android.R.attr.selectableItemBackgroundBorderless, ripple, true);
-        b.setBackgroundResource(ripple.resourceId);
+        b.setBackground(ripple());
         if (onClick != null) b.setOnClickListener(onClick);
         return b;
+    }
+
+    private ImageButton chromeButton(int icon, String label, View.OnClickListener onClick) {
+        ImageButton b = iconButton(icon, label, onClick);
+        chromeIcons.put(b, icon);
+        return b;
+    }
+
+    private RippleDrawable ripple() {
+        return new RippleDrawable(ColorStateList.valueOf(dayMode ? Color.argb(40, 29, 30, 33) : Color.argb(50, 230, 233, 237)), null, null);
     }
 
     private TextView label(String text, int sp, int color, boolean bold) {
         TextView view = new TextView(this);
         view.setText(text);
         view.setTextColor(color);
-        view.setTypeface(Typeface.MONOSPACE, bold ? Typeface.BOLD : Typeface.NORMAL);
+        view.setTypeface(Typeface.create(bold ? FONT_MEDIUM : FONT_UI, Typeface.NORMAL));
         view.setTextSize(TypedValue.COMPLEX_UNIT_SP, sp);
         return view;
     }
@@ -309,11 +464,14 @@ public class BrowserActivity extends Activity {
 
     private void loadSettings() {
         BrowserSettings settings = BrowserSettings.load(this);
+        boolean wasDay = dayMode;
+        dayMode = !BrowserSettings.THEME_NIGHT.equals(settings.theme);
         engine = settings.engine;
         genMin = settings.genMin;
         genMax = settings.genMax;
         allowedSnapshot = Collections.unmodifiableSet(new HashSet<>(settings.allowedSites));
         pinsSnapshot = new ArrayList<>(settings.pins);
+        if (wasDay != dayMode && switcher != null) applyTheme();
     }
 
     @Override
@@ -343,13 +501,13 @@ public class BrowserActivity extends Activity {
             finish();
             return;
         }
-        setTaskDescription(new ActivityManager.TaskDescription(TASK_LABEL, R.drawable.vv_logo, COLOR_BAR));
-        goEdgeToEdge();
         loadSettings();
+        setTaskDescription(new ActivityManager.TaskDescription(TASK_LABEL, R.drawable.vv_logo, barColor()));
+        goEdgeToEdge();
         BrowserPrivacy.loadList(this);
 
         root = new FrameLayout(this);
-        root.setBackgroundColor(COLOR_BG);
+        root.setBackgroundColor(bgColor());
         root.setFocusableInTouchMode(true);
 
         startView = buildStart();
@@ -365,11 +523,11 @@ public class BrowserActivity extends Activity {
         root.addView(bottomBar, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(BOTTOM_BAR_DP), Gravity.BOTTOM));
 
         statusScrim = new View(this);
-        statusScrim.setBackgroundColor(COLOR_BAR);
+        statusScrim.setBackgroundColor(barColor());
         root.addView(statusScrim, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, Gravity.TOP));
 
         navScrim = new View(this);
-        navScrim.setBackgroundColor(COLOR_BAR);
+        navScrim.setBackgroundColor(barColor());
         root.addView(navScrim, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, Gravity.BOTTOM));
 
         switcher = buildSwitcher();
@@ -383,6 +541,7 @@ public class BrowserActivity extends Activity {
         });
 
         setContentView(root);
+        applySystemBars();
         root.requestFocus();
         root.requestApplyInsets();
         updateBar();
@@ -561,7 +720,7 @@ public class BrowserActivity extends Activity {
     private LinearLayout buildTopBar() {
         LinearLayout wrap = new LinearLayout(this);
         wrap.setOrientation(LinearLayout.VERTICAL);
-        wrap.setBackgroundColor(COLOR_BAR);
+        wrap.setBackgroundColor(barColor());
 
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
@@ -571,15 +730,15 @@ public class BrowserActivity extends Activity {
         address = new EditText(this);
         address.setSingleLine(true);
         address.setHint(HINT_NORMAL);
-        address.setHintTextColor(COLOR_DIM);
-        address.setTextColor(COLOR_TEXT);
-        address.setTypeface(Typeface.MONOSPACE);
+        address.setHintTextColor(dimColor());
+        address.setTextColor(textColor());
+        address.setTypeface(Typeface.create(FONT_UI, Typeface.NORMAL));
         address.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
         address.setSelectAllOnFocus(true);
         address.setGravity(Gravity.CENTER_VERTICAL);
         address.setImeOptions(EditorInfo.IME_ACTION_GO);
         address.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
-        address.setPadding(dp(12), 0, dp(12), 0);
+        address.setPadding(dp(14), 0, dp(14), dp(RIM_DP));
         address.setBackground(frame());
         address.setOnEditorActionListener((v, actionId, event) -> {
             boolean enter = event != null && event.getKeyCode() == KeyEvent.KEYCODE_ENTER && event.getAction() == KeyEvent.ACTION_DOWN;
@@ -596,9 +755,18 @@ public class BrowserActivity extends Activity {
         });
         row.addView(address, new LinearLayout.LayoutParams(0, dp(BOX_HEIGHT_DP), 1f));
 
+        themeButton = new ImageButton(this);
+        themeButton.setScaleType(ImageView.ScaleType.CENTER);
+        themeButton.setBackground(ripple());
+        themeButton.setOnClickListener(v -> toggleDayNight());
+        updateThemeButton();
+        LinearLayout.LayoutParams themeParams = new LinearLayout.LayoutParams(dp(THEME_BUTTON_DP), dp(BOX_HEIGHT_DP));
+        themeParams.setMargins(dp(4), 0, 0, 0);
+        row.addView(themeButton, themeParams);
+
         tabButton = new TextView(this);
-        tabButton.setTextColor(accentColor());
-        tabButton.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
+        embossText(tabButton, accentColor());
+        tabButton.setTypeface(Typeface.create(FONT_MEDIUM, Typeface.NORMAL));
         tabButton.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
         tabButton.setGravity(Gravity.CENTER);
         tabButton.setBackground(tabFrame());
@@ -612,10 +780,10 @@ public class BrowserActivity extends Activity {
             return true;
         });
         LinearLayout.LayoutParams tabParams = new LinearLayout.LayoutParams(dp(TAB_BUTTON_DP), dp(TAB_BUTTON_DP));
-        tabParams.setMargins(dp(8), 0, dp(2), 0);
+        tabParams.setMargins(dp(4), 0, dp(2), 0);
         row.addView(tabButton, tabParams);
 
-        ImageButton more = iconButton(R.drawable.vv_ic_more, "Menu", null);
+        ImageButton more = chromeButton(R.drawable.vv_ic_more, "Menu", null);
         more.setOnClickListener(v -> showMenu(more));
         row.addView(more, new LinearLayout.LayoutParams(dp(40), dp(BOX_HEIGHT_DP)));
 
@@ -623,7 +791,7 @@ public class BrowserActivity extends Activity {
 
         progress = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
         progress.setMax(100);
-        progress.setProgressTintList(ColorStateList.valueOf(COLOR_GREEN));
+        progress.setProgressTintList(ColorStateList.valueOf(accentColor()));
         progress.setVisibility(View.INVISIBLE);
         wrap.addView(progress, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(PROGRESS_DP)));
         return wrap;
@@ -633,12 +801,12 @@ public class BrowserActivity extends Activity {
         LinearLayout bar = new LinearLayout(this);
         bar.setOrientation(LinearLayout.HORIZONTAL);
         bar.setGravity(Gravity.CENTER_VERTICAL);
-        bar.setBackgroundColor(COLOR_BAR);
-        backButton = iconButton(R.drawable.vv_ic_back, "Back", v -> backButtonPressed());
-        forwardButton = iconButton(R.drawable.vv_ic_forward, "Forward", v -> goForward());
-        ImageButton newTabButton = iconButton(R.drawable.vv_ic_add, "New tab", v -> newTab(false));
-        ImageButton bookmarks = iconButton(R.drawable.vv_ic_bookmark, "Bookmarks", v -> openVault(LaunchTarget.TAB_BOOKMARKS, "Bookmarks"));
-        ImageButton share = iconButton(R.drawable.vv_ic_share, "Share", v -> sharePage());
+        bar.setBackgroundColor(barColor());
+        backButton = chromeButton(R.drawable.vv_ic_back, "Back", v -> backButtonPressed());
+        forwardButton = chromeButton(R.drawable.vv_ic_forward, "Forward", v -> goForward());
+        ImageButton newTabButton = chromeButton(R.drawable.vv_ic_add, "New tab", v -> newTab(false));
+        ImageButton bookmarks = chromeButton(R.drawable.vv_ic_bookmark, "Bookmarks", v -> openVault(LaunchTarget.TAB_BOOKMARKS, "Bookmarks"));
+        ImageButton share = chromeButton(R.drawable.vv_ic_share, "Share", v -> sharePage());
         for (ImageButton b : new ImageButton[] { backButton, bookmarks, newTabButton, share, forwardButton }) {
             bar.addView(b, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f));
         }
@@ -648,10 +816,10 @@ public class BrowserActivity extends Activity {
     @RequiresApi(api = Build.VERSION_CODES.P)
     private FrameLayout buildStart() {
         FrameLayout frame = new FrameLayout(this);
-        frame.setBackgroundColor(COLOR_BG);
+        frame.setBackgroundColor(bgColor());
 
         art = new WebView(this);
-        art.setBackgroundColor(COLOR_BG);
+        art.setBackgroundColor(bgColor());
         art.setFocusable(false);
         art.setVerticalScrollBarEnabled(false);
         art.setHorizontalScrollBarEnabled(false);
@@ -677,18 +845,19 @@ public class BrowserActivity extends Activity {
         pinsBox.setOrientation(LinearLayout.VERTICAL);
         column.addView(pinsBox, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
-        startInfo = label("", 12, COLOR_DIM, false);
+        startInfo = label("", 12, dimColor(), false);
         startInfo.setGravity(Gravity.CENTER);
-        startInfo.setShadowLayer(dp(3), 0, 0, COLOR_SHADOW);
+        haloText(startInfo, textColor());
         LinearLayout.LayoutParams infoParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         infoParams.gravity = Gravity.CENTER_HORIZONTAL;
         infoParams.setMargins(0, dp(18), 0, 0);
         column.addView(startInfo, infoParams);
 
-        TextView save = label("Like this background? Save it to Downloads", 12, COLOR_GREEN, false);
+        TextView save = label("Like this background? Save it to Downloads", 12, textColor(), false);
+        saveLink = save;
         save.setGravity(Gravity.CENTER);
         save.setPaintFlags(save.getPaintFlags() | Paint.UNDERLINE_TEXT_FLAG);
-        save.setShadowLayer(dp(3), 0, 0, COLOR_SHADOW);
+        haloText(save, textColor());
         save.setPadding(dp(8), dp(8), dp(8), dp(8));
         save.setClickable(true);
         save.setOnClickListener(v -> saveBackground());
@@ -750,13 +919,15 @@ public class BrowserActivity extends Activity {
         tile.setContentDescription(text);
         TextView badge = label(letter, 22, letterColor, true);
         badge.setGravity(Gravity.CENTER);
-        badge.setBackground(box(COLOR_GLASS, 14));
+        badge.setPadding(0, 0, 0, dp(RIM_DP));
+        embossText(badge, letterColor);
+        badge.setBackground(bevel(TILE_RADIUS_DP, false));
         tile.addView(badge, new LinearLayout.LayoutParams(dp(PIN_BADGE_DP), dp(PIN_BADGE_DP)));
-        TextView name = label(text, 11, COLOR_TEXT, false);
+        TextView name = label(text, 11, textColor(), false);
         name.setSingleLine(true);
         name.setEllipsize(TextUtils.TruncateAt.END);
         name.setGravity(Gravity.CENTER);
-        name.setShadowLayer(dp(3), 0, 0, COLOR_SHADOW);
+        haloText(name, textColor());
         LinearLayout.LayoutParams nameParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         nameParams.setMargins(dp(2), dp(5), dp(2), 0);
         tile.addView(name, nameParams);
@@ -764,13 +935,13 @@ public class BrowserActivity extends Activity {
     }
 
     private View addTile() {
-        LinearLayout tile = tileFrame("+", "Add site", COLOR_DIM);
+        LinearLayout tile = tileFrame("+", "Add site", dimColor());
         tile.setOnClickListener(v -> showAddSite());
         return tile;
     }
 
     private View pinTile(BrowserPins.Pin pin, int index) {
-        LinearLayout tile = tileFrame(BrowserPins.letter(pin), BrowserPins.label(pin), accentColor());
+        LinearLayout tile = tileFrame(BrowserPins.letter(pin), BrowserPins.label(pin), iconColor());
         View badge = tile.getChildAt(0);
         tile.setOnClickListener(v -> openPin(pin));
         tile.setOnLongClickListener(v -> {
@@ -792,18 +963,18 @@ public class BrowserActivity extends Activity {
                 case DragEvent.ACTION_DRAG_STARTED:
                     return dragActive;
                 case DragEvent.ACTION_DRAG_ENTERED:
-                    if (!self) badge.setBackground(box(COLOR_GLASS, 14, accentColor()));
+                    if (!self) badge.setBackground(bevel(TILE_RADIUS_DP, true));
                     return true;
                 case DragEvent.ACTION_DRAG_EXITED:
-                    badge.setBackground(box(COLOR_GLASS, 14));
+                    badge.setBackground(bevel(TILE_RADIUS_DP, false));
                     return true;
                 case DragEvent.ACTION_DROP:
-                    badge.setBackground(box(COLOR_GLASS, 14));
+                    badge.setBackground(bevel(TILE_RADIUS_DP, false));
                     if (self) dropSelf = true;
                     else dropIndex = index;
                     return true;
                 case DragEvent.ACTION_DRAG_ENDED:
-                    badge.setBackground(box(COLOR_GLASS, 14));
+                    badge.setBackground(bevel(TILE_RADIUS_DP, false));
                     v.setAlpha(1f);
                     if (self) finishDrag(pin);
                     return true;
@@ -858,12 +1029,13 @@ public class BrowserActivity extends Activity {
 
     private void showEditSite(BrowserPins.Pin pin) {
         if (isFinishing() || torMode) return;
-        EditText name = new EditText(this);
-        EditText site = new EditText(this);
+        android.content.Context themed = menuContext();
+        EditText name = new EditText(themed);
+        EditText site = new EditText(themed);
         LinearLayout form = siteForm(name, site);
         name.setText(pin.title.isEmpty() ? BrowserPins.hostLabel(pin.url) : pin.title);
         site.setText(pin.url);
-        new AlertDialog.Builder(this)
+        dialog()
             .setTitle("Edit site")
             .setView(form)
             .setPositiveButton("Save", (d, w) -> {
@@ -895,10 +1067,11 @@ public class BrowserActivity extends Activity {
 
     private void showAddSite() {
         if (isFinishing() || torMode) return;
-        EditText name = new EditText(this);
-        EditText site = new EditText(this);
+        android.content.Context themed = menuContext();
+        EditText name = new EditText(themed);
+        EditText site = new EditText(themed);
         LinearLayout form = siteForm(name, site);
-        new AlertDialog.Builder(this)
+        dialog()
             .setTitle("Add a site to new tab quick view")
             .setView(form)
             .setPositiveButton("Add", (d, w) -> {
@@ -974,7 +1147,7 @@ public class BrowserActivity extends Activity {
 
     private void pinMenu(BrowserPins.Pin pin) {
         if (isFinishing()) return;
-        new AlertDialog.Builder(this)
+        dialog()
             .setTitle(BrowserPins.label(pin))
             .setItems(new CharSequence[] { "Edit", "Open in new tab", "Remove from new tab quick view" }, (d, which) -> {
                 if (which == 0) showEditSite(pin);
@@ -1014,7 +1187,7 @@ public class BrowserActivity extends Activity {
 
     private FrameLayout buildSwitcher() {
         FrameLayout frame = new FrameLayout(this);
-        frame.setBackgroundColor(COLOR_BG);
+        frame.setBackgroundColor(bgColor());
         frame.setClickable(true);
         frame.setVisibility(View.GONE);
 
@@ -1025,13 +1198,15 @@ public class BrowserActivity extends Activity {
         header.setOrientation(LinearLayout.HORIZONTAL);
         header.setGravity(Gravity.CENTER_VERTICAL);
         header.setPadding(dp(16), dp(10), dp(8), dp(10));
-        switcherTitle = label("Tabs", 17, COLOR_TEXT, true);
+        switcherTitle = label("Tabs", 17, textColor(), true);
         header.addView(switcherTitle, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        TextView closeAll = label("Close all", 14, COLOR_DIM, false);
+        TextView closeAll = label("Close all", 14, dimColor(), false);
+        switcherCloseAll = closeAll;
         closeAll.setPadding(dp(10), dp(10), dp(10), dp(10));
         closeAll.setOnClickListener(v -> confirmCloseAll());
         header.addView(closeAll);
-        TextView add = label("New tab", 14, COLOR_GREEN, true);
+        TextView add = label("New tab", 14, textColor(), true);
+        switcherAdd = add;
         add.setPadding(dp(10), dp(10), dp(10), dp(10));
         add.setOnClickListener(v -> newTab(false));
         header.addView(add);
@@ -1072,7 +1247,7 @@ public class BrowserActivity extends Activity {
             row.setGravity(Gravity.CENTER_VERTICAL);
             row.setPadding(dp(14), 0, dp(4), 0);
             boolean isActive = tab == current;
-            row.setBackground(box(isActive ? COLOR_BAR : COLOR_BG, BOX_RADIUS_DP, isActive ? accentColor() : COLOR_BAR));
+            row.setBackground(isActive ? bevel(BOX_RADIUS_DP, false) : box(barColor(), BOX_RADIUS_DP, faintColor()));
             row.setClickable(true);
             row.setOnClickListener(v -> {
                 selectTab(tab);
@@ -1081,11 +1256,11 @@ public class BrowserActivity extends Activity {
 
             LinearLayout text = new LinearLayout(this);
             text.setOrientation(LinearLayout.VERTICAL);
-            TextView title = label(tabTitle(tab), 14, COLOR_TEXT, isActive);
+            TextView title = label(tabTitle(tab), 14, textColor(), isActive);
             title.setSingleLine(true);
             title.setEllipsize(TextUtils.TruncateAt.END);
             text.addView(title);
-            TextView sub = label(tabSubtitle(tab), 12, COLOR_DIM, false);
+            TextView sub = label(tabSubtitle(tab), 12, dimColor(), false);
             sub.setSingleLine(true);
             sub.setEllipsize(TextUtils.TruncateAt.END);
             text.addView(sub);
@@ -1117,7 +1292,7 @@ public class BrowserActivity extends Activity {
 
     private void confirmCloseAll() {
         if (isFinishing()) return;
-        new AlertDialog.Builder(this)
+        dialog()
             .setTitle("Close all tabs?")
             .setMessage("Every open tab closes and a new start page opens.")
             .setPositiveButton("Close all", (d, w) -> {
@@ -1188,20 +1363,20 @@ public class BrowserActivity extends Activity {
             artPending = seed;
             return;
         }
-        art.evaluateJavascript(BrowserScripts.paint(seed), null);
+        art.evaluateJavascript(BrowserScripts.paint(seed, dayMode), null);
     }
 
     private FrameLayout buildPull() {
         FrameLayout circle = new FrameLayout(this);
         GradientDrawable shape = new GradientDrawable();
         shape.setShape(GradientDrawable.OVAL);
-        shape.setColor(COLOR_BAR);
-        shape.setStroke(dp(1), COLOR_BORDER);
+        shape.setColor(barColor());
+        shape.setStroke(dp(1), borderColor());
         circle.setBackground(shape);
         circle.setVisibility(View.GONE);
         circle.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
         pullIcon = new ImageView(this);
-        pullIcon.setImageResource(R.drawable.vv_ic_refresh);
+        pullIcon.setImageDrawable(emboss(R.drawable.vv_ic_refresh));
         pullIcon.setScaleType(ImageView.ScaleType.CENTER);
         circle.addView(pullIcon, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         return circle;
@@ -1218,8 +1393,9 @@ public class BrowserActivity extends Activity {
         pullStartY = lastTouchY;
         pullReady = false;
         GradientDrawable shape = (GradientDrawable) pullView.getBackground();
+        shape.setColor(barColor());
         shape.setStroke(dp(1), borderColor());
-        pullIcon.setImageTintList(ColorStateList.valueOf(accentColor()));
+        pullIcon.setImageDrawable(emboss(R.drawable.vv_ic_refresh));
         pullView.animate().cancel();
         pullView.setVisibility(View.VISIBLE);
         drawPull(0f);
@@ -1294,7 +1470,7 @@ public class BrowserActivity extends Activity {
     @RequiresApi(api = Build.VERSION_CODES.P)
     private void createWeb(BrowserTab tab) {
         WebView view = new BrowserWebView(this);
-        view.setBackgroundColor(COLOR_BG);
+        view.setBackgroundColor(bgColor());
         tab.web = view;
         configure(tab, view);
         view.setVisibility(View.GONE);
@@ -1772,7 +1948,7 @@ public class BrowserActivity extends Activity {
         if (!origin.equals(BrowserFill.originOf(tab.web.getUrl()))) return;
         String host = tab.pageHost;
         CharSequence[] styles = { "With special characters (Aa1!)", "Letters and numbers only (Aa1)" };
-        fillDialog = new AlertDialog.Builder(this)
+        fillDialog = dialog()
             .setTitle("New password")
             .setItems(styles, (d, which) -> {
                 if (torMode || switching || tab != activeTab() || tab.web == null || !origin.equals(BrowserFill.originOf(tab.web.getUrl()))) return;
@@ -1859,7 +2035,7 @@ public class BrowserActivity extends Activity {
     }
 
     private void confirmFill(BrowserTab tab, String title, String message, String okLabel, boolean torNote, Runnable launch) {
-        fillDialog = new AlertDialog.Builder(this)
+        fillDialog = dialog()
             .setTitle(title)
             .setMessage(message)
             .setPositiveButton(okLabel, (d, w) -> {
@@ -1985,7 +2161,7 @@ public class BrowserActivity extends Activity {
         String key = BrowserFill.loginKey(host, save.username, save.password);
         if (knownLogins.contains(key)) return;
         String who = save.username.isEmpty() ? "No username" : save.username;
-        saveDialog = new AlertDialog.Builder(this)
+        saveDialog = dialog()
             .setTitle("Save this login?")
             .setMessage(who + "\n" + host + "\n\nValid Vault will unlock, then save it encrypted in your vault.")
             .setPositiveButton("Save", (d, w) -> launchSave(host, save, key))
@@ -2043,7 +2219,7 @@ public class BrowserActivity extends Activity {
     private void showLinkMenu(String url) {
         if (isFinishing()) return;
         String shown = url.length() > MAX_LINK_LABEL ? url.substring(0, MAX_LINK_LABEL) + "…" : url;
-        new AlertDialog.Builder(this)
+        dialog()
             .setTitle(shown)
             .setItems(new CharSequence[] { "Open in new tab", "Copy link", "Share link" }, (d, which) -> {
                 if (which == 0) openInNewTab(url, false);
@@ -2120,7 +2296,7 @@ public class BrowserActivity extends Activity {
     }
 
     private void showMenu(View anchor) {
-        PopupMenu popup = new PopupMenu(this, anchor);
+        PopupMenu popup = new PopupMenu(menuContext(), anchor);
         Menu menu = popup.getMenu();
         BrowserTab tab = activeTab();
         String url = currentUrl();
@@ -2166,7 +2342,7 @@ public class BrowserActivity extends Activity {
         } catch (Exception e) {
             version = "";
         }
-        new AlertDialog.Builder(this)
+        dialog()
             .setTitle("About")
             .setMessage("Valid Vault private browser" + (version == null || version.isEmpty() ? "" : "\nVersion " + version))
             .setPositiveButton("OK", null)
@@ -2183,19 +2359,84 @@ public class BrowserActivity extends Activity {
 
     private void applyTheme() {
         int bar = barColor();
+        int bg = bgColor();
+        root.setBackgroundColor(bg);
+        startView.setBackgroundColor(bg);
+        art.setBackgroundColor(bg);
+        switcher.setBackgroundColor(bg);
+        for (BrowserTab tab : tabs.list()) if (tab.web != null) tab.web.setBackgroundColor(bg);
         topWrap.setBackgroundColor(bar);
         bottomBar.setBackgroundColor(bar);
         statusScrim.setBackgroundColor(bar);
         navScrim.setBackgroundColor(bar);
         address.setBackground(frame());
+        address.setTextColor(textColor());
+        address.setHintTextColor(dimColor());
         address.setHint(torMode ? HINT_TOR : HINT_NORMAL);
+        updateThemeButton();
         tabButton.setBackground(tabFrame());
-        tabButton.setTextColor(accentColor());
+        embossText(tabButton, accentColor());
         progress.setProgressTintList(ColorStateList.valueOf(accentColor()));
+        for (Map.Entry<ImageButton, Integer> entry : chromeIcons.entrySet()) {
+            entry.getKey().setImageDrawable(emboss(entry.getValue()));
+            entry.getKey().setBackground(ripple());
+        }
+        haloText(startInfo, textColor());
+        haloText(saveLink, textColor());
+        switcherTitle.setTextColor(textColor());
+        switcherCloseAll.setTextColor(dimColor());
+        switcherAdd.setTextColor(textColor());
+        GradientDrawable pull = (GradientDrawable) pullView.getBackground();
+        pull.setColor(bar);
+        pull.setStroke(dp(1), borderColor());
+        pullIcon.setImageDrawable(emboss(R.drawable.vv_ic_refresh));
+        applySystemBars();
         setTaskDescription(new ActivityManager.TaskDescription(TASK_LABEL, R.drawable.vv_logo, bar));
         renderPins();
+        if (switcherOpen()) renderSwitcher();
         updateShield();
         updateStartInfo();
+        BrowserTab current = activeTab();
+        if (current != null && startShowing()) paintArt(current.seed);
+    }
+
+    private void updateThemeButton() {
+        if (themeButton == null) return;
+        themeButton.setImageDrawable(emboss(dayMode ? R.drawable.vv_ic_moon : R.drawable.vv_ic_sun));
+        themeButton.setContentDescription(dayMode ? "Night mode" : "Day mode");
+        themeButton.setBackground(ripple());
+    }
+
+    private void toggleDayNight() {
+        boolean next = !dayMode;
+        BrowserSettings saved = BrowserSettings.update(this, settings -> {
+            settings.theme = next ? BrowserSettings.THEME_DAY : BrowserSettings.THEME_NIGHT;
+            settings.themeChosen = true;
+        });
+        if (saved == null) {
+            toast("Could not save the change");
+            return;
+        }
+        dayMode = next;
+        applyTheme();
+    }
+
+    @SuppressWarnings("deprecation")
+    private void applySystemBars() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                android.view.WindowInsetsController controller = getWindow().getDecorView().getWindowInsetsController();
+                if (controller == null) return;
+                int mask = android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS | android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS;
+                controller.setSystemBarsAppearance(dayMode ? mask : 0, mask);
+            } else {
+                View decor = getWindow().getDecorView();
+                int flags = View.SYSTEM_UI_FLAG_LAYOUT_STABLE | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION;
+                if (dayMode) flags |= View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+                decor.setSystemUiVisibility(flags);
+            }
+        } catch (RuntimeException e) {
+        }
     }
 
     private void toast(String message) {
@@ -2326,7 +2567,7 @@ public class BrowserActivity extends Activity {
 
     private void showTorNote() {
         if (isFinishing()) return;
-        new AlertDialog.Builder(this)
+        dialog()
             .setTitle("Tor mode is on")
             .setMessage("Every page now goes through Orbot. If Orbot stops, pages stop loading until it is running again.\n\n"
                 + "Sites can no longer see your IP address or location. They can still see some details about your phone's browser.\n\n"
@@ -2339,7 +2580,7 @@ public class BrowserActivity extends Activity {
     private void showOrbotMissing() {
         if (isFinishing()) return;
         Intent launch = BrowserTor.launchIntent(this);
-        AlertDialog.Builder builder = new AlertDialog.Builder(this)
+        AlertDialog.Builder builder = dialog()
             .setTitle("Orbot isn't running")
             .setNegativeButton("Cancel", null);
         if (launch != null) {
@@ -2372,7 +2613,7 @@ public class BrowserActivity extends Activity {
         String name = BrowserDownloads.fileName(url, contentDisposition, mimeType);
         String pageUrl = hasPage(tab) ? tab.web.getUrl() : null;
         String size = contentLength > 0 ? Formatter.formatShortFileSize(this, contentLength) : null;
-        new AlertDialog.Builder(this)
+        dialog()
             .setTitle("Download this file?")
             .setMessage(size == null ? name : name + "\n" + size)
             .setPositiveButton("Download", (d, w) -> startDownload(url, userAgent, mimeType, name, pageUrl))

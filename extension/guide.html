@@ -341,6 +341,7 @@
           <h3>Naming your key and vault</h3>
           <p>Settings, Key and Vault Name. One name covers both, so key files and vault files you export always match. It is a label only and is never needed to import: a key or vault file renamed by hand still opens exactly as before.</p>
           <p>If this browser uses Uni-Vault, renaming offers to save the vault under the new name and link to it. Browsers cannot rename a file in place, so the old file stays where it is. Link your other browsers to the new file with Import Vault, then delete the old one. A linked file renamed by hand in File Explorer needs the same: pick it again with Import Vault and link it.</p>
+          <p>After a rename, Valid Vault offers to export your key and vault right away under the new name, with one fingerprint, device PIN, or password check. Files you saved before keep their old names and still open, so delete them once you no longer need them.</p>
         </section>
 
         <section id="univault">
@@ -369,7 +370,8 @@
           <ul>
             <li><strong>A bad file is refused, never trusted.</strong> If the file is damaged, replaced with something else, or made with a different master key, Valid Vault refuses it, leaves it untouched, and keeps working with its own copy. Sync shows exactly why.</li>
             <li><strong>Moved or unreachable file:</strong> nothing is lost. Put it back, or use Unlink and then Import Vault to link the file in its new place.</li>
-            <li><strong>Permission asked again:</strong> if the browser ever forgets your permission, a <strong>Reconnect</strong> button appears in the popup and in Sync. One click and you are back in sync.</li>
+            <li><strong>Permission asked again:</strong> if the browser forgets your permission, unlocking asks for it again, so you are usually back in sync with no extra step. If it still needs your OK, a <strong>Reconnect</strong> button appears in the window you unlocked from and in Sync. If this browser loses the link itself, Sync names the file so you can pick it again with Import Vault.</li>
+            <li><strong>If the browser empties its storage:</strong> Valid Vault keeps an encrypted backup copy of your vault and unlock setup in the extension's own settings storage. If the browser ever clears the main copy, Valid Vault restores it the next time it opens, and you unlock as usual. Clear Vault removes the backup copy too.</li>
             <li><strong>Keep the file on this computer's own drive.</strong> A USB drive is for backups, since Uni-Vault stops syncing whenever the drive is unplugged.</li>
             <li><strong>Keep your backups.</strong> Uni-Vault keeps one file on one disk, so keep exporting backups to cold storage as described in <a href="#backups" style="color:var(--green);">Backups and Cold Storage</a>. When a browser is linked, Export Vault saves a separate backup copy and the link stays put.</li>
             <li><strong>Unlink</strong> in Sync stops a browser from syncing. It keeps its own copy, and the file is not deleted.</li>

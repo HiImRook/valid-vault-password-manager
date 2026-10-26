@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="26dp"
+    android:height="26dp"
+    android:viewportWidth="26"
+    android:viewportHeight="26">
+    <group android:translateX="0.4" android:translateY="0.4">
+        <path
+        android:fillColor="#00000000"
+        android:strokeColor="#4DFFFFFF"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M12,3.5a4,4 0,1 1,0,8a4,4 0,1 1,0,-8z" />
+        <path
+        android:fillColor="#00000000"
+        android:strokeColor="#4DFFFFFF"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M4.5,21a7.5,7 0,0 1,15,0" />
+    </group>
+    <group android:translateX="1.7" android:translateY="1.7">
+        <path
+        android:fillColor="#00000000"
+        android:strokeColor="#B3000000"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M12,3.5a4,4 0,1 1,0,8a4,4 0,1 1,0,-8z" />
+        <path
+        android:fillColor="#00000000"
+        android:strokeColor="#B3000000"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M4.5,21a7.5,7 0,0 1,15,0" />
+    </group>
+    <group android:translateX="1" android:translateY="1">
+        <path
+        android:fillColor="#00000000"
+        android:strokeColor="#DFE2E6"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M12,3.5a4,4 0,1 1,0,8a4,4 0,1 1,0,-8z" />
+        <path
+        android:fillColor="#00000000"
+        android:strokeColor="#DFE2E6"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M4.5,21a7.5,7 0,0 1,15,0" />
+    </group>
+</vector>

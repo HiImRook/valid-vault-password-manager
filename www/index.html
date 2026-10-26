@@ -4,81 +4,107 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Valid Vault</title>
+  <script>try { if (localStorage.getItem('vvTheme') === 'dark') document.documentElement.setAttribute('data-theme', 'dark') } catch (e) {}</script>
   <style>
-    @font-face { font-family: 'Orbitron'; src: url('Orbitron.ttf') format('truetype'); font-weight: 700 900; font-display: swap; }
     :root {
-      --bg: #0a0e0a; --bg-raise: #0d130d; --panel: #101710;
-      --green: #33ff66; --green-dim: #1f9e40; --green-faint: #163020;
-      --text: #b8f0c4; --text-dim: #6fae7f; --danger: #ff5555;
+      --bg: #f4f1ea; --bg-raise: #fbfaf7; --panel: #f0ece5;
+      --green: #1d1e21; --green-dim: #8f8b83; --green-faint: #ddd7cc;
+      --text: #1d1e21; --text-dim: #66645f; --danger: #b42318;
+      --focus: rgba(29,30,33,0.18); --shadow: rgba(29,30,33,0.10); --overlay: rgba(20,20,22,0.45);
+      --mark-1: #1d1e21; --mark-2: #3b3d42;
+      --rim-a: #4a4c52; --rim-b: #0e0f11;
+      --raise-top: #ffffff; --raise-bottom: #ebe7df;
+      --sink-top: #e4dfd5; --sink-bottom: #fbfaf7;
+      --inner: rgba(29,30,33,0.16); --drop: rgba(29,30,33,0.24); --hi: rgba(255,255,255,0.85);
+      --emboss: 0 1px 0 rgba(255,255,255,0.6); --emboss-icon: drop-shadow(0 1px 0 rgba(255,255,255,0.55));
+      --danger-rim-a: #d0473a; --danger-rim-b: #7a1810;
+      --line: 2px;
+      --font-ui: "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      --font-mono: Consolas, "Roboto Mono", "DejaVu Sans Mono", monospace;
+      --font-brand: Georgia, "Noto Serif", "Times New Roman", serif;
+      color-scheme: light;
+    }
+    :root[data-theme="dark"] {
+      --bg: #16181b; --bg-raise: #1e2125; --panel: #23272c;
+      --green: #e6e9ed; --green-dim: #5d636b; --green-faint: #33383e;
+      --text: #e9ebee; --text-dim: #9aa0a6; --danger: #f97066;
+      --focus: rgba(230,233,237,0.22); --shadow: rgba(0,0,0,0.45); --overlay: rgba(0,0,0,0.6);
+      --mark-1: #f7f8fa; --mark-2: #8e949c;
+      --rim-a: #f4f6f8; --rim-b: #8a9098;
+      --raise-top: #2d3238; --raise-bottom: #1a1d21;
+      --sink-top: #111316; --sink-bottom: #22262b;
+      --inner: rgba(0,0,0,0.5); --drop: rgba(0,0,0,0.55); --hi: rgba(255,255,255,0.1);
+      --emboss: 0 1px 0 rgba(0,0,0,0.6); --emboss-icon: drop-shadow(0 1px 0 rgba(0,0,0,0.55));
+      --danger-rim-a: #ffa39b; --danger-rim-b: #b4433a;
+      color-scheme: dark;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
     html, body { background: var(--bg); }
-    body { font-family: "Courier New", "Consolas", "DejaVu Sans Mono", monospace; color: var(--text); min-height: 100vh; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
-    .topbar { position: sticky; top: 0; z-index: 50; display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: var(--bg-raise); border-bottom: 1px solid var(--green-faint); }
-    .brand { font-family: 'Orbitron', sans-serif; font-weight: 900; color: var(--green); font-size: 17px; letter-spacing: 2px; text-shadow: 0 0 8px rgba(51,255,102,0.4); }
+    body { font-family: var(--font-ui); color: var(--text); min-height: 100vh; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+    .topbar { position: sticky; top: 0; z-index: 50; display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: var(--bg-raise); border-bottom: var(--line) solid var(--green-faint); }
+    .brand { display: flex; align-items: center; gap: 10px; font-family: var(--font-brand); font-weight: 400; color: var(--text); font-size: 17px; letter-spacing: 0.28em; }
+    .brand .vv-mark { width: 20px; height: 24px; }
+    .vv-mark { display: block; }
+    .topbar-actions { display: flex; align-items: center; gap: 8px; }
+    .icon-btn { display: inline-flex; align-items: center; justify-content: center; width: 38px; min-height: 38px; height: 38px; padding: 0; }
+    .vv-icon { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    .theme-toggle .when-day, :root[data-theme="dark"] .theme-toggle .when-night { display: none; }
+    :root[data-theme="dark"] .theme-toggle .when-day { display: inline-flex; }
+    .btn-icon { width: 18px; height: 18px; margin-right: 8px; vertical-align: -3px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
     .wrap { max-width: 620px; margin: 0 auto; padding: 16px; }
     .globe-wrap { display: flex; justify-content: center; margin: 8px 0 14px; }
-    .globe-wrap canvas { width: 150px; height: 150px; filter: drop-shadow(0 0 5px rgba(51,255,102,0.4)); }
-    h1 { font-family: 'Orbitron', sans-serif; font-weight: 700; color: var(--green); font-size: 20px; margin-bottom: 14px; letter-spacing: 1px; text-shadow: 0 0 8px rgba(51,255,102,0.3); }
-    h2 { color: var(--text-dim); font-size: 12px; text-transform: uppercase; letter-spacing: 1px; margin: 22px 0 10px; }
-    h3 { color: var(--green); font-size: 14px; margin: 16px 0 8px; }
+    .globe-wrap .vv-mark { width: 96px; height: 113px; margin: 10px 0; }
+    h1 { font-weight: 600; color: var(--text); font-size: 22px; margin-bottom: 14px; }
+    h2 { color: var(--text-dim); font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; margin: 22px 0 10px; }
+    h3 { color: var(--text); font-size: 15px; font-weight: 600; margin: 16px 0 8px; }
     p.lead { color: var(--text-dim); font-size: 13px; line-height: 1.55; margin-bottom: 12px; }
-    .card { background: var(--bg-raise); border: 1px solid var(--green-faint); border-radius: 8px; padding: 16px; margin-bottom: 14px; }
-    .card-title { color: var(--green); font-size: 15px; font-weight: 700; margin-bottom: 8px; }
-    button { background: var(--green); color: #05140a; border: none; padding: 11px 16px; border-radius: 6px; cursor: pointer; font-family: inherit; font-size: 14px; font-weight: 700; letter-spacing: 0.5px; min-height: 42px; }
-    button:active { background: #5aff80; }
-    button:disabled { opacity: 0.45; }
-    button.secondary { background: transparent; color: var(--green); border: 1px solid var(--green-dim); font-weight: 400; }
-    button.secondary:active { background: var(--green-faint); }
-    button.danger { background: transparent; color: var(--danger); border: 1px solid var(--danger); font-weight: 400; }
-    button.danger:active { background: rgba(255,85,85,0.12); }
+    .card { border-radius: 12px; padding: 16px; margin-bottom: 14px; }
+    .card-title { color: var(--text); font-size: 16px; font-weight: 600; margin-bottom: 8px; }
+    button { padding: 11px 16px; cursor: pointer; font-family: inherit; font-size: 14px; font-weight: 600; letter-spacing: 0.01em; min-height: 42px; }
+    button:disabled { opacity: 0.45; transform: none; box-shadow: none; }
+    button.secondary, button.danger, button.reenroll { font-weight: 500; }
     button.small { padding: 7px 11px; font-size: 12px; min-height: 34px; }
     button.block { width: 100%; }
-    button.enroll { background: var(--green); color: #05140a; font-weight: 700; }
-    button.reenroll { background: transparent; color: var(--danger); border: 1px solid var(--danger); font-weight: 400; }
     .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
     .btn-row > button { flex: 1 1 140px; }
-    input, select, textarea { background: var(--bg); border: 1px solid var(--green-faint); color: var(--text); padding: 11px; border-radius: 6px; font-family: inherit; font-size: 15px; min-width: 0; }
-    input:focus, select:focus, textarea:focus { outline: none; border-color: var(--green-dim); box-shadow: 0 0 0 2px rgba(51,255,102,0.1); }
+    input, select, textarea { color: var(--text); padding: 11px; border-radius: 10px; font-family: inherit; font-size: 15px; min-width: 0; }
+    input:focus, select:focus, textarea:focus { outline: none; }
     input::placeholder { color: var(--text-dim); }
     .row { display: flex; gap: 8px; align-items: center; }
     .row > input { flex: 1; }
     .hidden { display: none !important; }
-    .msg { padding: 12px; margin: 12px 0; border-radius: 6px; font-size: 13px; border: 1px solid transparent; line-height: 1.45; word-break: break-word; }
-    .msg.success { background: rgba(51,255,102,0.08); color: var(--green); border-color: var(--green-faint); }
-    .msg.error { background: rgba(255,85,85,0.08); color: var(--danger); border-color: rgba(255,85,85,0.3); }
-    .msg.info { background: var(--panel); color: var(--text); border-color: var(--green-faint); }
+    .msg { padding: 12px; margin: 12px 0; border-radius: 8px; font-size: 13px; line-height: 1.45; word-break: break-word; color: var(--text); }
+    .msg.error { color: var(--danger); }
     .enroll-row { display: flex; align-items: center; gap: 8px; margin: 10px 0; }
     .enroll-row .label { flex: 1; color: var(--text); font-size: 14px; }
     .enroll-row .state { color: var(--green); font-size: 12px; }
     .note { color: var(--text-dim); font-size: 12px; line-height: 1.5; margin: 4px 0 8px; }
     .divider { color: var(--text-dim); font-size: 12px; text-align: center; margin: 18px 0; letter-spacing: 1px; }
-    .tabs { position: sticky; top: 53px; z-index: 40; display: flex; overflow-x: auto; background: var(--bg); border-bottom: 1px solid var(--green-faint); scrollbar-width: none; }
+    .tabs { position: sticky; top: 53px; z-index: 40; display: flex; overflow-x: auto; background: var(--bg); border-bottom: var(--line) solid var(--green-faint); scrollbar-width: none; }
     .tabs::-webkit-scrollbar { display: none; }
     .tab { padding: 13px 14px; color: var(--text-dim); border-bottom: 2px solid transparent; font-size: 13px; white-space: nowrap; cursor: pointer; }
-    .tab.active { color: var(--green); border-bottom-color: var(--green); }
+    .tab.active { color: var(--text); font-weight: 600; border-bottom: 3px solid var(--green); }
     .panel { display: none; }
     .panel.active { display: block; }
     .auth-methods { display: flex; gap: 10px; flex-wrap: wrap; }
-    .auth-card { background: var(--bg-raise); border: 1px solid var(--green-faint); border-radius: 8px; padding: 14px; flex: 1 1 200px; }
-    .auth-card.active { border-color: var(--green); box-shadow: inset 0 0 20px rgba(51,255,102,0.06); }
-    .auth-title { color: var(--green); font-size: 15px; font-weight: 700; margin-bottom: 6px; }
+    .auth-card { border-radius: 12px; padding: 14px; flex: 1 1 200px; }
+    .auth-title { color: var(--text); font-size: 15px; font-weight: 600; margin-bottom: 6px; }
     .auth-status { color: var(--text-dim); font-size: 12px; margin-bottom: 10px; }
     .auth-actions { display: flex; gap: 8px; }
-    .list { background: var(--bg-raise); border: 1px solid var(--green-faint); border-radius: 8px; }
+    .list { border-radius: 12px; overflow: hidden; }
     .gate, .empty { padding: 22px 16px; text-align: center; color: var(--text-dim); font-size: 13px; }
     .group-head { display: flex; align-items: center; gap: 10px; padding: 14px; border-bottom: 1px solid var(--green-faint); cursor: pointer; }
     .group:last-child .group-head { border-bottom: none; }
     .group.open .group-head { border-bottom: 1px solid var(--green-faint); }
     .group-arrow { color: var(--text-dim); width: 14px; }
-    .group-name { color: var(--green); font-weight: 700; font-size: 14px; flex: 1; word-break: break-all; }
+    .group-name { color: var(--text); font-weight: 600; font-size: 15px; flex: 1; word-break: break-all; }
     .group-count { color: var(--text-dim); font-size: 12px; }
     .group-body { background: var(--panel); padding: 0 12px; border-bottom: 1px solid var(--green-faint); }
     .item { padding: 12px 0; border-bottom: 1px solid var(--green-faint); }
     .item:last-child { border-bottom: none; }
     .item-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
     .item-label { color: var(--text); font-size: 14px; flex: 1 1 140px; word-break: break-word; }
-    .item-secret { color: var(--text-dim); font-size: 13px; width: 100%; word-break: break-all; margin-top: 6px; }
+    .item-secret { color: var(--text-dim); font-family: var(--font-mono); font-size: 13px; width: 100%; word-break: break-all; margin-top: 6px; }
     .item-actions { display: flex; gap: 6px; }
     .item-extra { margin-top: 10px; padding-left: 4px; }
     .extra-row { display: flex; align-items: center; gap: 6px; padding: 6px 0; font-size: 12px; flex-wrap: wrap; }
@@ -88,17 +114,17 @@
     .field-row { display: flex; align-items: center; gap: 8px; padding: 10px 0; border-bottom: 1px solid var(--green-faint); }
     .field-label { width: 92px; color: var(--text-dim); font-size: 12px; flex-shrink: 0; }
     .field-value { flex: 1; word-break: break-word; font-size: 14px; }
-    .setting { background: var(--bg-raise); border: 1px solid var(--green-faint); padding: 14px; margin-bottom: 10px; border-radius: 8px; }
-    .setting-label { font-size: 14px; color: var(--text); }
+    .setting { padding: 14px; margin-bottom: 10px; border-radius: 12px; }
+    .setting-label { font-size: 15px; font-weight: 600; color: var(--text); }
     .setting-desc { font-size: 12px; color: var(--text-dim); margin: 4px 0 10px; line-height: 1.45; }
     .time-input { display: flex; align-items: center; gap: 12px; }
     .time-input input { width: 110px; }
-    .time-readout { font-size: 13px; color: var(--green-dim); font-variant-numeric: tabular-nums; }
-    .danger-zone { margin-top: 28px; padding: 16px; background: var(--bg-raise); border: 1px solid var(--danger); border-radius: 8px; }
-    .scan-box { border: 1px dashed var(--green-dim); border-radius: 8px; width: 100%; max-width: 360px; aspect-ratio: 1/1; display: flex; align-items: center; justify-content: center; text-align: center; color: var(--green); cursor: pointer; position: relative; overflow: hidden; margin: 10px auto 0; padding: 12px; }
+    .time-readout { font-size: 13px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+    .danger-zone { margin-top: 28px; padding: 16px; border-radius: 12px; }
+    .scan-box { border-radius: 12px; width: 100%; max-width: 360px; aspect-ratio: 1/1; display: flex; align-items: center; justify-content: center; text-align: center; color: var(--green); cursor: pointer; position: relative; overflow: hidden; margin: 10px auto 0; padding: 12px; }
     .scan-box video { width: 100%; height: 100%; object-fit: cover; position: absolute; inset: 0; }
-    .scan-cancel { position: absolute; top: 8px; left: 8px; z-index: 3; background: var(--danger); color: #fff; min-height: 34px; padding: 6px 14px; }
-    .scan-status { position: absolute; bottom: 8px; left: 0; right: 0; text-align: center; color: var(--green); font-size: 12px; z-index: 3; text-shadow: 0 0 4px #000; }
+    .scan-cancel { position: absolute; top: 8px; left: 8px; z-index: 3; min-height: 34px; padding: 6px 14px; }
+    .scan-status { position: absolute; bottom: 8px; left: 0; right: 0; text-align: center; color: #fff; font-size: 12px; z-index: 3; text-shadow: 0 0 4px #000; }
     .qr-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.92); z-index: 1500; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 8px; }
     .qr-label { color: var(--text); font-size: 13px; text-align: center; max-width: 360px; margin-bottom: 14px; line-height: 1.5; }
     .qr-box { background: #fff; padding: 10px; border-radius: 8px; width: min(calc(100vw - 16px), calc(100vh - 150px), 560px); }
@@ -108,26 +134,26 @@
     .bm-item { display: flex; align-items: center; gap: 8px; padding: 12px; border-bottom: 1px solid var(--green-faint); }
     .bm-item:last-child { border-bottom: none; }
     .bm-text { flex: 1; min-width: 0; }
-    .bm-title { color: var(--green); font-size: 14px; word-break: break-word; }
+    .bm-title { color: var(--text); font-weight: 600; font-size: 14px; word-break: break-word; }
     .bm-url { color: var(--text-dim); font-size: 11px; word-break: break-all; margin-top: 2px; }
     .bm-actions { display: flex; flex-direction: column; gap: 4px; }
     .bm-actions .pair { display: flex; gap: 4px; }
-    .guide details { background: var(--bg-raise); border: 1px solid var(--green-faint); border-radius: 8px; margin-bottom: 10px; }
-    .guide summary { padding: 14px; color: var(--green); font-weight: 700; font-size: 14px; cursor: pointer; }
+    .guide details { border-radius: 12px; margin-bottom: 10px; }
+    .guide summary { padding: 14px; color: var(--text); font-weight: 600; font-size: 15px; cursor: pointer; }
     .guide .body { padding: 0 14px 14px; color: var(--text); font-size: 13px; line-height: 1.6; }
     .guide .body p { margin-bottom: 8px; }
     .about-links button { margin: 4px 0; }
     .recover summary { cursor: pointer; list-style: none; margin-bottom: 0; }
     .recover[open] summary { margin-bottom: 8px; }
-    a { color: var(--green); }
+    a { color: var(--text); text-decoration: underline; }
     .wv-toolbar { display: flex; gap: 8px; margin-bottom: 14px; }
     .wv-gate, .wv-empty { padding: 22px; text-align: center; color: var(--text-dim); font-size: 13px; }
     .wv-error { color: var(--danger); }
-    .wv-wallet { background: var(--bg-raise); border: 1px solid var(--green-faint); border-radius: 8px; margin-bottom: 14px; }
+    .wv-wallet { border-radius: 12px; margin-bottom: 14px; }
     .wv-wallet-head, .wv-account-head { display: flex; align-items: center; gap: 8px; padding: 12px; flex-wrap: wrap; }
     .wv-wallet-head { border-bottom: 1px solid var(--green-faint); }
     .wv-wallet-info, .wv-account-info { flex: 1; min-width: 120px; }
-    .wv-wallet-name { color: var(--green); font-size: 15px; font-weight: 700; word-break: break-word; }
+    .wv-wallet-name { color: var(--text); font-size: 15px; font-weight: 600; word-break: break-word; }
     .wv-account-label { color: var(--text); font-size: 14px; font-weight: 700; word-break: break-word; }
     .wv-account-meta { color: var(--text-dim); font-size: 11px; margin-top: 2px; }
     .wv-accounts { padding: 4px 8px 8px 12px; }
@@ -138,18 +164,17 @@
     .wv-move { min-height: 28px; padding: 2px 8px; font-size: 10px; }
     .wv-confirm-text { color: var(--danger); font-size: 12px; }
     .wv-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 12px 0; }
-    .wv-cell { display: flex; align-items: center; gap: 6px; background: var(--bg); border: 1px solid var(--green-faint); border-radius: 6px; padding: 4px 8px; }
+    .wv-cell { display: flex; align-items: center; gap: 6px; border-radius: 6px; padding: 4px 8px; }
     .wv-num { color: var(--text-dim); font-size: 11px; min-width: 18px; text-align: right; }
-    .wv-word { color: var(--green); font-size: 14px; font-weight: 700; padding: 5px 0; }
-    .wv-word-input { border: none; background: transparent; padding: 5px 0; width: 100%; min-width: 0; color: var(--green); font-weight: 700; }
+    .wv-word { color: var(--text); font-family: var(--font-mono); font-size: 14px; font-weight: 600; padding: 5px 0; }
+    .wv-word-input { border: none; background: transparent; padding: 5px 0; width: 100%; min-width: 0; color: var(--text); font-family: var(--font-mono); font-weight: 600; }
     .wv-word-input:focus { box-shadow: none; }
-    .wv-cell:focus-within { border-color: var(--green-dim); }
     .wv-reveal { padding: 0 12px 12px; }
-    .wv-notes-view { background: var(--bg); border: 1px solid var(--green-faint); border-radius: 6px; padding: 10px 12px; }
-    .wv-notes-view-header { color: var(--green); font-size: 13px; font-weight: 700; margin-bottom: 4px; }
+    .wv-notes-view { border-radius: 6px; padding: 10px 12px; }
+    .wv-notes-view-header { color: var(--text); font-size: 13px; font-weight: 700; margin-bottom: 4px; }
     .wv-notes-view-body { color: var(--text); font-size: 13px; white-space: pre-wrap; word-break: break-word; }
-    .wv-editor { background: var(--panel); border: 1px solid var(--green-dim); border-radius: 8px; padding: 14px; margin: 10px 0 14px; }
-    .wv-editor-title { color: var(--green); font-size: 14px; font-weight: 700; margin-bottom: 10px; word-break: break-word; }
+    .wv-editor { border-radius: 8px; padding: 14px; margin: 10px 0 14px; }
+    .wv-editor-title { color: var(--text); font-size: 14px; font-weight: 700; margin-bottom: 10px; word-break: break-word; }
     .wv-fields { display: flex; gap: 8px; flex-wrap: wrap; }
     .wv-fields input { flex: 1; min-width: 140px; }
     .wv-hint { color: var(--text-dim); font-size: 12px; margin: 10px 0 0; line-height: 1.45; }
@@ -157,19 +182,19 @@
     .wv-notes-header { width: 100%; margin: 10px 0 8px; }
     .wv-notes-body { width: 100%; }
     .wv-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; flex-wrap: wrap; }
-    .wv-covered { display: flex; align-items: center; justify-content: center; min-height: 110px; border: 1px dashed var(--green-dim); border-radius: 6px; cursor: pointer; }
+    .wv-covered { display: flex; align-items: center; justify-content: center; min-height: 110px; border-radius: 6px; cursor: pointer; }
     .wv-covered-text { color: var(--text-dim); font-size: 13px; }
-    .wv-suggest { position: absolute; z-index: 1000; background: var(--bg-raise); border: 1px solid var(--green-dim); border-radius: 6px; box-shadow: 0 4px 16px rgba(0,0,0,0.5); overflow: hidden; }
+    .wv-suggest { position: absolute; z-index: 1000; background: var(--bg-raise); border: 1px solid var(--green-dim); border-radius: 6px; box-shadow: 0 4px 16px var(--shadow); overflow: hidden; }
     .wv-suggest-item { padding: 9px 12px; font-size: 14px; color: var(--text); cursor: pointer; }
-    .wv-suggest-item:first-child { background: var(--green-faint); color: var(--green); }
+    .wv-suggest-item:first-child { background: var(--panel); color: var(--text); font-weight: 600; }
     html.fill-mode, body.fill-mode { background: transparent; }
     body.fill-mode > .topbar, body.fill-mode > #view-loading, body.fill-mode > #view-setup, body.fill-mode > #view-locked, body.fill-mode > #view-app, body.fill-mode > #qr-overlay { display: none !important; }
     .fill-sheet { position: fixed; left: 0; right: 0; bottom: 0; display: flex; justify-content: center; padding: 12px 12px calc(12px + env(safe-area-inset-bottom)); z-index: 1000; }
-    .fill-card { width: min(100%, 560px); max-height: 72vh; overflow-y: auto; background: var(--bg-raise); border: 1px solid var(--green-dim); border-radius: 12px; padding: 16px; box-shadow: 0 -6px 28px rgba(0,0,0,0.65); }
+    .fill-card { width: min(100%, 560px); max-height: 72vh; overflow-y: auto; border-radius: 16px; padding: 16px; }
     .fill-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
-    .fill-title { color: var(--green); font-weight: 700; font-size: 15px; margin-bottom: 4px; word-break: break-word; }
+    .fill-title { color: var(--text); font-weight: 700; font-size: 15px; margin-bottom: 4px; word-break: break-word; }
     .fill-search { width: 100%; margin: 10px 0 2px; }
-    .fill-item { display: block; width: 100%; text-align: left; background: var(--bg); color: var(--text); border: 1px solid var(--green-faint); margin-top: 8px; font-weight: 400; word-break: break-all; }
+    .fill-item { display: block; width: 100%; text-align: left; margin-top: 8px; font-weight: 400; word-break: break-all; }
     .fill-item .fill-item-sub { display: block; color: var(--text-dim); font-size: 12px; margin-top: 3px; }
     .fill-actions { display: flex; gap: 8px; margin-top: 12px; }
     .fill-check { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 6px; cursor: pointer; }
@@ -179,9 +204,9 @@
     .fill-check-value { color: var(--text); word-break: break-word; }
     .fill-check-select { width: 100%; }
     .fill-actions button { flex: 1; }
-    .wv-dialog-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 2000; padding: 16px; }
-    .wv-dialog { background: var(--bg-raise); border: 1px solid var(--green-dim); border-radius: 8px; padding: 18px; width: min(460px, 100%); }
-    .wv-dialog-title { color: var(--green); font-size: 16px; font-weight: 700; margin-bottom: 10px; }
+    .wv-dialog-overlay { position: fixed; inset: 0; background: var(--overlay); display: flex; align-items: center; justify-content: center; z-index: 2000; padding: 16px; }
+    .wv-dialog { border-radius: 14px; padding: 18px; width: min(460px, 100%); }
+    .wv-dialog-title { color: var(--text); font-size: 17px; font-weight: 600; margin-bottom: 10px; }
     .wv-dialog-text { color: var(--text); font-size: 13px; line-height: 1.55; margin-bottom: 14px; word-break: break-word; white-space: pre-line; }
     .wv-dialog-input { width: 100%; margin-bottom: 14px; }
     .wv-dialog-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
@@ -195,20 +220,73 @@
     .vv-field-select { width: 100%; }
     .vv-field-hint { color: var(--text-dim); font-size: 11px; margin-top: 4px; line-height: 1.4; }
     .vv-form-error { color: var(--danger); font-size: 12px; min-height: 16px; margin-bottom: 8px; }
+    .card, .list, .setting, .auth-card, .guide details, .wv-wallet, .wv-editor, .wv-notes-view, .wv-cell, .msg, .scan-box, .wv-covered {
+      border: var(--line) solid transparent;
+      background: linear-gradient(180deg, var(--sink-top), var(--sink-bottom)) padding-box, linear-gradient(135deg, var(--rim-a), var(--rim-b)) border-box;
+      box-shadow: inset 0 3px 7px var(--inner), 0 2px 0 var(--drop);
+    }
+    .auth-card.active { box-shadow: inset 0 3px 7px var(--inner), 0 2px 0 var(--drop), 0 0 0 1px var(--rim-a); }
+    .msg.error, .danger-zone {
+      border: var(--line) solid transparent;
+      background: linear-gradient(180deg, var(--sink-top), var(--sink-bottom)) padding-box, linear-gradient(135deg, var(--danger-rim-a), var(--danger-rim-b)) border-box;
+      box-shadow: inset 0 3px 7px var(--inner), 0 2px 0 var(--drop);
+    }
+    input, select, textarea {
+      border: var(--line) solid transparent;
+      background: linear-gradient(180deg, var(--sink-top), var(--sink-bottom)) padding-box, linear-gradient(135deg, var(--rim-a), var(--rim-b)) border-box;
+      box-shadow: inset 0 3px 6px var(--inner), 0 2px 0 var(--drop);
+      border-radius: 10px;
+    }
+    input:focus, select:focus, textarea:focus { box-shadow: inset 0 3px 6px var(--inner), 0 2px 0 var(--drop), 0 0 0 3px var(--focus); }
+    input[type="checkbox"], input[type="radio"] { background: none; box-shadow: none; border: none; }
+    .wv-cell:focus-within { box-shadow: inset 0 3px 7px var(--inner), 0 2px 0 var(--drop), 0 0 0 2px var(--focus); }
+    button, .icon-btn, .fill-item {
+      border: var(--line) solid transparent;
+      border-radius: 10px;
+      color: var(--text);
+      text-shadow: var(--emboss);
+      background: linear-gradient(180deg, var(--raise-top), var(--raise-bottom)) padding-box, linear-gradient(135deg, var(--rim-a), var(--rim-b)) border-box;
+      box-shadow: inset 0 1px 0 var(--hi), 0 3px 0 var(--drop), 0 4px 8px var(--shadow);
+      transition: transform 0.06s, box-shadow 0.06s;
+    }
+    button:active, .icon-btn:active, .fill-item:active {
+      transform: translateY(2px);
+      background: linear-gradient(180deg, var(--sink-top), var(--sink-bottom)) padding-box, linear-gradient(135deg, var(--rim-a), var(--rim-b)) border-box;
+      box-shadow: inset 0 3px 6px var(--inner), 0 1px 0 var(--drop);
+    }
+    button:not(.secondary):not(.danger):not(.reenroll):not(.fill-item):not(.icon-btn):not(.scan-cancel):not(.wv-move):not(.vv-eye) { font-weight: 700; }
+    button.danger {
+      color: var(--danger);
+      background: linear-gradient(180deg, var(--raise-top), var(--raise-bottom)) padding-box, linear-gradient(135deg, var(--danger-rim-a), var(--danger-rim-b)) border-box;
+    }
+    button.danger:active {
+      background: linear-gradient(180deg, var(--sink-top), var(--sink-bottom)) padding-box, linear-gradient(135deg, var(--danger-rim-a), var(--danger-rim-b)) border-box;
+    }
+    button.scan-cancel { color: #fff; text-shadow: none; background: var(--danger); border-color: var(--danger); }
+    .icon-btn .vv-icon, button .btn-icon, button svg { filter: var(--emboss-icon); }
+    .wv-dialog, .fill-card {
+      border: var(--line) solid transparent;
+      background: linear-gradient(180deg, var(--raise-top), var(--raise-bottom)) padding-box, linear-gradient(135deg, var(--rim-a), var(--rim-b)) border-box;
+      box-shadow: inset 0 1px 0 var(--hi), 0 4px 0 var(--drop), 0 14px 40px var(--shadow);
+    }
   </style>
 </head>
 <body>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><linearGradient id="vv-mark-fill" x1="0" y1="0" x2="1" y2="1"><stop offset="0" style="stop-color: var(--mark-1)"/><stop offset="1" style="stop-color: var(--mark-2)"/></linearGradient><clipPath id="vv-mark-clip"><path d="M4,4 L104,4 L171,262 L238,4 L338,4 L171,399 Z"/></clipPath><mask id="vv-mark-mask"><g fill="#fff"><rect x="0" y="8.00" width="342" height="14.44"/><rect x="0" y="36.89" width="342" height="14.44"/><rect x="0" y="65.78" width="342" height="14.44"/><rect x="0" y="94.67" width="342" height="14.44"/><rect x="0" y="123.56" width="342" height="14.44"/><rect x="0" y="152.44" width="342" height="14.44"/><rect x="0" y="181.33" width="342" height="14.44"/><rect x="0" y="210.22" width="342" height="14.44"/><rect x="0" y="239.11" width="342" height="14.44"/><rect x="0" y="268.00" width="342" height="14.44"/><rect x="0" y="296.89" width="342" height="14.44"/><rect x="0" y="325.78" width="342" height="14.44"/><rect x="0" y="354.67" width="342" height="14.44"/><rect x="0" y="383.56" width="342" height="14.44"/></g></mask></defs><symbol id="vv-mark" viewBox="0 0 342 403"><g clip-path="url(#vv-mark-clip)"><rect width="342" height="403" fill="url(#vv-mark-fill)" mask="url(#vv-mark-mask)"/></g></symbol></svg>
   <div class="topbar">
-    <div class="brand">VALID VAULT</div>
-    <button id="btn-lock" class="small secondary hidden">Lock</button>
+    <div class="brand"><svg class="vv-mark" viewBox="0 0 342 403" aria-hidden="true"><use href="#vv-mark"/></svg>VALID VAULT</div>
+    <div class="topbar-actions">
+      <button id="btn-theme" class="icon-btn theme-toggle" type="button" aria-label="Switch between day and night mode"><span class="when-night"><svg class="vv-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 14.6A8.6 8.6 0 0 1 9.4 3.5a8.6 8.6 0 1 0 11.1 11.1z"/></svg></span><span class="when-day"><svg class="vv-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.2M12 19.3v2.2M4.6 4.6l1.6 1.6M17.8 17.8l1.6 1.6M2.5 12h2.2M19.3 12h2.2M4.6 19.4l1.6-1.6M17.8 6.2l1.6-1.6"/></svg></span></button>
+      <button id="btn-lock" class="small secondary hidden">Lock</button>
+    </div>
   </div>
 
   <div id="view-loading" class="wrap">
-    <div class="globe-wrap"><canvas class="globe" width="180" height="180"></canvas></div>
+    <div class="globe-wrap"><svg class="vv-mark" viewBox="0 0 342 403" aria-hidden="true"><use href="#vv-mark"/></svg></div>
   </div>
 
   <div id="view-setup" class="wrap hidden">
-    <div class="globe-wrap"><canvas class="globe" width="180" height="180"></canvas></div>
+    <div class="globe-wrap"><svg class="vv-mark" viewBox="0 0 342 403" aria-hidden="true"><use href="#vv-mark"/></svg></div>
     <div class="card">
       <div class="card-title">Set Up Your Vault</div>
       <p class="lead">Set up how you unlock your vault. Fingerprint, your device PIN, or your password can unlock it. Enroll at least one.</p>
@@ -240,7 +318,7 @@
   </div>
 
   <div id="view-locked" class="wrap hidden">
-    <div class="globe-wrap"><canvas class="globe" width="180" height="180"></canvas></div>
+    <div class="globe-wrap"><svg class="vv-mark" viewBox="0 0 342 403" aria-hidden="true"><use href="#vv-mark"/></svg></div>
     <div class="card">
       <div class="card-title">Unlock Vault</div>
       <button id="btn-unlock-fp" class="block hidden" style="margin-bottom:12px;">Unlock with Fingerprint</button>
@@ -279,6 +357,7 @@
       <div id="tab-manage" class="panel active">
         <h1>Manage Vault</h1>
         <h2>Unlock Methods</h2>
+        <p class="note">Keep at least one way to unlock: fingerprint or device PIN, or a master password. Having both is best, so one can stand in if the other stops working.</p>
         <div class="auth-methods">
           <div class="auth-card" id="card-fp">
             <div class="auth-title">Fingerprint / PIN</div>
@@ -10717,7 +10796,7 @@ self.onmessage = (event) => {
 <script>
 (function () {
 'use strict'
-const VALID_VAULT_VERSION = "0.9.0"
+const VALID_VAULT_VERSION = "0.9.1"
 const __modules = Object.create(null)
 __modules["extension/crypto.js"] = (function () {
 const SALT_LENGTH = 16
@@ -10903,12 +10982,172 @@ __modules["extension/store.js"] = (function () {
 const DB_NAME = 'ValidVault'
 const DB_VERSION = 5
 const VAULT_CHANGE_STAMP = 'vaultChangedAt'
+const MIRROR_PREFIX = 'vvMirror:'
+const MIRROR_READY_KEY = 'vvMirrorReady'
+const MIRROR_BYTES_TAG = '$vvBytes'
+const MIRROR_STORES = ['auth', 'passwords', 'wallets', 'webcreds', 'personalInfo', 'vaultMigration', 'bookmarks']
 
 let db = null
+let readyPromise = null
+
+function mirrorAvailable() {
+  return typeof chrome !== 'undefined' && !!chrome.storage && !!chrome.storage.local
+}
+
+function mirrorKey(storeName, id) {
+  return MIRROR_PREFIX + storeName + ':' + id
+}
+
+function bytesToBase64(bytes) {
+  let binary = ''
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i])
+  return btoa(binary)
+}
+
+function base64ToBytes(text) {
+  const binary = atob(text)
+  const out = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i)
+  return out
+}
+
+function toMirror(value) {
+  if (value instanceof ArrayBuffer) return { [MIRROR_BYTES_TAG]: 'buffer', d: bytesToBase64(new Uint8Array(value)) }
+  if (ArrayBuffer.isView(value)) return { [MIRROR_BYTES_TAG]: value.constructor.name, d: bytesToBase64(new Uint8Array(value.buffer, value.byteOffset, value.byteLength)) }
+  if (Array.isArray(value)) return value.map(toMirror)
+  if (value && typeof value === 'object') {
+    const out = {}
+    for (const [k, v] of Object.entries(value)) out[k] = toMirror(v)
+    return out
+  }
+  return value
+}
+
+function fromMirror(value) {
+  if (Array.isArray(value)) return value.map(fromMirror)
+  if (value && typeof value === 'object') {
+    if (typeof value[MIRROR_BYTES_TAG] === 'string' && typeof value.d === 'string') {
+      const bytes = base64ToBytes(value.d)
+      if (value[MIRROR_BYTES_TAG] === 'buffer') return bytes.buffer
+      const View = globalThis[value[MIRROR_BYTES_TAG]]
+      return typeof View === 'function' && View.BYTES_PER_ELEMENT ? new View(bytes.buffer, 0, bytes.byteLength / View.BYTES_PER_ELEMENT) : bytes
+    }
+    const out = {}
+    for (const [k, v] of Object.entries(value)) out[k] = fromMirror(v)
+    return out
+  }
+  return value
+}
+
+async function mirrorWrite(storeName, data) {
+  if (!mirrorAvailable() || !data || data.id === undefined) return
+  try { await chrome.storage.local.set({ [mirrorKey(storeName, data.id)]: toMirror(data) }) } catch (e) {}
+}
+
+async function mirrorRemove(storeName, id) {
+  if (!mirrorAvailable()) return
+  try { await chrome.storage.local.remove(mirrorKey(storeName, id)) } catch (e) {}
+}
+
+async function mirrorClear(names) {
+  if (!mirrorAvailable()) return
+  try {
+    const all = await chrome.storage.local.get(null)
+    const prefixes = names.map((name) => MIRROR_PREFIX + name + ':')
+    const keys = Object.keys(all || {}).filter((key) => prefixes.some((prefix) => key.startsWith(prefix)))
+    if (keys.length) await chrome.storage.local.remove(keys)
+  } catch (e) {}
+}
+
+function readAllRecords(database, storeName) {
+  return new Promise((resolve, reject) => {
+    const tx = database.transaction(storeName, 'readonly')
+    const request = tx.objectStore(storeName).getAll()
+    request.onsuccess = () => resolve(request.result || [])
+    request.onerror = () => reject(request.error)
+  })
+}
+
+function readRecord(database, storeName, key) {
+  return new Promise((resolve, reject) => {
+    const tx = database.transaction(storeName, 'readonly')
+    const request = tx.objectStore(storeName).get(key)
+    request.onsuccess = () => resolve(request.result || null)
+    request.onerror = () => reject(request.error)
+  })
+}
+
+async function restoreFromMirror(database, mirrored) {
+  const pending = []
+  for (const [key, value] of Object.entries(mirrored)) {
+    const rest = key.slice(MIRROR_PREFIX.length)
+    const at = rest.indexOf(':')
+    const storeName = rest.slice(0, at)
+    if (!MIRROR_STORES.includes(storeName) || !value || value.id === undefined) continue
+    if (await readRecord(database, storeName, value.id)) continue
+    pending.push({ storeName, record: fromMirror(value) })
+  }
+  if (!pending.length) return
+  await new Promise((resolve, reject) => {
+    const tx = database.transaction(Array.from(new Set(pending.map((p) => p.storeName))), 'readwrite')
+    for (const p of pending) tx.objectStore(p.storeName).put(p.record)
+    tx.oncomplete = () => resolve()
+    tx.onerror = () => reject(tx.error)
+    tx.onabort = () => reject(tx.error)
+  })
+}
+
+async function seedMirror(database) {
+  const entries = {}
+  for (const storeName of MIRROR_STORES) {
+    for (const record of await readAllRecords(database, storeName)) {
+      if (record && record.id !== undefined) entries[mirrorKey(storeName, record.id)] = toMirror(record)
+    }
+  }
+  entries[MIRROR_READY_KEY] = Date.now()
+  await chrome.storage.local.set(entries)
+}
+
+async function requestPersistence() {
+  try {
+    if (typeof navigator !== 'undefined' && navigator.storage && typeof navigator.storage.persist === 'function') {
+      if (!(await navigator.storage.persisted())) await navigator.storage.persist()
+    }
+  } catch (e) {}
+}
+
+async function prepareStorage(database) {
+  if (!mirrorAvailable()) return
+  requestPersistence()
+  try {
+    const authKey = mirrorKey('auth', 'primary')
+    const marks = await chrome.storage.local.get([MIRROR_READY_KEY, authKey])
+    const localAuth = await readRecord(database, 'auth', 'primary')
+    if (!localAuth && marks[authKey]) {
+      const all = await chrome.storage.local.get(null)
+      const mirrored = {}
+      for (const [key, value] of Object.entries(all || {})) if (key.startsWith(MIRROR_PREFIX)) mirrored[key] = value
+      await restoreFromMirror(database, mirrored)
+      return
+    }
+    if (localAuth && (!marks[MIRROR_READY_KEY] || !marks[authKey])) await seedMirror(database)
+  } catch (e) {}
+}
 
 async function openDB() {
-  if (db) return db
-  
+  if (!readyPromise) {
+    readyPromise = openRawDB().then(async (database) => {
+      await prepareStorage(database)
+      return database
+    }).catch((error) => {
+      readyPromise = null
+      throw error
+    })
+  }
+  return readyPromise
+}
+
+async function openRawDB() {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION)
     
@@ -10919,6 +11158,7 @@ async function openDB() {
       db.onversionchange = () => {
         db.close()
         db = null
+        readyPromise = null
       }
       resolve(db)
     }
@@ -10974,20 +11214,31 @@ async function get(storeName, key) {
 
 async function put(storeName, data) {
   const store = await getStore(storeName, 'readwrite')
-  return new Promise((resolve, reject) => {
+  const result = await new Promise((resolve, reject) => {
+    const tx = store.transaction
+    let value
     const request = store.put(data)
+    request.onsuccess = () => { value = request.result }
     request.onerror = () => reject(request.error)
-    request.onsuccess = () => resolve(request.result)
+    tx.oncomplete = () => resolve(value)
+    tx.onerror = () => reject(tx.error || request.error)
+    tx.onabort = () => reject(tx.error || request.error || new Error('Save did not complete'))
   })
+  await mirrorWrite(storeName, data)
+  return result
 }
 
 async function remove(storeName, key) {
   const store = await getStore(storeName, 'readwrite')
-  return new Promise((resolve, reject) => {
+  await new Promise((resolve, reject) => {
+    const tx = store.transaction
     const request = store.delete(key)
     request.onerror = () => reject(request.error)
-    request.onsuccess = () => resolve()
+    tx.oncomplete = () => resolve()
+    tx.onerror = () => reject(tx.error || request.error)
+    tx.onabort = () => reject(tx.error || request.error || new Error('Delete did not complete'))
   })
+  await mirrorRemove(storeName, key)
 }
 
 async function markVaultChanged() {
@@ -11074,6 +11325,7 @@ async function clearStores(names) {
     tx.onerror = () => reject(tx.error)
     tx.onabort = () => reject(tx.error)
   })
+  await mirrorClear(names)
 }
 
 async function clearAll() {
@@ -13750,6 +14002,28 @@ function el(tag, className, text) {
   return node
 }
 
+const SVG_NS = 'http://www.w3.org/2000/svg'
+
+function lockIcon() {
+  const svg = document.createElementNS(SVG_NS, 'svg')
+  svg.setAttribute('viewBox', '0 0 24 24')
+  svg.setAttribute('class', 'btn-icon')
+  svg.setAttribute('width', '18')
+  svg.setAttribute('height', '18')
+  svg.setAttribute('aria-hidden', 'true')
+  svg.setAttribute('style', 'margin-right:8px;vertical-align:-3px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round')
+  for (const [tag, attrs] of [
+    ['rect', { x: '4.5', y: '10.5', width: '15', height: '10', rx: '2.2' }],
+    ['path', { d: 'M8 10.5V7.5a4 4 0 0 1 8 0v3' }],
+    ['path', { d: 'M12 14.6v2.2' }]
+  ]) {
+    const node = document.createElementNS(SVG_NS, tag)
+    for (const [key, value] of Object.entries(attrs)) node.setAttribute(key, value)
+    svg.appendChild(node)
+  }
+  return svg
+}
+
 function button(label, className, handler) {
   const b = el('button', className, label)
   b.type = 'button'
@@ -14419,7 +14693,7 @@ function renderWallet(container, wallet, index, names) {
 
 function renderGate() {
   const gate = el('div', 'wv-gate')
-  gate.appendChild(button('🔐 Unlock to view Crypto Wallets', '', async () => {
+  const unlock = button('Unlock to view Crypto Wallets', '', async () => {
     const ok = await state.deps.authenticate()
     if (!ok) {
       showMsg('Authentication required', 'error')
@@ -14428,7 +14702,9 @@ function renderGate() {
     state.unlocked = true
     await reload()
     armHideTimer()
-  }))
+  })
+  unlock.prepend(lockIcon())
+  gate.appendChild(unlock)
   state.els.content.appendChild(gate)
 }
 
@@ -16609,6 +16885,23 @@ async function browserSettings() {
   }
 }
 
+async function browserTheme() {
+  const bb = plugin('BrowserBridge')
+  if (!bb) return ''
+  try {
+    const r = await bb.getSettings()
+    return r && (r.theme === 'day' || r.theme === 'night') ? r.theme : ''
+  } catch (e) {
+    return ''
+  }
+}
+
+async function setBrowserTheme(theme) {
+  const bb = plugin('BrowserBridge')
+  if (!bb) return
+  try { await bb.setTheme({ theme: theme === 'night' ? 'night' : 'day' }) } catch (e) {}
+}
+
 async function setBrowserEngine(engine) {
   const bb = plugin('BrowserBridge')
   if (!bb) throw new Error('The browser is not available')
@@ -16652,7 +16945,7 @@ async function openInBrowser(url) {
   }
   openExternal(url)
 }
-return Object.freeze({ "isNative": isNative, "biometricAvailable": biometricAvailable, "biometricEnroll": biometricEnroll, "biometricUnlock": biometricUnlock, "biometricRemove": biometricRemove, "saveToDownloads": saveToDownloads, "canShareFiles": canShareFiles, "shareFile": shareFile, "pickTextFile": pickTextFile, "takeShared": takeShared, "onShared": onShared, "returnToSender": returnToSender, "takeLaunch": takeLaunch, "onLaunch": onLaunch, "autofillRequest": autofillRequest, "autofillComplete": autofillComplete, "autofillCompleteInfo": autofillCompleteInfo, "setBrowserGenerator": setBrowserGenerator, "holdScreen": holdScreen, "autofillClose": autofillClose, "autofillStatus": autofillStatus, "openAutofillSettings": openAutofillSettings, "openExternal": openExternal, "browserSettings": browserSettings, "setBrowserEngine": setBrowserEngine, "removeBrowserSite": removeBrowserSite, "openBrowserSearch": openBrowserSearch, "openInBrowser": openInBrowser })
+return Object.freeze({ "isNative": isNative, "biometricAvailable": biometricAvailable, "biometricEnroll": biometricEnroll, "biometricUnlock": biometricUnlock, "biometricRemove": biometricRemove, "saveToDownloads": saveToDownloads, "canShareFiles": canShareFiles, "shareFile": shareFile, "pickTextFile": pickTextFile, "takeShared": takeShared, "onShared": onShared, "returnToSender": returnToSender, "takeLaunch": takeLaunch, "onLaunch": onLaunch, "autofillRequest": autofillRequest, "autofillComplete": autofillComplete, "autofillCompleteInfo": autofillCompleteInfo, "setBrowserGenerator": setBrowserGenerator, "holdScreen": holdScreen, "autofillClose": autofillClose, "autofillStatus": autofillStatus, "openAutofillSettings": openAutofillSettings, "openExternal": openExternal, "browserSettings": browserSettings, "browserTheme": browserTheme, "setBrowserTheme": setBrowserTheme, "setBrowserEngine": setBrowserEngine, "removeBrowserSite": removeBrowserSite, "openBrowserSearch": openBrowserSearch, "openInBrowser": openInBrowser })
 })()
 
 __modules["extension/fileimport.js"] = (function () {
@@ -17706,8 +17999,6 @@ const MSG_SHOW_MS = 6000
 const ACTIVITY_EVENTS = ['touchstart', 'click', 'input', 'keydown', 'scroll']
 const MASK = '••••••••'
 const DEFAULT_NICKNAME = 'My Master Key'
-const GLOBE_SPIN_PER_MS = 0.0003
-const GLOBE_EARLY_MARGIN = '240px 0px 240px 0px'
 const SHARE_URL_PATTERN = /https?:\/\/[^\s<>"'`]+/i
 const SHARE_URL_TRAILING = /[)\].,;:!?'"]+$/
 const SHARE_TITLE_MAX = 200
@@ -17722,9 +18013,9 @@ const PASSWORD_RULE_TEXT = '12+ characters with a letter, a number, and a symbol
 const PASSPHRASE_TIP = 'Use four or more random words plus a number and a symbol, like copper-lantern-mosaic-drift7!. Capitalization matters.'
 const ANSWER_TIP = 'One word. Capitalization matters.'
 const LOGIN_TYPES = [
-  { value: 'username', label: '👤 Username' },
-  { value: 'email', label: '📧 Email' },
-  { value: 'phone', label: '📱 Phone' }
+  { value: 'username', label: 'Username' },
+  { value: 'email', label: 'Email' },
+  { value: 'phone', label: 'Phone' }
 ]
 const TABS = ['manage', 'personal', 'webcreds', 'wallets', 'bookmarks', 'sync', 'settings', 'guide', 'about']
 
@@ -17748,7 +18039,6 @@ const state = {
   msgTimers: new Map()
 }
 
-const GLOBES = { visible: new Set(), raf: null, start: performance.now() }
 
 function $(id) {
   return document.getElementById(id)
@@ -17759,6 +18049,25 @@ function el(tag, className, text) {
   if (className) node.className = className
   if (text !== undefined) node.textContent = text
   return node
+}
+
+const SVG_NS = 'http://www.w3.org/2000/svg'
+
+function lockIcon() {
+  const svg = document.createElementNS(SVG_NS, 'svg')
+  svg.setAttribute('viewBox', '0 0 24 24')
+  svg.setAttribute('class', 'btn-icon')
+  svg.setAttribute('aria-hidden', 'true')
+  for (const [tag, attrs] of [
+    ['rect', { x: '4.5', y: '10.5', width: '15', height: '10', rx: '2.2' }],
+    ['path', { d: 'M8 10.5V7.5a4 4 0 0 1 8 0v3' }],
+    ['path', { d: 'M12 14.6v2.2' }]
+  ]) {
+    const node = document.createElementNS(SVG_NS, tag)
+    for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v)
+    svg.appendChild(node)
+  }
+  return svg
 }
 
 function btn(label, className, handler) {
@@ -17891,134 +18200,6 @@ function fingerprintFailureText(result) {
 
 async function newMasterKey() {
   return masterKeyToCryptoKey(await generateMasterKey())
-}
-
-function globeAngle(now) {
-  return (now - GLOBES.start) * GLOBE_SPIN_PER_MS
-}
-
-function globeTick(now) {
-  const angle = globeAngle(now)
-  for (const draw of GLOBES.visible) draw(angle)
-  GLOBES.raf = GLOBES.visible.size ? requestAnimationFrame(globeTick) : null
-}
-
-function startGlobes() {
-  const canvases = Array.from(document.querySelectorAll('canvas.globe'))
-  const draws = new Map()
-  for (const cv of canvases) draws.set(cv, makeGlobe(cv))
-  if (typeof IntersectionObserver !== 'function') {
-    for (const draw of draws.values()) GLOBES.visible.add(draw)
-    GLOBES.raf = requestAnimationFrame(globeTick)
-    return
-  }
-  const observer = new IntersectionObserver((entries) => {
-    for (const entry of entries) {
-      const draw = draws.get(entry.target)
-      if (!draw) continue
-      if (entry.isIntersecting) {
-        if (!GLOBES.visible.has(draw)) draw(globeAngle(performance.now()))
-        GLOBES.visible.add(draw)
-      } else {
-        GLOBES.visible.delete(draw)
-      }
-    }
-    if (GLOBES.visible.size && GLOBES.raf === null) GLOBES.raf = requestAnimationFrame(globeTick)
-  }, { rootMargin: GLOBE_EARLY_MARGIN })
-  for (const cv of canvases) observer.observe(cv)
-}
-
-function makeGlobe(cv) {
-  const ctx = cv.getContext('2d')
-  const CX = 90
-  const CY = 90
-  const R = 68
-  const TILT = -0.35
-  const LAT = 7
-  const LON = 12
-  const SEG = 48
-  const VT = -38
-  const VB = 44
-  const rotY = (p, a) => { const c = Math.cos(a), s = Math.sin(a); return { x: p.x * c + p.z * s, y: p.y, z: -p.x * s + p.z * c } }
-  const rotX = (p, a) => { const c = Math.cos(a), s = Math.sin(a); return { x: p.x, y: p.y * c - p.z * s, z: p.y * s + p.z * c } }
-  const lats = []
-  const lons = []
-  for (let i = 1; i < LAT + 1; i++) {
-    const phi = -Math.PI / 2 + (Math.PI * i / (LAT + 1))
-    const ring = []
-    for (let j = 0; j <= SEG; j++) { const th = 2 * Math.PI * j / SEG; ring.push({ x: Math.cos(phi) * Math.cos(th), y: Math.sin(phi), z: Math.cos(phi) * Math.sin(th) }) }
-    lats.push(ring)
-  }
-  for (let i = 0; i < LON; i++) {
-    const th = 2 * Math.PI * i / LON
-    const mer = []
-    for (let j = 0; j <= SEG; j++) { const phi = -Math.PI / 2 + Math.PI * j / SEG; mer.push({ x: Math.cos(phi) * Math.cos(th), y: Math.sin(phi), z: Math.cos(phi) * Math.sin(th) }) }
-    lons.push(mer)
-  }
-  const drawWire = (pts, a, side) => {
-    for (let k = 0; k < pts.length - 1; k++) {
-      const A = rotX(rotY(pts[k], a), TILT)
-      const B = rotX(rotY(pts[k + 1], a), TILT)
-      const z = (A.z + B.z) / 2
-      if (side === 'back' && z >= 0) continue
-      if (side === 'front' && z < 0) continue
-      const al = 0.14 + 0.7 * ((z + 1) / 2)
-      ctx.strokeStyle = 'rgba(51,255,102,' + al.toFixed(3) + ')'
-      ctx.lineWidth = 0.5 + 0.8 * ((z + 1) / 2)
-      ctx.beginPath()
-      ctx.moveTo(CX + A.x * R, CY - A.y * R)
-      ctx.lineTo(CX + B.x * R, CY - B.y * R)
-      ctx.stroke()
-    }
-  }
-  const vPath = () => {
-    const ht = 34
-    const thick = 18
-    const p = new Path2D()
-    p.moveTo(CX - ht, CY + VT)
-    p.lineTo(CX, CY + VB)
-    p.lineTo(CX + ht, CY + VT)
-    p.lineTo(CX + ht - thick, CY + VT)
-    p.lineTo(CX, CY + VB - thick * 1.15)
-    p.lineTo(CX - ht + thick, CY + VT)
-    p.closePath()
-    return p
-  }
-  const drawV = () => {
-    const path = vPath()
-    ctx.save()
-    const g = ctx.createLinearGradient(0, CY + VT, 0, CY + VB)
-    g.addColorStop(0, 'rgba(51,255,102,1)')
-    g.addColorStop(1, 'rgba(20,120,55,1)')
-    ctx.shadowColor = 'rgba(51,255,102,0.8)'
-    ctx.shadowBlur = 8
-    ctx.fillStyle = g
-    ctx.fill(path)
-    ctx.shadowBlur = 0
-    ctx.save()
-    ctx.clip(path)
-    ctx.strokeStyle = 'rgba(10,14,10,0.85)'
-    ctx.lineWidth = 2
-    for (let y = CY + VT; y <= CY + VB; y += 5) { ctx.beginPath(); ctx.moveTo(CX - 50, y); ctx.lineTo(CX + 50, y); ctx.stroke() }
-    ctx.restore()
-    ctx.lineWidth = 1.2
-    ctx.strokeStyle = '#7dffa6'
-    ctx.stroke(path)
-    ctx.restore()
-  }
-  return (ang) => {
-    ctx.clearRect(0, 0, cv.width, cv.height)
-    for (const ring of lats) drawWire(ring, ang, 'back')
-    for (const mer of lons) drawWire(mer, ang, 'back')
-    drawV()
-    for (const ring of lats) drawWire(ring, ang, 'front')
-    for (const mer of lons) drawWire(mer, ang, 'front')
-    ctx.strokeStyle = '#33ff66'
-    ctx.lineWidth = 1.5
-    ctx.beginPath()
-    ctx.arc(CX, CY, R, 0, 2 * Math.PI)
-    ctx.stroke()
-  }
 }
 
 function showView(name) {
@@ -18627,13 +18808,15 @@ async function deletePassword() {
 function renderGate(container, label, msgId, section, reload) {
   container.textContent = ''
   const gate = el('div', 'gate')
-  gate.appendChild(btn('🔐 ' + label, '', async () => {
+  const unlock = btn(label, '', async () => {
     const r = await promptAuth()
     if (!r.success) { showMsg(msgId, 'Authentication required', 'error'); return }
     session.setMasterKey(r.masterKey)
     state.unlocked[section] = true
     reload()
-  }))
+  })
+  unlock.prepend(lockIcon())
+  gate.appendChild(unlock)
   container.appendChild(gate)
 }
 
@@ -19670,6 +19853,38 @@ async function saveGenerator() {
   showMsg('msg-settings', 'Password generator updated', 'success')
 }
 
+const THEME_KEY = 'vvTheme'
+
+function currentTheme() {
+  return document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light'
+}
+
+function applyTheme(theme, share) {
+  if (theme === 'dark') document.documentElement.setAttribute('data-theme', 'dark')
+  else document.documentElement.removeAttribute('data-theme')
+  try { localStorage.setItem(THEME_KEY, theme === 'dark' ? 'dark' : 'light') } catch (e) {}
+  updateThemeButton()
+  if (share) platform.setBrowserTheme(theme === 'dark' ? 'night' : 'day')
+}
+
+async function syncTheme() {
+  const shared = await platform.browserTheme()
+  if (!shared) {
+    if (platform.isNative()) platform.setBrowserTheme(currentTheme() === 'dark' ? 'night' : 'day')
+    return
+  }
+  const theme = shared === 'night' ? 'dark' : 'light'
+  if (theme !== currentTheme()) applyTheme(theme, false)
+}
+
+function updateThemeButton() {
+  const button = $('btn-theme')
+  if (!button) return
+  const night = currentTheme() === 'dark'
+  button.setAttribute('aria-label', night ? 'Switch to day mode' : 'Switch to night mode')
+  button.title = night ? 'Day mode' : 'Night mode'
+}
+
 async function renameKey() {
   const name = $('key-nickname-input').value.trim()
   if (!name) { showMsg('msg-settings', 'Name cannot be empty', 'error'); return }
@@ -19678,7 +19893,33 @@ async function renameKey() {
     showMsg('msg-settings', 'Key and vault renamed. Files you export from now on use the new name.', 'success')
   } catch (e) {
     showMsg('msg-settings', 'Rename failed', 'error')
+    return
   }
+  await offerExportAfterRename(name)
+}
+
+async function offerExportAfterRename(name) {
+  if (!key()) return
+  const keyName = keyFileName(name)
+  const vaultName = backupFileName(name)
+  const go = await confirmDialog({
+    title: 'Export Key and Vault now with the new name?',
+    text: 'Your saved files keep their old names and still open. Export now to save ' + keyName + ' and ' + vaultName + ' to Downloads. You confirm once with your fingerprint, device PIN, or password.',
+    okLabel: 'Export both',
+    cancelLabel: 'Not now'
+  })
+  if (!go) { showMsg('msg-settings', 'Key and vault renamed. Your saved files keep their old names and still open. Export any time to get files with the new name.', 'success'); return }
+  if (!(await requireTransferAuth('msg-settings'))) { showMsg('msg-settings', 'Export cancelled. The rename is saved, and nothing was exported.', 'error'); return }
+  showMsg('msg-settings', 'Saving ' + keyName + '...', 'info')
+  let pkg
+  try { pkg = await ensureKeyPackage(key()) } catch (e) { showMsg('msg-settings', 'Could not export the key: ' + errText(e), 'error'); return }
+  if (!pkg) { showMsg('msg-settings', 'Key export cancelled. The rename is saved, and nothing was exported.', 'error'); return }
+  try { await deliverFile(keyName, JSON.stringify(pkg), 'download') } catch (e) { showMsg('msg-settings', 'Could not save ' + keyName + ': ' + errText(e) + '. Nothing was exported.', 'error'); return }
+  showMsg('msg-settings', 'Saved ' + keyName + '. Saving ' + vaultName + '...', 'info')
+  const bundle = await vaultFile.buildBundle()
+  if (!vaultFile.bundleHasData(bundle)) { showMsg('msg-settings', 'Saved ' + keyName + ' to Downloads. The vault is empty, so there was no vault file to save.', 'success'); return }
+  try { await deliverFile(vaultName, JSON.stringify(bundle), 'download') } catch (e) { showMsg('msg-settings', 'Saved ' + keyName + ', but could not save ' + vaultName + ': ' + errText(e) + '. Use Export Vault in Sync to try again.', 'error'); return }
+  showMsg('msg-settings', 'Saved ' + keyName + ' and ' + vaultName + ' to Downloads. Both stay encrypted. Your old files still open, so delete them once you no longer need them.', 'success')
 }
 
 async function clearVault() {
@@ -19700,6 +19941,7 @@ function attachActivity() {
   for (const name of ACTIVITY_EVENTS) document.addEventListener(name, bump, { capture: true, passive: true })
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden && key()) session.checkTimeout()
+    if (!document.hidden) syncTheme()
     if (document.hidden) stopScanner()
   })
 }
@@ -19756,6 +19998,9 @@ function wire() {
   $('select-gen-min').onchange = saveGenerator
   $('select-gen-max').onchange = saveGenerator
   $('btn-rename-key').onclick = renameKey
+  $('btn-theme').onclick = () => applyTheme(currentTheme() === 'dark' ? 'light' : 'dark', true)
+  syncTheme()
+  updateThemeButton()
   $('btn-backup-sync').onclick = () => showTab('sync')
   $('btn-clear-vault').onclick = clearVault
   for (const b of document.querySelectorAll('[data-link]')) b.onclick = () => platform.openExternal(b.dataset.link)
@@ -20217,7 +20462,6 @@ async function init() {
   session.setAutoLockProvider(() => state.settings.autoLock)
   session.onLock(() => { handleLocked() })
   wire()
-  startGlobes()
   attachActivity()
   walletsTab.init({
     getKey: () => key(),

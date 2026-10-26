@@ -264,6 +264,23 @@ async function browserSettings() {
   }
 }
 
+async function browserTheme() {
+  const bb = plugin('BrowserBridge')
+  if (!bb) return ''
+  try {
+    const r = await bb.getSettings()
+    return r && (r.theme === 'day' || r.theme === 'night') ? r.theme : ''
+  } catch (e) {
+    return ''
+  }
+}
+
+async function setBrowserTheme(theme) {
+  const bb = plugin('BrowserBridge')
+  if (!bb) return
+  try { await bb.setTheme({ theme: theme === 'night' ? 'night' : 'day' }) } catch (e) {}
+}
+
 async function setBrowserEngine(engine) {
   const bb = plugin('BrowserBridge')
   if (!bb) throw new Error('The browser is not available')
@@ -333,6 +350,8 @@ export {
   openAutofillSettings,
   openExternal,
   browserSettings,
+  browserTheme,
+  setBrowserTheme,
   setBrowserEngine,
   removeBrowserSite,
   openBrowserSearch,

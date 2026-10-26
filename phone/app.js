@@ -28,8 +28,6 @@ const MSG_SHOW_MS = 6000
 const ACTIVITY_EVENTS = ['touchstart', 'click', 'input', 'keydown', 'scroll']
 const MASK = '••••••••'
 const DEFAULT_NICKNAME = 'My Master Key'
-const GLOBE_SPIN_PER_MS = 0.0003
-const GLOBE_EARLY_MARGIN = '240px 0px 240px 0px'
 const SHARE_URL_PATTERN = /https?:\/\/[^\s<>"'`]+/i
 const SHARE_URL_TRAILING = /[)\].,;:!?'"]+$/
 const SHARE_TITLE_MAX = 200
@@ -44,9 +42,9 @@ const PASSWORD_RULE_TEXT = '12+ characters with a letter, a number, and a symbol
 const PASSPHRASE_TIP = 'Use four or more random words plus a number and a symbol, like copper-lantern-mosaic-drift7!. Capitalization matters.'
 const ANSWER_TIP = 'One word. Capitalization matters.'
 const LOGIN_TYPES = [
-  { value: 'username', label: '👤 Username' },
-  { value: 'email', label: '📧 Email' },
-  { value: 'phone', label: '📱 Phone' }
+  { value: 'username', label: 'Username' },
+  { value: 'email', label: 'Email' },
+  { value: 'phone', label: 'Phone' }
 ]
 const TABS = ['manage', 'personal', 'webcreds', 'wallets', 'bookmarks', 'sync', 'settings', 'guide', 'about']
 
@@ -70,7 +68,6 @@ const state = {
   msgTimers: new Map()
 }
 
-const GLOBES = { visible: new Set(), raf: null, start: performance.now() }
 
 function $(id) {
   return document.getElementById(id)
@@ -81,6 +78,25 @@ function el(tag, className, text) {
   if (className) node.className = className
   if (text !== undefined) node.textContent = text
   return node
+}
+
+const SVG_NS = 'http://www.w3.org/2000/svg'
+
+function lockIcon() {
+  const svg = document.createElementNS(SVG_NS, 'svg')
+  svg.setAttribute('viewBox', '0 0 24 24')
+  svg.setAttribute('class', 'btn-icon')
+  svg.setAttribute('aria-hidden', 'true')
+  for (const [tag, attrs] of [
+    ['rect', { x: '4.5', y: '10.5', width: '15', height: '10', rx: '2.2' }],
+    ['path', { d: 'M8 10.5V7.5a4 4 0 0 1 8 0v3' }],
+    ['path', { d: 'M12 14.6v2.2' }]
+  ]) {
+    const node = document.createElementNS(SVG_NS, tag)
+    for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v)
+    svg.appendChild(node)
+  }
+  return svg
 }
 
 function btn(label, className, handler) {
@@ -213,134 +229,6 @@ function fingerprintFailureText(result) {
 
 async function newMasterKey() {
   return masterKeyToCryptoKey(await generateMasterKey())
-}
-
-function globeAngle(now) {
-  return (now - GLOBES.start) * GLOBE_SPIN_PER_MS
-}
-
-function globeTick(now) {
-  const angle = globeAngle(now)
-  for (const draw of GLOBES.visible) draw(angle)
-  GLOBES.raf = GLOBES.visible.size ? requestAnimationFrame(globeTick) : null
-}
-
-function startGlobes() {
-  const canvases = Array.from(document.querySelectorAll('canvas.globe'))
-  const draws = new Map()
-  for (const cv of canvases) draws.set(cv, makeGlobe(cv))
-  if (typeof IntersectionObserver !== 'function') {
-    for (const draw of draws.values()) GLOBES.visible.add(draw)
-    GLOBES.raf = requestAnimationFrame(globeTick)
-    return
-  }
-  const observer = new IntersectionObserver((entries) => {
-    for (const entry of entries) {
-      const draw = draws.get(entry.target)
-      if (!draw) continue
-      if (entry.isIntersecting) {
-        if (!GLOBES.visible.has(draw)) draw(globeAngle(performance.now()))
-        GLOBES.visible.add(draw)
-      } else {
-        GLOBES.visible.delete(draw)
-      }
-    }
-    if (GLOBES.visible.size && GLOBES.raf === null) GLOBES.raf = requestAnimationFrame(globeTick)
-  }, { rootMargin: GLOBE_EARLY_MARGIN })
-  for (const cv of canvases) observer.observe(cv)
-}
-
-function makeGlobe(cv) {
-  const ctx = cv.getContext('2d')
-  const CX = 90
-  const CY = 90
-  const R = 68
-  const TILT = -0.35
-  const LAT = 7
-  const LON = 12
-  const SEG = 48
-  const VT = -38
-  const VB = 44
-  const rotY = (p, a) => { const c = Math.cos(a), s = Math.sin(a); return { x: p.x * c + p.z * s, y: p.y, z: -p.x * s + p.z * c } }
-  const rotX = (p, a) => { const c = Math.cos(a), s = Math.sin(a); return { x: p.x, y: p.y * c - p.z * s, z: p.y * s + p.z * c } }
-  const lats = []
-  const lons = []
-  for (let i = 1; i < LAT + 1; i++) {
-    const phi = -Math.PI / 2 + (Math.PI * i / (LAT + 1))
-    const ring = []
-    for (let j = 0; j <= SEG; j++) { const th = 2 * Math.PI * j / SEG; ring.push({ x: Math.cos(phi) * Math.cos(th), y: Math.sin(phi), z: Math.cos(phi) * Math.sin(th) }) }
-    lats.push(ring)
-  }
-  for (let i = 0; i < LON; i++) {
-    const th = 2 * Math.PI * i / LON
-    const mer = []
-    for (let j = 0; j <= SEG; j++) { const phi = -Math.PI / 2 + Math.PI * j / SEG; mer.push({ x: Math.cos(phi) * Math.cos(th), y: Math.sin(phi), z: Math.cos(phi) * Math.sin(th) }) }
-    lons.push(mer)
-  }
-  const drawWire = (pts, a, side) => {
-    for (let k = 0; k < pts.length - 1; k++) {
-      const A = rotX(rotY(pts[k], a), TILT)
-      const B = rotX(rotY(pts[k + 1], a), TILT)
-      const z = (A.z + B.z) / 2
-      if (side === 'back' && z >= 0) continue
-      if (side === 'front' && z < 0) continue
-      const al = 0.14 + 0.7 * ((z + 1) / 2)
-      ctx.strokeStyle = 'rgba(51,255,102,' + al.toFixed(3) + ')'
-      ctx.lineWidth = 0.5 + 0.8 * ((z + 1) / 2)
-      ctx.beginPath()
-      ctx.moveTo(CX + A.x * R, CY - A.y * R)
-      ctx.lineTo(CX + B.x * R, CY - B.y * R)
-      ctx.stroke()
-    }
-  }
-  const vPath = () => {
-    const ht = 34
-    const thick = 18
-    const p = new Path2D()
-    p.moveTo(CX - ht, CY + VT)
-    p.lineTo(CX, CY + VB)
-    p.lineTo(CX + ht, CY + VT)
-    p.lineTo(CX + ht - thick, CY + VT)
-    p.lineTo(CX, CY + VB - thick * 1.15)
-    p.lineTo(CX - ht + thick, CY + VT)
-    p.closePath()
-    return p
-  }
-  const drawV = () => {
-    const path = vPath()
-    ctx.save()
-    const g = ctx.createLinearGradient(0, CY + VT, 0, CY + VB)
-    g.addColorStop(0, 'rgba(51,255,102,1)')
-    g.addColorStop(1, 'rgba(20,120,55,1)')
-    ctx.shadowColor = 'rgba(51,255,102,0.8)'
-    ctx.shadowBlur = 8
-    ctx.fillStyle = g
-    ctx.fill(path)
-    ctx.shadowBlur = 0
-    ctx.save()
-    ctx.clip(path)
-    ctx.strokeStyle = 'rgba(10,14,10,0.85)'
-    ctx.lineWidth = 2
-    for (let y = CY + VT; y <= CY + VB; y += 5) { ctx.beginPath(); ctx.moveTo(CX - 50, y); ctx.lineTo(CX + 50, y); ctx.stroke() }
-    ctx.restore()
-    ctx.lineWidth = 1.2
-    ctx.strokeStyle = '#7dffa6'
-    ctx.stroke(path)
-    ctx.restore()
-  }
-  return (ang) => {
-    ctx.clearRect(0, 0, cv.width, cv.height)
-    for (const ring of lats) drawWire(ring, ang, 'back')
-    for (const mer of lons) drawWire(mer, ang, 'back')
-    drawV()
-    for (const ring of lats) drawWire(ring, ang, 'front')
-    for (const mer of lons) drawWire(mer, ang, 'front')
-    ctx.strokeStyle = '#33ff66'
-    ctx.lineWidth = 1.5
-    ctx.beginPath()
-    ctx.arc(CX, CY, R, 0, 2 * Math.PI)
-    ctx.stroke()
-  }
 }
 
 function showView(name) {
@@ -949,13 +837,15 @@ async function deletePassword() {
 function renderGate(container, label, msgId, section, reload) {
   container.textContent = ''
   const gate = el('div', 'gate')
-  gate.appendChild(btn('🔐 ' + label, '', async () => {
+  const unlock = btn(label, '', async () => {
     const r = await promptAuth()
     if (!r.success) { showMsg(msgId, 'Authentication required', 'error'); return }
     session.setMasterKey(r.masterKey)
     state.unlocked[section] = true
     reload()
-  }))
+  })
+  unlock.prepend(lockIcon())
+  gate.appendChild(unlock)
   container.appendChild(gate)
 }
 
@@ -1992,6 +1882,38 @@ async function saveGenerator() {
   showMsg('msg-settings', 'Password generator updated', 'success')
 }
 
+const THEME_KEY = 'vvTheme'
+
+function currentTheme() {
+  return document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light'
+}
+
+function applyTheme(theme, share) {
+  if (theme === 'dark') document.documentElement.setAttribute('data-theme', 'dark')
+  else document.documentElement.removeAttribute('data-theme')
+  try { localStorage.setItem(THEME_KEY, theme === 'dark' ? 'dark' : 'light') } catch (e) {}
+  updateThemeButton()
+  if (share) platform.setBrowserTheme(theme === 'dark' ? 'night' : 'day')
+}
+
+async function syncTheme() {
+  const shared = await platform.browserTheme()
+  if (!shared) {
+    if (platform.isNative()) platform.setBrowserTheme(currentTheme() === 'dark' ? 'night' : 'day')
+    return
+  }
+  const theme = shared === 'night' ? 'dark' : 'light'
+  if (theme !== currentTheme()) applyTheme(theme, false)
+}
+
+function updateThemeButton() {
+  const button = $('btn-theme')
+  if (!button) return
+  const night = currentTheme() === 'dark'
+  button.setAttribute('aria-label', night ? 'Switch to day mode' : 'Switch to night mode')
+  button.title = night ? 'Day mode' : 'Night mode'
+}
+
 async function renameKey() {
   const name = $('key-nickname-input').value.trim()
   if (!name) { showMsg('msg-settings', 'Name cannot be empty', 'error'); return }
@@ -2000,7 +1922,33 @@ async function renameKey() {
     showMsg('msg-settings', 'Key and vault renamed. Files you export from now on use the new name.', 'success')
   } catch (e) {
     showMsg('msg-settings', 'Rename failed', 'error')
+    return
   }
+  await offerExportAfterRename(name)
+}
+
+async function offerExportAfterRename(name) {
+  if (!key()) return
+  const keyName = keyFileName(name)
+  const vaultName = backupFileName(name)
+  const go = await confirmDialog({
+    title: 'Export Key and Vault now with the new name?',
+    text: 'Your saved files keep their old names and still open. Export now to save ' + keyName + ' and ' + vaultName + ' to Downloads. You confirm once with your fingerprint, device PIN, or password.',
+    okLabel: 'Export both',
+    cancelLabel: 'Not now'
+  })
+  if (!go) { showMsg('msg-settings', 'Key and vault renamed. Your saved files keep their old names and still open. Export any time to get files with the new name.', 'success'); return }
+  if (!(await requireTransferAuth('msg-settings'))) { showMsg('msg-settings', 'Export cancelled. The rename is saved, and nothing was exported.', 'error'); return }
+  showMsg('msg-settings', 'Saving ' + keyName + '...', 'info')
+  let pkg
+  try { pkg = await ensureKeyPackage(key()) } catch (e) { showMsg('msg-settings', 'Could not export the key: ' + errText(e), 'error'); return }
+  if (!pkg) { showMsg('msg-settings', 'Key export cancelled. The rename is saved, and nothing was exported.', 'error'); return }
+  try { await deliverFile(keyName, JSON.stringify(pkg), 'download') } catch (e) { showMsg('msg-settings', 'Could not save ' + keyName + ': ' + errText(e) + '. Nothing was exported.', 'error'); return }
+  showMsg('msg-settings', 'Saved ' + keyName + '. Saving ' + vaultName + '...', 'info')
+  const bundle = await vaultFile.buildBundle()
+  if (!vaultFile.bundleHasData(bundle)) { showMsg('msg-settings', 'Saved ' + keyName + ' to Downloads. The vault is empty, so there was no vault file to save.', 'success'); return }
+  try { await deliverFile(vaultName, JSON.stringify(bundle), 'download') } catch (e) { showMsg('msg-settings', 'Saved ' + keyName + ', but could not save ' + vaultName + ': ' + errText(e) + '. Use Export Vault in Sync to try again.', 'error'); return }
+  showMsg('msg-settings', 'Saved ' + keyName + ' and ' + vaultName + ' to Downloads. Both stay encrypted. Your old files still open, so delete them once you no longer need them.', 'success')
 }
 
 async function clearVault() {
@@ -2022,6 +1970,7 @@ function attachActivity() {
   for (const name of ACTIVITY_EVENTS) document.addEventListener(name, bump, { capture: true, passive: true })
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden && key()) session.checkTimeout()
+    if (!document.hidden) syncTheme()
     if (document.hidden) stopScanner()
   })
 }
@@ -2078,6 +2027,9 @@ function wire() {
   $('select-gen-min').onchange = saveGenerator
   $('select-gen-max').onchange = saveGenerator
   $('btn-rename-key').onclick = renameKey
+  $('btn-theme').onclick = () => applyTheme(currentTheme() === 'dark' ? 'light' : 'dark', true)
+  syncTheme()
+  updateThemeButton()
   $('btn-backup-sync').onclick = () => showTab('sync')
   $('btn-clear-vault').onclick = clearVault
   for (const b of document.querySelectorAll('[data-link]')) b.onclick = () => platform.openExternal(b.dataset.link)
@@ -2539,7 +2491,6 @@ async function init() {
   session.setAutoLockProvider(() => state.settings.autoLock)
   session.onLock(() => { handleLocked() })
   wire()
-  startGlobes()
   attachActivity()
   walletsTab.init({
     getKey: () => key(),

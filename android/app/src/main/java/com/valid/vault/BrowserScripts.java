@@ -60,7 +60,7 @@ final class BrowserScripts {
         "<!doctype html><html><head><meta charset=\"utf-8\">"
         + "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; script-src 'unsafe-inline'; worker-src blob:; style-src 'unsafe-inline'\">"
         + "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
-        + "<style>html,body{margin:0;height:100%;overflow:hidden;background:#0A0E0A}canvas{display:block;width:100vw;height:100vh}</style>"
+        + "<style>html,body{margin:0;height:100%;overflow:hidden;background:transparent}canvas{display:block;width:100vw;height:100vh}</style>"
         + "</head><body><canvas id=\"stage\"></canvas><script id=\"art\">";
     private static final String START_MIDDLE = "</script><script id=\"paint\">";
     private static final String START_DRIVER = "</script><script>";
@@ -92,8 +92,8 @@ final class BrowserScripts {
         }
     }
 
-    static String paint(int seed) {
-        return "paintStart(" + seed + ")";
+    static String paint(int seed, boolean day) {
+        return "paintStart(" + seed + ",'" + (day ? "day" : "night") + "')";
     }
 
     static String exportStart(int id) {

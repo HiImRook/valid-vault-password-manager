@@ -19,12 +19,16 @@ public class SearchWidgetProvider extends AppWidgetProvider {
         return PendingIntent.getActivity(context, REQUEST_SEARCH, intent, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
     }
 
+    protected int layoutId() {
+        return R.layout.vv_widget_search;
+    }
+
     @Override
     public void onUpdate(Context context, AppWidgetManager manager, int[] appWidgetIds) {
         PendingIntent search = searchPending(context);
         PendingIntent bookmarks = LaunchTarget.tabPending(context, LaunchTarget.TAB_BOOKMARKS, REQUEST_BOOKMARKS);
         for (int id : appWidgetIds) {
-            RemoteViews views = new RemoteViews(context.getPackageName(), R.layout.vv_widget_search);
+            RemoteViews views = new RemoteViews(context.getPackageName(), layoutId());
             views.setOnClickPendingIntent(R.id.vv_widget_search_root, search);
             views.setOnClickPendingIntent(R.id.vv_widget_bookmarks, bookmarks);
             manager.updateAppWidget(id, views);

@@ -17,6 +17,7 @@ const LINK_STORE = 'link'
 const LINK_KEY = 'vaultFile'
 const SYNC_LOCK = 'valid-vault-uni-vault-sync'
 const STATE_KEYS = ['vaultChangedAt', 'linkSyncedAt', 'linkFileSig']
+const LAST_LINK_KEY = 'linkLastName'
 const NOT_VAULT_MSG = 'The linked file is not a readable Valid Vault vault file. Nothing was changed.'
 const UNAVAILABLE_MSG = 'The linked vault file cannot be reached. It may have been moved, renamed, or be on a drive that is not plugged in. This browser keeps working with its own copy.'
 const PERMISSION_MSG = 'This browser needs your permission again to use the vault file. Click Reconnect.'
@@ -62,11 +63,17 @@ async function getLink() {
 
 async function saveLink(handle) {
   await linkOp('readwrite', (s) => s.put({ handle, name: handle.name, linkedAt: Date.now() }, LINK_KEY))
+  try { await chrome.storage.local.set({ [LAST_LINK_KEY]: handle.name }) } catch (e) {}
 }
 
 async function clearLink() {
   try { await linkOp('readwrite', (s) => s.delete(LINK_KEY)) } catch (e) {}
-  await chrome.storage.local.remove(['linkSyncedAt', 'linkFileSig', 'linkStatus'])
+  await chrome.storage.local.remove(['linkSyncedAt', 'linkFileSig', 'linkStatus', LAST_LINK_KEY])
+}
+
+async function getLostLinkName() {
+  if (await getLink()) return ''
+  try { return (await chrome.storage.local.get(LAST_LINK_KEY))[LAST_LINK_KEY] || '' } catch (e) { return '' }
 }
 
 async function setStatus(state, message) {
@@ -155,7 +162,7 @@ async function runSync(mk, force) {
   const syncedAt = Date.now()
   let newSig = sig
   let wrote = false
-  if (dirty && bundleHasData(await buildBundle())) {
+  if ((dirty || merged) && bundleHasData(await buildBundle())) {
     try { newSig = await writeBundle(handle) } catch (e) {
       await setStatus('unavailable', UNAVAILABLE_MSG)
       return { state: 'unavailable', message: UNAVAILABLE_MSG }
@@ -199,6 +206,16 @@ async function linkNew(handle, mk) {
   return { state: 'ok', merged: false, wrote: true }
 }
 
+async function reconnectAfterUnlock(mk) {
+  const link = await getLink()
+  if (!link) return { state: 'unlinked' }
+  if (!(await hasWritePermission(link.handle, true))) {
+    await setStatus('needs-permission', PERMISSION_MSG)
+    return { state: 'needs-permission', message: PERMISSION_MSG }
+  }
+  return syncNow(mk)
+}
+
 async function reconnect(mk) {
   const link = await getLink()
   if (!link) return { state: 'unlinked' }
@@ -227,5 +244,7 @@ export {
   syncNow,
   linkExisting,
   linkNew,
-  reconnect
+  reconnect,
+  reconnectAfterUnlock,
+  getLostLinkName
 }

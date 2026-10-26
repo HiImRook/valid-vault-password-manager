@@ -1,5 +1,6 @@
 import * as uniVault from './linkedvault.js'
 import { masterKeyToCryptoKey } from './crypto.js'
+import { openDB as openVaultStore } from './store.js'
 import { saveCredential as passwordsSaveCredential, getCredentials as passwordsGetCredentials, getRelatedCredentials as passwordsGetRelated, noteCredentialUse as passwordsNoteUse, restorePreviousPassword as passwordsRestorePrevious } from './passwords.js'
 
 function readRawRecord(storeName, key) {
@@ -25,8 +26,11 @@ function readRawRecord(storeName, key) {
 }
 
 async function getAuthRecord() {
+  try { await openVaultStore() } catch (e) {}
   return readRawRecord('auth', 'primary')
 }
+
+openVaultStore().catch(() => {})
 
 async function getSessionKeyBytes() {
   try {
@@ -44,6 +48,7 @@ async function decryptField(field, key) {
 }
 
 async function getPersonalInfoRecord() {
+  try { await openVaultStore() } catch (e) {}
   return readRawRecord('personalInfo', 'profile')
 }
 

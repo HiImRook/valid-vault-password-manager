@@ -7,36 +7,63 @@
 
     <FrameLayout
         android:layout_width="match_parent"
-        android:layout_height="48dp"
+        android:layout_height="52dp"
         android:layout_gravity="center_vertical"
-        android:background="@drawable/vv_widget_search_bg">
+        android:background="@drawable/vv_widget_night_bg"
+        android:paddingBottom="3dp">
 
-        <TextView
+        <FrameLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_gravity="center"
-            android:fontFamily="monospace"
-            android:text="@string/vv_search_privately"
-            android:textColor="#33FF66"
-            android:textSize="16sp" />
+            android:layout_gravity="center">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingEnd="1.5dp"
+                android:paddingBottom="1.5dp"
+                android:fontFamily="sans-serif-medium"
+                android:textStyle="normal"
+                android:maxLines="1"
+                android:text="@string/vv_search_privately"
+                android:textColor="#4DFFFFFF"
+                android:textSize="16sp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingStart="0.75dp"
+                android:paddingTop="0.75dp"
+                android:fontFamily="sans-serif-medium"
+                android:textStyle="normal"
+                android:maxLines="1"
+                android:text="@string/vv_search_privately"
+                android:textColor="#DFE2E6"
+                android:textSize="16sp"
+                android:shadowColor="#B3000000"
+                android:shadowDx="1"
+                android:shadowDy="1"
+                android:shadowRadius="1" />
+
+        </FrameLayout>
 
         <ImageView
-            android:layout_width="24dp"
-            android:layout_height="24dp"
+            android:layout_width="26dp"
+            android:layout_height="26dp"
             android:layout_gravity="end|center_vertical"
             android:layout_marginEnd="16dp"
             android:contentDescription="@string/vv_search_privately"
-            android:src="@drawable/vv_ic_widget_search" />
+            android:src="@drawable/vv_wic_search_night" />
 
     </FrameLayout>
 
     <ImageView
         android:id="@+id/vv_widget_bookmarks"
-        android:layout_width="48dp"
-        android:layout_height="48dp"
+        android:layout_width="50dp"
+        android:layout_height="50dp"
         android:layout_gravity="start|center_vertical"
         android:padding="12dp"
         android:contentDescription="@string/vv_widget_bookmarks"
-        android:src="@drawable/vv_ic_bookmark" />
+        android:src="@drawable/vv_wic_bookmark_night" />
 
 </FrameLayout>

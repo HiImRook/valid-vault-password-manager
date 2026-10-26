@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Valid Vault</string>
+    <string name="title_activity_main">Valid Vault</string>
+    <string name="package_name">com.valid.vault</string>
+    <string name="custom_url_scheme">com.valid.vault</string>
+</resources>

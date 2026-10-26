@@ -75,7 +75,12 @@
   <div class="container">
     <div class="wordmark">VALID VAULT</div>
     <div class="site" id="site"></div>
-    <div class="section">
+    <div class="section hidden" id="reconnect-box">
+      <p class="msg" style="margin:0 0 10px;">Unlocked. This browser needs your OK to keep your vault file in sync.</p>
+      <button id="btn-reconnect">Reconnect vault file</button>
+      <button class="link" id="btn-reconnect-skip">Not now</button>
+    </div>
+    <div class="section" id="unlock-box">
       <button id="btn-fingerprint" class="hidden">Unlock with Fingerprint</button>
       <div class="row">
         <div class="pw-wrap">

@@ -8,25 +8,52 @@
     <FrameLayout
         android:id="@+id/vv_panel_search"
         android:layout_width="match_parent"
-        android:layout_height="48dp"
-        android:background="@drawable/vv_widget_search_bg">
+        android:layout_height="52dp"
+        android:background="@drawable/vv_widget_night_bg"
+        android:paddingBottom="3dp">
 
-        <TextView
+        <FrameLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_gravity="center"
-            android:fontFamily="monospace"
-            android:text="@string/vv_search_privately"
-            android:textColor="#33FF66"
-            android:textSize="16sp" />
+            android:layout_gravity="center">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingEnd="1.5dp"
+                android:paddingBottom="1.5dp"
+                android:fontFamily="sans-serif-medium"
+                android:textStyle="normal"
+                android:maxLines="1"
+                android:text="@string/vv_search_privately"
+                android:textColor="#4DFFFFFF"
+                android:textSize="16sp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingStart="0.75dp"
+                android:paddingTop="0.75dp"
+                android:fontFamily="sans-serif-medium"
+                android:textStyle="normal"
+                android:maxLines="1"
+                android:text="@string/vv_search_privately"
+                android:textColor="#DFE2E6"
+                android:textSize="16sp"
+                android:shadowColor="#B3000000"
+                android:shadowDx="1"
+                android:shadowDy="1"
+                android:shadowRadius="1" />
+
+        </FrameLayout>
 
         <ImageView
-            android:layout_width="24dp"
-            android:layout_height="24dp"
+            android:layout_width="26dp"
+            android:layout_height="26dp"
             android:layout_gravity="end|center_vertical"
             android:layout_marginEnd="16dp"
             android:contentDescription="@string/vv_search_privately"
-            android:src="@drawable/vv_ic_widget_search" />
+            android:src="@drawable/vv_wic_search_night" />
 
     </FrameLayout>
 
@@ -44,7 +71,8 @@
             android:layout_weight="1"
             android:layout_marginStart="0dp"
             android:layout_marginEnd="4dp"
-            android:background="@drawable/vv_widget_tile_bg"
+            android:background="@drawable/vv_widget_night_bg"
+            android:paddingBottom="3dp"
             android:gravity="center"
             android:orientation="vertical">
 
@@ -52,17 +80,43 @@
                 android:layout_width="28dp"
                 android:layout_height="28dp"
                 android:contentDescription="@string/vv_widget_bookmarks"
-                android:src="@drawable/vv_ic_bookmark" />
+                android:src="@drawable/vv_wic_bookmark_night" />
+
+            <FrameLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            
+            android:layout_marginTop="4dp">
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:fontFamily="monospace"
+                android:paddingEnd="1.5dp"
+                android:paddingBottom="1.5dp"
+                android:fontFamily="sans-serif-medium"
+                android:textStyle="normal"
                 android:maxLines="1"
                 android:text="@string/vv_widget_bookmarks"
-                android:textColor="#33FF66"
-                android:textSize="11sp" />
+                android:textColor="#4DFFFFFF"
+                android:textSize="12sp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingStart="0.75dp"
+                android:paddingTop="0.75dp"
+                android:fontFamily="sans-serif-medium"
+                android:textStyle="normal"
+                android:maxLines="1"
+                android:text="@string/vv_widget_bookmarks"
+                android:textColor="#DFE2E6"
+                android:textSize="12sp"
+                android:shadowColor="#B3000000"
+                android:shadowDx="1"
+                android:shadowDy="1"
+                android:shadowRadius="1" />
+
+        </FrameLayout>
 
         </LinearLayout>
         <LinearLayout
@@ -72,7 +126,8 @@
             android:layout_weight="1"
             android:layout_marginStart="4dp"
             android:layout_marginEnd="4dp"
-            android:background="@drawable/vv_widget_tile_bg"
+            android:background="@drawable/vv_widget_night_bg"
+            android:paddingBottom="3dp"
             android:gravity="center"
             android:orientation="vertical">
 
@@ -80,17 +135,43 @@
                 android:layout_width="28dp"
                 android:layout_height="28dp"
                 android:contentDescription="@string/vv_widget_logins"
-                android:src="@drawable/vv_ic_login" />
+                android:src="@drawable/vv_wic_login_night" />
+
+            <FrameLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            
+            android:layout_marginTop="4dp">
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:fontFamily="monospace"
+                android:paddingEnd="1.5dp"
+                android:paddingBottom="1.5dp"
+                android:fontFamily="sans-serif-medium"
+                android:textStyle="normal"
                 android:maxLines="1"
                 android:text="@string/vv_widget_logins"
-                android:textColor="#33FF66"
-                android:textSize="11sp" />
+                android:textColor="#4DFFFFFF"
+                android:textSize="12sp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingStart="0.75dp"
+                android:paddingTop="0.75dp"
+                android:fontFamily="sans-serif-medium"
+                android:textStyle="normal"
+                android:maxLines="1"
+                android:text="@string/vv_widget_logins"
+                android:textColor="#DFE2E6"
+                android:textSize="12sp"
+                android:shadowColor="#B3000000"
+                android:shadowDx="1"
+                android:shadowDy="1"
+                android:shadowRadius="1" />
+
+        </FrameLayout>
 
         </LinearLayout>
         <LinearLayout
@@ -100,7 +181,8 @@
             android:layout_weight="1"
             android:layout_marginStart="4dp"
             android:layout_marginEnd="4dp"
-            android:background="@drawable/vv_widget_tile_bg"
+            android:background="@drawable/vv_widget_night_bg"
+            android:paddingBottom="3dp"
             android:gravity="center"
             android:orientation="vertical">
 
@@ -108,17 +190,43 @@
                 android:layout_width="28dp"
                 android:layout_height="28dp"
                 android:contentDescription="@string/vv_widget_wallets"
-                android:src="@drawable/vv_ic_wallet" />
+                android:src="@drawable/vv_wic_wallet_night" />
+
+            <FrameLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            
+            android:layout_marginTop="4dp">
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:fontFamily="monospace"
+                android:paddingEnd="1.5dp"
+                android:paddingBottom="1.5dp"
+                android:fontFamily="sans-serif-medium"
+                android:textStyle="normal"
                 android:maxLines="1"
                 android:text="@string/vv_widget_wallets"
-                android:textColor="#33FF66"
-                android:textSize="11sp" />
+                android:textColor="#4DFFFFFF"
+                android:textSize="12sp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingStart="0.75dp"
+                android:paddingTop="0.75dp"
+                android:fontFamily="sans-serif-medium"
+                android:textStyle="normal"
+                android:maxLines="1"
+                android:text="@string/vv_widget_wallets"
+                android:textColor="#DFE2E6"
+                android:textSize="12sp"
+                android:shadowColor="#B3000000"
+                android:shadowDx="1"
+                android:shadowDy="1"
+                android:shadowRadius="1" />
+
+        </FrameLayout>
 
         </LinearLayout>
         <LinearLayout
@@ -128,7 +236,8 @@
             android:layout_weight="1"
             android:layout_marginStart="4dp"
             android:layout_marginEnd="0dp"
-            android:background="@drawable/vv_widget_tile_bg"
+            android:background="@drawable/vv_widget_night_bg"
+            android:paddingBottom="3dp"
             android:gravity="center"
             android:orientation="vertical">
 
@@ -136,17 +245,43 @@
                 android:layout_width="28dp"
                 android:layout_height="28dp"
                 android:contentDescription="@string/vv_widget_personal"
-                android:src="@drawable/vv_ic_person" />
+                android:src="@drawable/vv_wic_person_night" />
+
+            <FrameLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            
+            android:layout_marginTop="4dp">
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:fontFamily="monospace"
+                android:paddingEnd="1.5dp"
+                android:paddingBottom="1.5dp"
+                android:fontFamily="sans-serif-medium"
+                android:textStyle="normal"
                 android:maxLines="1"
                 android:text="@string/vv_widget_personal"
-                android:textColor="#33FF66"
-                android:textSize="11sp" />
+                android:textColor="#4DFFFFFF"
+                android:textSize="12sp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingStart="0.75dp"
+                android:paddingTop="0.75dp"
+                android:fontFamily="sans-serif-medium"
+                android:textStyle="normal"
+                android:maxLines="1"
+                android:text="@string/vv_widget_personal"
+                android:textColor="#DFE2E6"
+                android:textSize="12sp"
+                android:shadowColor="#B3000000"
+                android:shadowDx="1"
+                android:shadowDy="1"
+                android:shadowRadius="1" />
+
+        </FrameLayout>
 
         </LinearLayout>
     </LinearLayout>

@@ -25,6 +25,28 @@ function el(tag, className, text) {
   return node
 }
 
+const SVG_NS = 'http://www.w3.org/2000/svg'
+
+function lockIcon() {
+  const svg = document.createElementNS(SVG_NS, 'svg')
+  svg.setAttribute('viewBox', '0 0 24 24')
+  svg.setAttribute('class', 'btn-icon')
+  svg.setAttribute('width', '18')
+  svg.setAttribute('height', '18')
+  svg.setAttribute('aria-hidden', 'true')
+  svg.setAttribute('style', 'margin-right:8px;vertical-align:-3px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round')
+  for (const [tag, attrs] of [
+    ['rect', { x: '4.5', y: '10.5', width: '15', height: '10', rx: '2.2' }],
+    ['path', { d: 'M8 10.5V7.5a4 4 0 0 1 8 0v3' }],
+    ['path', { d: 'M12 14.6v2.2' }]
+  ]) {
+    const node = document.createElementNS(SVG_NS, tag)
+    for (const [key, value] of Object.entries(attrs)) node.setAttribute(key, value)
+    svg.appendChild(node)
+  }
+  return svg
+}
+
 function button(label, className, handler) {
   const b = el('button', className, label)
   b.type = 'button'
@@ -694,7 +716,7 @@ function renderWallet(container, wallet, index, names) {
 
 function renderGate() {
   const gate = el('div', 'wv-gate')
-  gate.appendChild(button('🔐 Unlock to view Crypto Wallets', '', async () => {
+  const unlock = button('Unlock to view Crypto Wallets', '', async () => {
     const ok = await state.deps.authenticate()
     if (!ok) {
       showMsg('Authentication required', 'error')
@@ -703,7 +725,9 @@ function renderGate() {
     state.unlocked = true
     await reload()
     armHideTimer()
-  }))
+  })
+  unlock.prepend(lockIcon())
+  gate.appendChild(unlock)
   state.els.content.appendChild(gate)
 }
 

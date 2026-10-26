@@ -222,6 +222,7 @@ async function init() {
 async function completeUnlock(key) {
   session.setMasterKey(key)
   await persistKey()
+  try { await uniVault.reconnectAfterUnlock(key) } catch (e) {}
   await updateStatus()
   await enterUnlocked()
 }

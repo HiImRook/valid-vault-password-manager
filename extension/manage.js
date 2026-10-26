@@ -7,7 +7,6 @@ import * as wallets from './wallets.js'
 import * as walletsTab from './wallets-tab.js'
 import * as session from './session.js'
 import * as store from './store.js'
-import * as pairing from './pairing.js'
 import { splitIntoFrames, createFrameCollector } from './frames.js'
 import { createEncoder, createDecoder, QR_FRAME_MS } from './fountain.js'
 import { qrSvg, openCamera, scanStream, scanReadout } from './qrtools.js'
@@ -62,6 +61,7 @@ if (btnManageUnlockFp) {
       session.setMasterKey(result.masterKey)
       const bytes = new Uint8Array(await crypto.subtle.exportKey('raw', result.masterKey))
       await chrome.storage.session.set({ masterKeyBytes: Array.from(bytes), lastActivity: Date.now() })
+      try { await uniVault.reconnectAfterUnlock(result.masterKey) } catch (e) {}
       hideLockOverlay()
       location.reload()
     } else if (msgManageLock) { showMsg(msgManageLock, result.error, 'error') }
@@ -78,6 +78,7 @@ if (btnManageUnlockPw) {
       const bytes = new Uint8Array(await crypto.subtle.exportKey('raw', result.masterKey))
       await chrome.storage.session.set({ masterKeyBytes: Array.from(bytes), lastActivity: Date.now() })
       inputManagePassword.value = ''
+      try { await uniVault.reconnectAfterUnlock(result.masterKey) } catch (e) {}
       hideLockOverlay()
       location.reload()
     } else if (msgManageLock) { showMsg(msgManageLock, result.error, 'error') }
@@ -1092,7 +1093,8 @@ async function init() {
       if (msgEl) { msgEl.textContent = 'Rename failed'; msgEl.style.color = 'var(--danger)' }
       return
     }
-    await offerLinkedRename(name, msgEl)
+    const vaultMoved = await offerLinkedRename(name, msgEl)
+    await offerExportAfterRename(name, msgEl, vaultMoved)
   }
 
   attachActivityListeners()
@@ -1207,31 +1209,75 @@ function readFileText(cb) {
 }
 
 async function offerLinkedRename(name, msgEl) {
-  if (!uniVault.uniVaultSupported()) return
+  if (!uniVault.uniVaultSupported()) return false
   const linked = await uniVault.getLink()
   const wanted = backupFileName(name)
-  if (!linked || linked.name === wanted) return
+  if (!linked || linked.name === wanted) return false
   const choice = await formDialog({
     title: 'Rename your Uni-Vault file too?',
     text: 'This browser is linked to ' + linked.name + '. Save the vault as ' + wanted + ' and link to it instead? Browsers cannot rename a file in place, so the old file stays where it is. Once your other browsers are linked to the new file, delete the old one.',
     okLabel: 'Save under the new name',
     cancelLabel: 'Keep the old file'
   })
-  if (!choice) return
+  if (!choice) return false
   const mk = session.getMasterKey()
-  if (!mk) { if (msgEl) { msgEl.textContent = 'Unlock first to save the vault under the new name.'; msgEl.style.color = 'var(--danger)' } return }
+  if (!mk) { if (msgEl) { msgEl.textContent = 'Unlock first to save the vault under the new name.'; msgEl.style.color = 'var(--danger)' } return false }
   let handle
-  try { handle = await window.showSaveFilePicker({ suggestedName: wanted, startIn: linked.handle, types: VAULT_FILE_TYPES }) } catch (e) { return }
-  if (!(await requireTransferAuth())) return
+  try { handle = await window.showSaveFilePicker({ suggestedName: wanted, startIn: linked.handle, types: VAULT_FILE_TYPES }) } catch (e) { return false }
+  if (!(await requireTransferAuth())) return false
   const result = await uniVault.linkNew(handle, mk)
-  if (!msgEl) return
   if (result.state === 'ok') {
-    msgEl.textContent = 'Uni-Vault now uses ' + handle.name + '. In your other browsers, use Import Vault in Sync, pick ' + handle.name + ', and link it. Then delete ' + linked.name + '.'
-    msgEl.style.color = 'var(--green)'
-  } else {
+    if (msgEl) {
+      msgEl.textContent = 'Uni-Vault now uses ' + handle.name + '. In your other browsers, use Import Vault in Sync, pick ' + handle.name + ', and link it. Then delete ' + linked.name + '.'
+      msgEl.style.color = 'var(--green)'
+    }
+    return true
+  }
+  if (msgEl) {
     msgEl.textContent = result.message || 'Could not link the new file.'
     msgEl.style.color = 'var(--danger)'
   }
+  return false
+}
+
+function keyFileName(nickname) {
+  return ((nickname || 'master-key').replace(/[^a-z0-9]+/gi, '-').replace(/^-+|-+$/g, '').toLowerCase() || 'master-key') + '.vaultkey'
+}
+
+function renameMsg(msgEl, text, ok) {
+  if (!msgEl) return
+  msgEl.textContent = text
+  msgEl.style.color = ok ? 'var(--green)' : 'var(--danger)'
+}
+
+async function offerExportAfterRename(name, msgEl, vaultMoved) {
+  const mk = session.getMasterKey()
+  if (!mk) return
+  const keyName = keyFileName(name)
+  const vaultName = backupFileName(name)
+  const both = !vaultMoved
+  const choice = await formDialog({
+    title: both ? 'Export Key and Vault now with the new name?' : 'Export Key now with the new name?',
+    text: (both
+      ? 'Your saved files keep their old names and still open. Export now to save ' + keyName + ' and ' + vaultName + ' to your downloads.'
+      : 'Your vault file already uses the new name. Export now to save ' + keyName + ' to your downloads. Your old key file still opens.') +
+      ' You confirm once with your fingerprint, device PIN, or password.',
+    okLabel: both ? 'Export both' : 'Export key',
+    cancelLabel: 'Not now'
+  })
+  if (!choice) { renameMsg(msgEl, 'Key and vault renamed. Your saved files keep their old names and still open. Export any time to get files with the new name.', true); return }
+  if (!(await requireTransferAuth())) { renameMsg(msgEl, 'Export cancelled. The rename is saved, and nothing was exported.', false); return }
+  renameMsg(msgEl, 'Saving ' + keyName + '...', true)
+  let pkg
+  try { pkg = await ensureKeyPackage(mk) } catch (e) { renameMsg(msgEl, 'Could not export the key: ' + (e && e.message ? e.message : e), false); return }
+  if (!pkg) { renameMsg(msgEl, 'Key export cancelled. The rename is saved, and nothing was exported.', false); return }
+  if (!downloadFile(keyName, JSON.stringify(pkg))) { renameMsg(msgEl, 'Could not save ' + keyName + '. Nothing was exported.', false); return }
+  if (!both) { renameMsg(msgEl, 'Saved ' + keyName + ' to your downloads. Keep the file, passphrase, and answers safe. Delete the old key file once you no longer need it.', true); return }
+  renameMsg(msgEl, 'Saved ' + keyName + '. Saving ' + vaultName + '...', true)
+  const bundle = await vaultFile.buildBundle()
+  if (!vaultFile.bundleHasData(bundle)) { renameMsg(msgEl, 'Saved ' + keyName + ' to your downloads. The vault is empty, so there was no vault file to save.', true); return }
+  if (!downloadFile(vaultName, JSON.stringify(bundle))) { renameMsg(msgEl, 'Saved ' + keyName + ', but could not save ' + vaultName + '. Use Export Vault in Sync to try again.', false); return }
+  renameMsg(msgEl, 'Saved ' + keyName + ' and ' + vaultName + ' to your downloads. Both stay encrypted. Your old files still open, so delete them once you no longer need them.', true)
 }
 
 function backupFileName(nickname) {
@@ -1392,7 +1438,10 @@ async function refreshUniVault() {
     return
   }
   if (!info.linked) {
-    uniVaultStatusEl.textContent = 'Not linked. Export Vault or Import Vault to link a vault file.'
+    const lost = await uniVault.getLostLinkName()
+    uniVaultStatusEl.textContent = lost
+      ? 'This browser lost its link to ' + lost + '. Your vault is still here. Click Import Vault and pick ' + lost + ' to link it again.'
+      : 'Not linked. Export Vault or Import Vault to link a vault file.'
     btnUniVaultReconnect.classList.add('hidden')
     btnUniVaultUnlink.classList.add('hidden')
     return
@@ -1526,8 +1575,7 @@ const _btnExportKey = document.getElementById('btn-export-key'); if (_btnExportK
   try {
     const pkg = await ensureKeyPackage(mk)
     if (!pkg) return
-    const nickname = await keypackage.getNickname()
-    const fname = ((nickname || 'master-key').replace(/[^a-z0-9]+/gi, '-').replace(/^-+|-+$/g, '').toLowerCase() || 'master-key') + '.vaultkey'
+    const fname = keyFileName(await keypackage.getNickname())
     if (downloadFile(fname, JSON.stringify(pkg))) syncMsg('Key exported. Keep the file, passphrase, and answers safe.', 'success')
     else syncMsg('Could not save the file', 'error')
   } catch (e) { syncMsg('Export failed: ' + (e && e.message ? e.message : e), 'error') }

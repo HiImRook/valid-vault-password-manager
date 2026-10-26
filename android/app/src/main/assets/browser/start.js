@@ -4,10 +4,11 @@ const WORKER_TAIL = '\nself.onmessage=function(e){var m=e.data;if(m.canvas){self
   + 'if(m.exportId!==undefined){if(!self.stage){self.postMessage({exportId:m.exportId,error:true});return}'
   + 'self.stage.convertToBlob({type:"image/png"}).then(function(b){return b.arrayBuffer()}).then(function(buf){self.postMessage({exportId:m.exportId,png:buf},[buf])})'
   + '.catch(function(){self.postMessage({exportId:m.exportId,error:true})});return}'
-  + 'var style=paintStage(self.stage,m.seed,m.w,m.h);self.postMessage({key:m.key,style:style})};'
+  + 'var style=paintStage(self.stage,m.seed,m.w,m.h,m.mode);self.postMessage({key:m.key,style:style})};'
 let stage = document.getElementById('stage')
 let worker = null
 let currentSeed = null
+let currentMode = 'night'
 let requestedKey = null
 let lastStyle = ''
 let paintedKey = null
@@ -26,7 +27,7 @@ function dropWorker() {
   worker = null
   freshStage()
   requestedKey = null
-  if (currentSeed !== null) paintStart(currentSeed)
+  if (currentSeed !== null) paintStart(currentSeed, currentMode)
 }
 
 function startWorker() {
@@ -58,17 +59,18 @@ function stageSize() {
   return [Math.max(1, Math.round(window.innerWidth * scale)), Math.max(1, Math.round(window.innerHeight * scale))]
 }
 
-function paintStart(seed) {
+function paintStart(seed, mode) {
   currentSeed = seed
+  currentMode = mode === 'day' ? 'day' : 'night'
   const [w, h] = stageSize()
-  const key = seed + ':' + w + 'x' + h
+  const key = seed + ':' + currentMode + ':' + w + 'x' + h
   if (key === requestedKey) return 'same'
   requestedKey = key
   if (worker) {
-    worker.postMessage({ seed, w, h, key })
+    worker.postMessage({ seed, w, h, key, mode: currentMode })
     return 'worker'
   }
-  lastStyle = paintStage(stage, seed, w, h)
+  lastStyle = paintStage(stage, seed, w, h, currentMode)
   paintedKey = key
   return lastStyle
 }
@@ -103,7 +105,7 @@ function takeExport(id) {
 }
 
 window.addEventListener('resize', () => {
-  if (currentSeed !== null) paintStart(currentSeed)
+  if (currentSeed !== null) paintStart(currentSeed, currentMode)
 })
 
 startWorker()

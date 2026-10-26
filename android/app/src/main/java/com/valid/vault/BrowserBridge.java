@@ -27,6 +27,7 @@ public class BrowserBridge extends Plugin {
         JSArray sites = new JSArray();
         for (String site : settings.allowedSites) sites.put(site);
         ret.put("allowedSites", sites);
+        if (settings.themeChosen) ret.put("theme", settings.theme);
         return ret;
     }
 
@@ -66,6 +67,24 @@ public class BrowserBridge extends Plugin {
     @PluginMethod
     public void getSettings(PluginCall call) {
         call.resolve(settingsJson(BrowserSettings.load(getContext())));
+    }
+
+    @PluginMethod
+    public void setTheme(PluginCall call) {
+        String theme = call.getString("theme", "");
+        if (!BrowserSettings.THEME_DAY.equals(theme) && !BrowserSettings.THEME_NIGHT.equals(theme)) {
+            call.reject("Unknown theme");
+            return;
+        }
+        BrowserSettings saved = BrowserSettings.update(getContext(), settings -> {
+            settings.theme = theme;
+            settings.themeChosen = true;
+        });
+        if (saved == null) {
+            call.reject("Could not save the theme");
+            return;
+        }
+        call.resolve(settingsJson(saved));
     }
 
     @PluginMethod

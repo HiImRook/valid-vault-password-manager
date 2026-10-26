@@ -1,12 +1,172 @@
 const DB_NAME = 'ValidVault'
 const DB_VERSION = 5
 const VAULT_CHANGE_STAMP = 'vaultChangedAt'
+const MIRROR_PREFIX = 'vvMirror:'
+const MIRROR_READY_KEY = 'vvMirrorReady'
+const MIRROR_BYTES_TAG = '$vvBytes'
+const MIRROR_STORES = ['auth', 'passwords', 'wallets', 'webcreds', 'personalInfo', 'vaultMigration', 'bookmarks']
 
 let db = null
+let readyPromise = null
+
+function mirrorAvailable() {
+  return typeof chrome !== 'undefined' && !!chrome.storage && !!chrome.storage.local
+}
+
+function mirrorKey(storeName, id) {
+  return MIRROR_PREFIX + storeName + ':' + id
+}
+
+function bytesToBase64(bytes) {
+  let binary = ''
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i])
+  return btoa(binary)
+}
+
+function base64ToBytes(text) {
+  const binary = atob(text)
+  const out = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i)
+  return out
+}
+
+function toMirror(value) {
+  if (value instanceof ArrayBuffer) return { [MIRROR_BYTES_TAG]: 'buffer', d: bytesToBase64(new Uint8Array(value)) }
+  if (ArrayBuffer.isView(value)) return { [MIRROR_BYTES_TAG]: value.constructor.name, d: bytesToBase64(new Uint8Array(value.buffer, value.byteOffset, value.byteLength)) }
+  if (Array.isArray(value)) return value.map(toMirror)
+  if (value && typeof value === 'object') {
+    const out = {}
+    for (const [k, v] of Object.entries(value)) out[k] = toMirror(v)
+    return out
+  }
+  return value
+}
+
+function fromMirror(value) {
+  if (Array.isArray(value)) return value.map(fromMirror)
+  if (value && typeof value === 'object') {
+    if (typeof value[MIRROR_BYTES_TAG] === 'string' && typeof value.d === 'string') {
+      const bytes = base64ToBytes(value.d)
+      if (value[MIRROR_BYTES_TAG] === 'buffer') return bytes.buffer
+      const View = globalThis[value[MIRROR_BYTES_TAG]]
+      return typeof View === 'function' && View.BYTES_PER_ELEMENT ? new View(bytes.buffer, 0, bytes.byteLength / View.BYTES_PER_ELEMENT) : bytes
+    }
+    const out = {}
+    for (const [k, v] of Object.entries(value)) out[k] = fromMirror(v)
+    return out
+  }
+  return value
+}
+
+async function mirrorWrite(storeName, data) {
+  if (!mirrorAvailable() || !data || data.id === undefined) return
+  try { await chrome.storage.local.set({ [mirrorKey(storeName, data.id)]: toMirror(data) }) } catch (e) {}
+}
+
+async function mirrorRemove(storeName, id) {
+  if (!mirrorAvailable()) return
+  try { await chrome.storage.local.remove(mirrorKey(storeName, id)) } catch (e) {}
+}
+
+async function mirrorClear(names) {
+  if (!mirrorAvailable()) return
+  try {
+    const all = await chrome.storage.local.get(null)
+    const prefixes = names.map((name) => MIRROR_PREFIX + name + ':')
+    const keys = Object.keys(all || {}).filter((key) => prefixes.some((prefix) => key.startsWith(prefix)))
+    if (keys.length) await chrome.storage.local.remove(keys)
+  } catch (e) {}
+}
+
+function readAllRecords(database, storeName) {
+  return new Promise((resolve, reject) => {
+    const tx = database.transaction(storeName, 'readonly')
+    const request = tx.objectStore(storeName).getAll()
+    request.onsuccess = () => resolve(request.result || [])
+    request.onerror = () => reject(request.error)
+  })
+}
+
+function readRecord(database, storeName, key) {
+  return new Promise((resolve, reject) => {
+    const tx = database.transaction(storeName, 'readonly')
+    const request = tx.objectStore(storeName).get(key)
+    request.onsuccess = () => resolve(request.result || null)
+    request.onerror = () => reject(request.error)
+  })
+}
+
+async function restoreFromMirror(database, mirrored) {
+  const pending = []
+  for (const [key, value] of Object.entries(mirrored)) {
+    const rest = key.slice(MIRROR_PREFIX.length)
+    const at = rest.indexOf(':')
+    const storeName = rest.slice(0, at)
+    if (!MIRROR_STORES.includes(storeName) || !value || value.id === undefined) continue
+    if (await readRecord(database, storeName, value.id)) continue
+    pending.push({ storeName, record: fromMirror(value) })
+  }
+  if (!pending.length) return
+  await new Promise((resolve, reject) => {
+    const tx = database.transaction(Array.from(new Set(pending.map((p) => p.storeName))), 'readwrite')
+    for (const p of pending) tx.objectStore(p.storeName).put(p.record)
+    tx.oncomplete = () => resolve()
+    tx.onerror = () => reject(tx.error)
+    tx.onabort = () => reject(tx.error)
+  })
+}
+
+async function seedMirror(database) {
+  const entries = {}
+  for (const storeName of MIRROR_STORES) {
+    for (const record of await readAllRecords(database, storeName)) {
+      if (record && record.id !== undefined) entries[mirrorKey(storeName, record.id)] = toMirror(record)
+    }
+  }
+  entries[MIRROR_READY_KEY] = Date.now()
+  await chrome.storage.local.set(entries)
+}
+
+async function requestPersistence() {
+  try {
+    if (typeof navigator !== 'undefined' && navigator.storage && typeof navigator.storage.persist === 'function') {
+      if (!(await navigator.storage.persisted())) await navigator.storage.persist()
+    }
+  } catch (e) {}
+}
+
+async function prepareStorage(database) {
+  if (!mirrorAvailable()) return
+  requestPersistence()
+  try {
+    const authKey = mirrorKey('auth', 'primary')
+    const marks = await chrome.storage.local.get([MIRROR_READY_KEY, authKey])
+    const localAuth = await readRecord(database, 'auth', 'primary')
+    if (!localAuth && marks[authKey]) {
+      const all = await chrome.storage.local.get(null)
+      const mirrored = {}
+      for (const [key, value] of Object.entries(all || {})) if (key.startsWith(MIRROR_PREFIX)) mirrored[key] = value
+      await restoreFromMirror(database, mirrored)
+      return
+    }
+    if (localAuth && (!marks[MIRROR_READY_KEY] || !marks[authKey])) await seedMirror(database)
+  } catch (e) {}
+}
 
 async function openDB() {
-  if (db) return db
-  
+  if (!readyPromise) {
+    readyPromise = openRawDB().then(async (database) => {
+      await prepareStorage(database)
+      return database
+    }).catch((error) => {
+      readyPromise = null
+      throw error
+    })
+  }
+  return readyPromise
+}
+
+async function openRawDB() {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION)
     
@@ -17,6 +177,7 @@ async function openDB() {
       db.onversionchange = () => {
         db.close()
         db = null
+        readyPromise = null
       }
       resolve(db)
     }
@@ -72,20 +233,31 @@ async function get(storeName, key) {
 
 async function put(storeName, data) {
   const store = await getStore(storeName, 'readwrite')
-  return new Promise((resolve, reject) => {
+  const result = await new Promise((resolve, reject) => {
+    const tx = store.transaction
+    let value
     const request = store.put(data)
+    request.onsuccess = () => { value = request.result }
     request.onerror = () => reject(request.error)
-    request.onsuccess = () => resolve(request.result)
+    tx.oncomplete = () => resolve(value)
+    tx.onerror = () => reject(tx.error || request.error)
+    tx.onabort = () => reject(tx.error || request.error || new Error('Save did not complete'))
   })
+  await mirrorWrite(storeName, data)
+  return result
 }
 
 async function remove(storeName, key) {
   const store = await getStore(storeName, 'readwrite')
-  return new Promise((resolve, reject) => {
+  await new Promise((resolve, reject) => {
+    const tx = store.transaction
     const request = store.delete(key)
     request.onerror = () => reject(request.error)
-    request.onsuccess = () => resolve()
+    tx.oncomplete = () => resolve()
+    tx.onerror = () => reject(tx.error || request.error)
+    tx.onabort = () => reject(tx.error || request.error || new Error('Delete did not complete'))
   })
+  await mirrorRemove(storeName, key)
 }
 
 async function markVaultChanged() {
@@ -172,6 +344,7 @@ async function clearStores(names) {
     tx.onerror = () => reject(tx.error)
     tx.onabort = () => reject(tx.error)
   })
+  await mirrorClear(names)
 }
 
 async function clearAll() {

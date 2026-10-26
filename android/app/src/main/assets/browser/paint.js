@@ -1,14 +1,14 @@
 const LOGO_WIDTH = 1200
 const LOGO_HEIGHT = 540
-const LOGO_GROUND = '#010302'
+const LOGO_GROUND = { day: '#f4f1ea', night: '#0d0e10' }
 
-function paintLogo(stage, seed, w, h) {
+function paintLogo(stage, seed, w, h, mode) {
   const art = document.createElement('canvas')
   art.width = LOGO_WIDTH
   art.height = LOGO_HEIGHT
-  drawBackground(art, 'metal', seed)
+  drawBackground(art, 'metal', seed, mode)
   const ctx = stage.getContext('2d')
-  ctx.fillStyle = LOGO_GROUND
+  ctx.fillStyle = LOGO_GROUND[backgroundMode(mode)]
   ctx.fillRect(0, 0, w, h)
   const sideways = h > w
   const across = sideways ? LOGO_HEIGHT : LOGO_WIDTH
@@ -22,11 +22,11 @@ function paintLogo(stage, seed, w, h) {
   ctx.restore()
 }
 
-function paintStage(stage, seed, w, h) {
+function paintStage(stage, seed, w, h, mode) {
   stage.width = w
   stage.height = h
-  const style = pickBackgroundStyle(seededRandom(seed))
-  if (style === 'metal') paintLogo(stage, seed, w, h)
-  else drawBackground(stage, style, seed)
+  const style = pickBackgroundStyle(seededRandom(seed), mode)
+  if (style === 'metal') paintLogo(stage, seed, w, h, mode)
+  else drawBackground(stage, style, seed, mode)
   return style
 }

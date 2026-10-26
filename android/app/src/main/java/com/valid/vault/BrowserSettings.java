@@ -31,6 +31,8 @@ final class BrowserSettings {
     static final List<Integer> GEN_MAX_CHOICES = Collections.unmodifiableList(Arrays.asList(24, 32, 48, 64));
     static final int GEN_DEFAULT_MIN = 16;
     static final int GEN_DEFAULT_MAX = 24;
+    static final String THEME_DAY = "day";
+    static final String THEME_NIGHT = "night";
 
     private static final String FILE_NAME = "browser_settings.json";
     private static final String TEMP_PREFIX = "browser_settings.json.tmp.";
@@ -41,6 +43,8 @@ final class BrowserSettings {
     String engine = ENGINE_STARTPAGE;
     int genMin = GEN_DEFAULT_MIN;
     int genMax = GEN_DEFAULT_MAX;
+    String theme = THEME_DAY;
+    boolean themeChosen = false;
     final Set<String> allowedSites = new TreeSet<>();
     final List<BrowserPins.Pin> pins = new ArrayList<>();
 
@@ -113,6 +117,11 @@ final class BrowserSettings {
             int max = json.optInt("genMax", GEN_DEFAULT_MAX);
             if (GEN_MIN_CHOICES.contains(min)) settings.genMin = min;
             if (GEN_MAX_CHOICES.contains(max)) settings.genMax = max;
+            String theme = json.optString("theme", "");
+            if (THEME_NIGHT.equals(theme) || THEME_DAY.equals(theme)) {
+                settings.theme = theme;
+                settings.themeChosen = true;
+            }
             JSONArray sites = json.optJSONArray("allowedSites");
             if (sites != null) {
                 for (int i = 0; i < sites.length(); i++) {
@@ -139,6 +148,7 @@ final class BrowserSettings {
         json.put("engine", engine);
         json.put("genMin", genMin);
         json.put("genMax", genMax);
+        if (themeChosen) json.put("theme", theme);
         JSONArray sites = new JSONArray();
         for (String site : allowedSites) sites.put(site);
         json.put("allowedSites", sites);
