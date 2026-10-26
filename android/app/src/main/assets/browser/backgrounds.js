@@ -2674,7 +2674,8 @@ function drawBulbsLight(ctx, w, h, random) {
 const BACKGROUND_STYLES = {
   galaxy: drawGalaxy,
   branches: drawWinterBranches,
-  metal: drawBranchLogo,
+  metal: (ctx, w, h, random) => drawBranchLogo(ctx, w, h, random, 'day'),
+  nightmetal: (ctx, w, h, random) => drawBranchLogo(ctx, w, h, random, 'night'),
   christmas: drawChristmasFarm,
   fern: drawFern,
   city: drawCity,
@@ -2686,8 +2687,10 @@ const BACKGROUND_STYLES = {
   waves: drawWaves,
   cherry: drawCherryBranch,
   mushrooms: drawMushrooms,
-  fractal: drawFractal,
-  bulbs: drawBulbs,
+  fractal: (ctx, w, h, random) => drawFractal(ctx, w, h, random, 'day'),
+  nightfractal: (ctx, w, h, random) => drawFractal(ctx, w, h, random, 'night'),
+  bulbs: (ctx, w, h, random) => drawBulbs(ctx, w, h, random, 'day'),
+  nightbulbs: (ctx, w, h, random) => drawBulbs(ctx, w, h, random, 'night'),
   meadow: drawMeadow,
   lightning: drawLightning,
   beach: drawBeach,
@@ -2696,7 +2699,7 @@ const BACKGROUND_STYLES = {
 
 const BACKGROUND_MODES = {
   day: ['branches', 'metal', 'mountains', 'dandelion', 'bamboo', 'cherry', 'fractal', 'bulbs', 'meadow', 'beach', 'openwater'],
-  night: ['galaxy', 'metal', 'christmas', 'fern', 'city', 'board', 'underwater', 'waves', 'mushrooms', 'fractal', 'bulbs', 'lightning']
+  night: ['galaxy', 'nightmetal', 'christmas', 'fern', 'city', 'board', 'underwater', 'waves', 'mushrooms', 'nightfractal', 'nightbulbs', 'lightning']
 }
 
 const BACKGROUND_RARITY = { cherry: 0.15 }
@@ -2715,11 +2718,15 @@ function pickBackgroundStyle(random, mode) {
   return names[names.length - 1]
 }
 
+function styleMode(name) {
+  return BACKGROUND_MODES.day.includes(name) ? 'day' : 'night'
+}
+
 function drawBackground(canvas, style, seed, mode) {
   const ctx = canvas.getContext('2d')
   const random = seededRandom(seed)
-  const light = backgroundMode(mode) === 'day'
   const name = style || pickBackgroundStyle(random, mode)
+  const light = styleMode(name) === 'day'
   BACKGROUND_STYLES[name](ctx, canvas.width, canvas.height, random, light ? 'day' : 'night')
   readabilityFade(ctx, canvas.width, canvas.height, light, BACKGROUND_FADE[name])
   return name
