@@ -16,42 +16,6 @@ A local, encrypted, QR code portable password manager. No cloud, accounts, or sy
 
 ---
 
-> ✅ **Phone App Rebuilt - v0.8.0**
->
-> The Android app now runs on the same code as the extension, so the two stay in step from here on. The phone gets every extension tab: Website Credentials, Personal Info, Misc Credentials, Crypto Wallets, Bookmarks, Sync, Settings, a phone User Guide, and About, along with the protected key transfer, the key import flow, and fingerprint, device PIN, or password before every transfer. A new phone can be set up straight from your existing key, by key QR or key file, and the lock screen can restore access from a key file if fingerprint unlock is ever reset. Importing a vault is now checked in full before anything is written, never creates duplicates, keeps deletes deleted, and changes nothing when the same file is imported twice. The extension shares these merge fixes, and its Misc Credentials and extra field values are now entered in masked boxes. See [CHANGELOG.md](CHANGELOG.md) for full details.
-
-> ✅ **Vault QR Rebuilt - v0.8.1**
->
-> The vault QR is drawn larger, carries less data per frame, and is compressed first, so a typical vault needs about half as many frames. Frames the camera misses are filled in by later ones, so a scan finishes a few frames after enough are read. The vault QR and key QR now match in size, and the scanner reads a sharper camera feed. Update the phone and the extension together, since a 0.8.0 scanner can't read the new QR. This is verified in Chromium, but still being tested and hardened on the phone camera, so Export Vault and Import Vault, carried on a USB drive if you like, remain the dependable path until QR share is finalized. See [CHANGELOG.md](CHANGELOG.md) for full details.
-
-> ✅ **Android Autofill and Share to Bookmarks - v0.8.2**
->
-> Valid Vault can now be the phone's autofill service. Tap a login field in any app or browser, choose Valid Vault, and confirm with your fingerprint or device PIN. One saved login fills right away, and several are listed so you can pick. Only the login you pick is handed to Android, and every fill asks again. When you sign in somewhere new, Android offers to save it to Valid Vault. Apps are linked to a saved site on their first fill, and that link is stored in your encrypted vault and travels with it. Saving a page is one tap too: share any link to Valid Vault and it becomes an encrypted bookmark. This is verified in Chromium with Android's autofill simulated and is being tested on phones now. See [CHANGELOG.md](CHANGELOG.md) for full details.
-
-> ✅ **Private Browser and Widgets - v0.8.3**
->
-> The phone app now includes a private browser, a modified Chromium built on the Android System WebView. Known trackers and ad scripts are blocked, tracking tags are stripped from links, redirect wrappers are skipped, third-party cookies are off, and cookies, site data, cache, and history are wiped when you close it. The address bar and a bottom toolbar slide away as you scroll, and Home opens a new tab page with the logo front and center. Search with Startpage by default, or DuckDuckGo or Brave Search. The app icon is now the globe V logo. Two home screen widgets put Search privately, Bookmarks, Logins, Wallet, and Personal one tap and one fingerprint away. Key files with the default name no longer overwrite the name you set, on the extension and the phone. Needs Android 9 or newer for the browser. See [CHANGELOG.md](CHANGELOG.md) for full details.
-
-> ✅ **Import From Another App - v0.8.4**
->
-> Bring your logins over from another password manager's CSV export, and your bookmarks from a browser's bookmarks HTML file, on the extension and the phone. The extension can also pull in the bookmarks of the browser it runs in with one click. Exports from Chrome, Edge, Brave, Firefox, Bitwarden, LastPass, Proton Pass, Dashlane, Apple Passwords, 1Password, KeePassXC, and NordPass are recognized, and any other CSV can be matched by column. When the file and your vault have different passwords for a login, you see both with their dates and pick the current one, and the other is kept as the previous password for 30 days. Stopping an import changes nothing, and Valid Vault still has no unencrypted export. Previous passwords are now kept for 30 days everywhere, and each login shows when it was last used. See [CHANGELOG.md](CHANGELOG.md) for full details.
-
-> ✅ **Private Browser Tor Mode and Downloads - v0.8.5**
->
-> The phone's private browser now blocks tens of thousands of known tracker and ad domains from the EasyPrivacy and EasyList lists alongside its own, and removes the empty space left where an ad was blocked. Every page receives the Global Privacy Control signal. Files download to your Downloads folder after you confirm them. Tor mode, in the menu, sends every page through Orbot with no direct connection as a fallback, turns the bars purple, removes WebRTC, and offers Safer with JavaScript off. Switching in or out of Tor mode and New identity wipe the whole session. The browser also finishes its startup wipe before loading anything. See [CHANGELOG.md](CHANGELOG.md) for full details.
-
-> ✅ **Private Browser Tabs and Start Page - v0.8.6**
->
-> The phone's private browser now has tabs, up to 15, with a tab count beside the address bar that opens a list to switch, close, or close them all. Every new tab opens on a start page with one of 20 generated backgrounds, drawn fresh for each tab, and a few are rare. Pin up to 12 sites to the start page from the menu or by name and address, and drag them into any order. Any background can be saved to Downloads as a picture. Press and hold a link to open it in a new tab, and the menu now opens Valid Vault's Settings. See [CHANGELOG.md](CHANGELOG.md) for full details.
-
-> ✅ **Private Browser Autofill - v0.8.7**
->
-> The phone's private browser now fills logins from Valid Vault. Login fields get a green V, and the menu has Fill login. Either one asks for your fingerprint, device PIN, or password, then fills your saved login for that site, and every fill asks again. When you sign in with a new login or a new password, the browser offers to save it. If the exact address has nothing saved but another part of the site does, those logins are offered first. A login only fills the page it was requested for, and only that one login ever reaches the browser. In Tor mode nothing is offered on its own: Fill login in the menu works on https pages, with a reminder that signing in tells the site who you are. See [CHANGELOG.md](CHANGELOG.md) for full details.
-
-> ✅ **Private Browser Autofill Parity - v0.8.7.1**
->
-> Autofill in the phone's private browser now matches the extension. Name, email, phone, and address fields get a V that fills from Personal Info, with the field you tapped checked and anything else on the form one tap away. New password boxes get an inverted V that generates a strong password into both boxes, following your length settings and the site's rules. Pull down from the top of a page to reload it. The V tags are larger and step aside for a site's own icons, like a show password eye. The menu is trimmed to what isn't already on screen, sites in new tab quick view can be renamed and edited, and the top bar and widgets are redrawn to match the toolbar icons. See [CHANGELOG.md](CHANGELOG.md) for full details.
-
 > ✅ **Faster Vault QR - v0.8.8**
 >
 > Sharing the vault by QR is about twice as fast, and much less fussy about aim. Each frame carries its data as raw bytes, so it holds a third more at the same density, and frames change twice as often. The scanner reads frames on several processor cores at once and also looks at the whole camera image, so a code that drifts off center keeps reading. A live readout shows pieces received, the share of frames caught, and reads per second. The extension draws the QR as large as the window allows, and the phone goes to full brightness while it shows one. Master Key Name is now Key and Vault Name, so key and vault files always carry the same name. Update the phone and the extension together, since older scanners can't read the new QR. See [CHANGELOG.md](CHANGELOG.md) for full details.
@@ -63,6 +27,10 @@ A local, encrypted, QR code portable password manager. No cloud, accounts, or sy
 > ✅ **Bookmarks in the Vault QR - v0.9.1**
 >
 > Share Vault now carries your bookmarks along with logins, misc credentials, and personal info, on the extension and the phone. Crypto wallets still travel only in vault files, so seed phrases never go over a QR. The extension's password generator no longer stalls on sites with empty password rules, and fits a site's required pattern, like a short PIN, the same way the phone browser does. Code left over from retired features is cleaned out. See [CHANGELOG.md](CHANGELOG.md) for full details.
+
+> ✅ **A New Look - v0.9.2**
+>
+> The phone app, the private browser, and the widgets are redesigned, with Ink for day and Platinum for night, switched with the sun and moon button and shared between the app and the browser. Buttons are raised, panels are recessed, and the green and the globe give way to the striped V, which is also the new white app icon. The start page backgrounds are redrawn and split by mode, 11 for day and 12 for night, with rare versions hidden in some. The widgets come in day and night versions, and new 1x1 icon widgets open the app. The extension now keeps an encrypted backup copy of the vault, so a browser that clears site data no longer takes the vault with it, and renaming the key and vault offers new files under the new name. See [CHANGELOG.md](CHANGELOG.md) for full details.
 
 ---
 
@@ -142,10 +110,10 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 * Private by default: cookies, site data, cache, and history wiped when you close it
 * Search with Startpage by default, or DuckDuckGo or Brave Search, chosen in Settings
 * Tabs, up to 15, with a tab count beside the address bar that opens the tab list; tabs you aren't looking at are paused
-* Start page on every new tab with one of 20 generated backgrounds, a new tab quick view of up to 12 sites you can reorder, rename, and edit, and a link to save the background to Downloads
+* Start page on every new tab with a generated background, drawn from 11 day styles or 12 night styles with rare versions hidden in some, a new tab quick view of up to 12 sites you can reorder, rename, and edit, and a link to save the background to Downloads
 * Press and hold a link to open it in a new tab, copy it, or share it
 * Bottom toolbar with Back, Bookmarks, New tab, Share, and Forward, bars that slide away as you scroll, and pull down from the top of a page to reload
-* 4x1 Search privately widget with a Bookmarks button, a 4x2 widget with Bookmarks, Logins, Wallet, and Personal, and a Search shortcut on the app icon; every button asks for fingerprint or device PIN once
+* 4x1 Search privately widget with a Bookmarks button, a 4x2 widget with Bookmarks, Logins, Wallet, and Personal, each in a day and a night version, 1x1 icon widgets that open the app, and a Search shortcut on the app icon; every button asks for fingerprint or device PIN once
 * Bookmarks open in the browser, and the browser's Bookmarks button opens them in Valid Vault
 * Runs in its own process with its own storage, so it never touches the vault
 * Valid Vault autofill: login fields get a V tag; every fill asks for fingerprint, device PIN, or password, and only the login you pick is handed to the page
@@ -161,11 +129,18 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 * In Tor mode there are no V tags, no save prompts, no Personal Info, and no password generator; Fill login in the menu works on https pages with Safer off, and reminds you once each session that signing in tells the site who you are
 * Also works with a VPN, or Orbot in VPN mode
 
+**Day and Night (Android):**
+
+* Ink for day and Platinum for night, switched with the sun and moon button in the app and beside the browser's address bar; the app and the browser keep the same choice
+* Raised buttons and recessed panels drawn with one line weight, with embossed labels and icons, and widgets and system bars that match
+
 **Sync and Backup:**
 
 * Uni-Vault - link every browser on one computer to a single encrypted vault file; saves reach the file within about a second and other linked browsers pick them up within about 30 seconds, or within seconds while Manage is open, merged by timestamp with tombstoned deletes
 * Uni-Vault refuses a damaged file, a replaced file, or a file made with a different key and never overwrites it; each browser keeps its own working copy, and Sync shows the linked file and last sync time with Reconnect and Unlink
 * Uni-Vault works in Chrome and Edge out of the box; Brave needs its File System Access API setting switched on, explained in the User Guide, and Export and Import work in Brave as before
+* The extension keeps an encrypted backup copy of the vault in its own storage; if the browser clears site data, the vault is restored at the next start and a linked Uni-Vault file is reconnected after you unlock
+* Renaming the key and vault offers a key file and a vault file under the new name right away, on the extension and the phone
 * Live QR sync - stream your vault or your protected key as a one-way fountain QR, scan it on the other device; frames carry raw bytes, change every 0.2 seconds, and any frame the camera catches helps, in any order
 * Sovereign scanner - the standard web camera plus a vendored jsQR decoder, no Google dependency; it reads on several processor cores at once, checks the whole camera image as well as the scan box, and shows pieces received, frames caught, and reads per second while it works
 * Encrypted vault backup - save directly to Downloads or share the file, inert without the matching master key
@@ -200,7 +175,7 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 * Android via Capacitor, with native plugins for biometric auth, file saving, autofill, sharing, and the private browser
 * Vendored, self-contained code only, no Google SDKs in the scan path
 
-## Current Status: v0.9.1 - Active Testing
+## Current Status: v0.9.2 - Active Testing
 
 **Completed:**
 
@@ -253,6 +228,8 @@ No cloud service holds your data. No company can be subpoenaed for it or breache
 * ✅ Vault QR about twice as fast and tolerant of off-center aim, with a live readout while scanning
 * ✅ Import from Samsung Pass, Bitwarden JSON, 1Password, and Dashlane files, with logins for phone apps matched to their websites
 * ✅ Bookmarks travel in the vault QR alongside logins, misc credentials, and personal info
+* ✅ New look on the phone: day and night modes, the striped V, raised and recessed design, redrawn start page backgrounds, and day and night widgets
+* ✅ Encrypted backup copy in the extension that restores the vault after the browser clears site data
 
 **In Development:**
 

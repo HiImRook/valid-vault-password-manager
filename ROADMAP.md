@@ -1,10 +1,23 @@
 # Valid Vault - Development Roadmap
 
-**Current Version:** v0.9.1 - **Status: Active Testing**
+**Current Version:** v0.9.2 - **Status: Active Testing**
 
 ---
 
 ## Version History (Completed)
+
+### v0.9.2 - A New Look (Oct 2026)
+
+* ✅ Ink for day and Platinum for night, switched with the sun and moon button, with the app and the private browser sharing the choice
+* ✅ Raised buttons and recessed panels drawn with one line weight, with embossed labels and icons
+* ✅ The striped V and a serif wordmark replace the globe logos and the green, with a new white app icon and a one-color themed version
+* ✅ Private browser restyled for day and night, with matching system bars and Tor mode's purple kept in both
+* ✅ Start page backgrounds redrawn and split by mode, 11 for day and 12 for night, with rare versions hidden in some
+* ✅ Day and night versions of the search and 4x2 widgets, and 1x1 icon widgets that open the app
+* ✅ Encrypted backup copy in the extension that restores the vault after the browser clears site data, with a linked Uni-Vault file reconnected after unlock
+* ✅ Renaming the key and vault offers new key and vault files under the new name
+* ✅ Uni-Vault writes merged changes back to the linked file right away
+* ✅ Drawn lock icons, neutral success messages, and more leftover code removed
 
 ### v0.9.1 - Bookmarks in the Vault QR (Oct 2026)
 
@@ -294,7 +307,7 @@
 
 ---
 
-## Upcoming After v0.9.1
+## Upcoming After v0.9.2
 
 ### v0.8.x - The Phone App
 
@@ -334,7 +347,8 @@ Encrypted files on a USB drive remain a dependable device-to-device path, alread
 ### v0.9.x - Hardening and Polish
 
 * Security hardening across the extension and the phone app
-* Visual overhaul: matching border weights across the app and widgets, more legible text, and brighter screens
+* Visual overhaul of the phone app, the private browser, and the widgets shipped in v0.9.2
+* Bring the new look to the extension, the User Guide, and the website
 * Final features and fixes before 1.0
 * Polish throughout
 
@@ -401,4 +415,4 @@ MIT License - See LICENSE file for details
 
 ---
 
-**Last Updated:** Oct 23, 2026
+**Last Updated:** Oct 26, 2026

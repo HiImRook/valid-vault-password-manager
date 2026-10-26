@@ -5,6 +5,39 @@ All notable changes to Valid Vault will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.2] - 2026-10-26
+
+A new look across the phone app, the private browser, and the home screen, with day and night modes. The extension now keeps an encrypted backup copy of the vault so a browser that clears site data doesn't take the vault with it.
+
+### Added
+
+* **Day and night modes.** The phone app has two looks, Ink for day and Platinum for night, switched with the sun and moon button in the top corner. The private browser has the same button beside the address bar, and the app and the browser keep the same choice.
+* **A raised and sunken design.** Buttons stand out with a beveled rim and sink in when pressed, while cards, lists, settings, and text fields sit recessed into the page, all drawn with the same line weight. Button labels and icons are embossed to match.
+* **New start page backgrounds.** Every background except the city is redrawn without the old green. Day mode draws from 11 light styles, including ink on paper bamboo, mountains, and cherry blossoms, a pastel meadow, a beach, open water, dandelions, a winter sky, champagne bokeh, the Valid Vault logo, and fractals. Night mode draws from 12, including a galaxy, a storm, moonlit waves, a coral seafloor, glowing mushrooms, bokeh lights, a circuit board, a Christmas tree farm, ferns, the city, the logo, and fractals. Switching modes redraws the start page.
+* **Rare finds.** Some backgrounds hide rare versions: a lit Christmas tree, a whole farm of them, and Santa, a UFO over the waves, and glowing ones beneath them, jellyfish, dolphins, a manta ray, a shark, and a whale in open water, fairy dust and dragonflies among the mushrooms, a sun over the dandelions, and a full cherry tree.
+* **Day and night widgets.** The search widget and the 4x2 widget each come in a day version and a night version, with beveled frames and embossed icons and labels.
+* **1x1 icon widgets.** Valid Vault Icon, Day and Valid Vault Icon, Night open the app from a single tile.
+* **Backup copy in the extension.** The extension keeps an encrypted copy of the vault in its own storage. If the browser clears the extension's site data, the vault is restored from that copy at the next start, and you are asked to reconnect a linked Uni-Vault file after unlocking.
+* **Save files after a rename.** Renaming the key and vault offers to save a key file and a vault file under the new name right away, on the extension and the phone, with each step explained as it happens.
+
+### Changed
+
+* **New app icon.** The app icon is the striped V on white, larger than before, with a one-color version for phones that theme their icons. The autofill button in other apps, the home screen shortcut, and the widget previews use it too.
+* **The private browser restyled.** The address bar, tab button, menu, toolbar, tab list, start page tiles, and dialogs follow day and night mode, with the system bars matching. Tor mode keeps its purple tint in both modes.
+* **The striped V logo.** The globe logos and the green throughout the phone app are replaced by the striped V and a serif wordmark.
+* **Drawn lock icons.** Unlock buttons show a drawn lock instead of an emoji, the same on every tab.
+* **Clearer messages.** Success messages and the Re-enroll button use neutral colors, and Unlock Methods explains why keeping both a fingerprint and a password is best.
+* **The autofill button** in other apps uses the new night style.
+* **Uni-Vault saves merged changes back.** When a linked file brings in changes from another browser, the merged vault is written back to the file right away, so every linked browser ends up with the same vault.
+* **Saves confirmed when written.** A change is only reported as saved once it is fully written to storage.
+* **Older code removed.** More code left over from retired features is cleaned out.
+
+### Notes
+
+* The extension asks for unlimited storage so the browser keeps the backup copy instead of clearing it.
+* If the home screen still shows the old app icon, remove it and add it again from the app drawer, since launchers keep their own copy of icons.
+* Update the extension too. It shares the backup copy, the Uni-Vault fix, and save after rename.
+
 ## [0.9.1] - 2026-10-23
 
 Bookmarks now travel in the vault QR, and the extension's password generator handles strict site rules.
