@@ -20,9 +20,6 @@ const setupPassword = document.getElementById('setup-password')
 const btnSetupDone = document.getElementById('btn-setup-done')
 const msgSetup = document.getElementById('msg-setup')
 
-const statusFp = document.getElementById('status-fp')
-const statusPw = document.getElementById('status-pw')
-
 const btnFingerprint = document.getElementById('btn-fingerprint')
 const btnPassword = document.getElementById('btn-password')
 const inputPassword = document.getElementById('input-password')
@@ -132,9 +129,7 @@ function updateSetupStatus() {
 
 async function updateStatus() {
   const status = await auth.initAuth()
-  if (statusFp) statusFp.className = 'status' + (status.hasFingerprint ? ' active' : '')
-  if (statusPw) statusPw.className = 'status' + (status.hasPassword ? ' active' : '')
-  btnFingerprint.classList.toggle('hidden', !status.hasFingerprint)
+  viewLocked.classList.toggle('no-fp', !status.hasFingerprint)
   return status
 }
 
@@ -240,7 +235,7 @@ function showFpFallback() {
   msgSetup.className = 'msg'
   const title = document.createElement('div')
   title.textContent = 'Fingerprint / PIN not available on this device.'
-  title.style.color = 'var(--green)'
+  title.style.color = 'var(--text)'
   title.style.fontWeight = 'bold'
   title.style.fontSize = '12px'
   title.style.marginBottom = '4px'

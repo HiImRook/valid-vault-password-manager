@@ -2,156 +2,101 @@
 <html>
 <head>
   <meta charset="UTF-8">
+  <link rel="stylesheet" href="theme.css">
+  <script src="theme.js"></script>
   <style>
-    @font-face {
-      font-family: 'Orbitron';
-      src: url('Orbitron.ttf') format('truetype');
-      font-weight: 700 900;
-      font-display: swap;
-    }
-    :root {
-      --bg: #0a0e0a;
-      --bg-raise: #0d130d;
-      --panel: #101710;
-      --green: #33ff66;
-      --green-dim: #1f9e40;
-      --green-faint: #163020;
-      --text: #b8f0c4;
-      --text-dim: #6fae7f;
-      --danger: #ff5555;
-    }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    html { background: var(--bg); padding-bottom: 3px; }
-    body {
-      width: 340px;
-      font-family: "Courier New", "Consolas", "DejaVu Sans Mono", monospace;
-      background: var(--bg);
-      color: var(--text);
-      border: 1px solid var(--green-dim);
-      border-top: none;
-      border-radius: 0 0 12px 12px;
-    }
-    .container { padding: 16px; }
-    .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
-    .header-icon { width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 20px; border-radius: 6px; transition: background 0.15s; }
-    .header-icon:hover { background: var(--green-faint); }
-    .header-icon.lock { color: var(--green); }
-    .header-icon.expand { color: var(--green); }
-    .header-left { display: flex; gap: 2px; align-items: center; }
-    .header-icon.bookmark svg { width: 20px; height: 20px; }
-    .header-icon.bookmark path { stroke: var(--green); stroke-width: 2; stroke-linejoin: round; fill: none; }
-    .header-icon.bookmark.saved path { fill: var(--green); }
-    .bm-url { font-size: 11px; color: var(--text-dim); word-break: break-all; margin: 4px 0 8px; }
-    .bm-name { color: var(--green); word-break: break-word; }
-    .ham { display: inline-block; width: 20px; height: 2px; background: var(--green); position: relative; box-shadow: 0 6px 0 var(--green), 0 -6px 0 var(--green); }
-    .wordmark {
-      font-family: 'Orbitron', sans-serif;
-      font-weight: 900;
-      color: var(--green);
-      font-size: 17px;
-      letter-spacing: 2px;
-      text-align: center;
-      flex: 1;
-      text-shadow: 0 0 8px rgba(51,255,102,0.4);
-    }
-    .wordmark.solo { margin-bottom: 14px; }
+    body { width: 340px; }
+    .body { padding: 16px 14px 14px; }
+    .mark { margin: 6px 0 16px; }
+    .fp { width: 100%; min-height: 46px; display: flex; align-items: center; justify-content: center; gap: 9px; }
+    .fp svg { width: 22px; height: 22px; fill: currentColor; }
+    .go { width: 46px; min-height: 46px; padding: 0; display: flex; align-items: center; justify-content: center; flex: none; }
+    .go svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    #view-locked .note { margin-top: 12px; }
+    #view-locked.no-fp .fp, #view-locked.no-fp .or, #view-locked.no-fp .note { display: none; }
+    .lead { margin-bottom: 12px; }
+    .enroll-row { display: flex; gap: 8px; align-items: center; margin: 8px 0; }
+    .enroll-row .label { flex: 1; font-size: 14px; color: var(--text); }
+    .enroll-row .state { font-size: 12px; color: var(--text-dim); }
+    .enroll-row input { flex: 1; min-width: 0; }
+    .fp-note { font-size: 12px; color: var(--text-dim); margin: -2px 0 8px; line-height: 1.4; }
+    #btn-setup-done { margin-top: 12px; }
     .menu-wrap { position: relative; }
-    .menu-dropdown { position: absolute; top: 40px; right: 0; background: var(--bg-raise); border: 1px solid var(--green-dim); border-radius: 6px; overflow: hidden; z-index: 50; min-width: 150px; box-shadow: 0 4px 16px rgba(0,0,0,0.5); }
-    .menu-item { padding: 12px 16px; color: var(--text); font-size: 13px; cursor: pointer; white-space: nowrap; }
-    .menu-item:hover { background: var(--green); color: #05140a; }
-    .section { background: var(--bg-raise); border: 1px solid var(--green-faint); border-radius: 8px; padding: 14px; margin-bottom: 10px; }
-    .section-title { color: var(--text-dim); font-size: 11px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; }
-    button {
-      background: var(--green); color: #05140a; border: none;
-      padding: 11px 16px; border-radius: 6px; cursor: pointer;
-      font-family: inherit; font-size: 13px; font-weight: 700; width: 100%; margin: 4px 0;
-      letter-spacing: 0.5px; transition: background 0.15s, box-shadow 0.15s;
-    }
-    button:hover { background: #5aff80; box-shadow: 0 0 14px rgba(51,255,102,0.25); }
-    button.secondary { background: transparent; color: var(--green); border: 1px solid var(--green-dim); font-weight: 400; }
-    button.secondary:hover { background: var(--green-faint); box-shadow: none; }
-    button.small { padding: 8px 12px; font-size: 12px; width: auto; }
-    button.enroll { background: var(--green); color: #05140a; }
-    button.reenroll { background: transparent; color: var(--danger); border: 1px solid var(--danger); font-weight: 400; }
-    button.reenroll:hover { background: rgba(255,85,85,0.12); box-shadow: none; }
-    .enroll-row { display: flex; gap: 6px; align-items: center; margin: 6px 0; }
-    .enroll-row .label { flex: 1; font-size: 13px; color: var(--text); }
-    .enroll-row .state { font-size: 11px; color: var(--text-dim); margin-right: 6px; }
-    button.danger { background: transparent; color: var(--danger); border: 1px solid var(--danger); font-weight: 400; }
-    button.danger:hover { background: rgba(255,85,85,0.12); box-shadow: none; }
-    input {
-      background: var(--bg); border: 1px solid var(--green-faint); color: var(--text);
-      padding: 10px; border-radius: 6px; width: 100%; margin: 4px 0;
-      font-family: inherit; font-size: 13px;
-    }
-    input:focus { outline: none; border-color: var(--green-dim); box-shadow: 0 0 0 2px rgba(51,255,102,0.1); }
-    input::placeholder { color: var(--text-dim); }
-    .row { display: flex; gap: 6px; align-items: center; }
-    .row input { flex: 1; }
-    .status-bar { display: flex; gap: 6px; margin-bottom: 14px; justify-content: center; }
-    .status { padding: 4px 12px; border-radius: 4px; font-size: 10px; letter-spacing: 1px; background: var(--panel); color: var(--text-dim); border: 1px solid var(--green-faint); }
-    .status.active { background: var(--green); color: #05140a; border-color: var(--green); font-weight: 700; }
-    .hidden { display: none !important; }
-    .msg { font-size: 11px; color: var(--text-dim); text-align: center; padding: 8px; min-height: 8px; }
-    .msg.error { color: var(--danger); }
-    .msg.success { color: var(--green); }
-    p { font-size: 12px; color: var(--text-dim); line-height: 1.5; margin-bottom: 10px; }
+    .bookmark svg path { fill: none; }
+    .bookmark.saved svg path { fill: currentColor; }
+    .stack { display: flex; flex-direction: column; gap: 12px; }
+    .msg:empty { display: none; }
+    #bookmark-name { width: 100%; }
+    .bm-url { font-size: 11px; color: var(--text-dim); word-break: break-all; margin: 8px 0 12px; }
+    .bm-name { color: var(--text); font-weight: 600; word-break: break-word; }
+    .actions { display: flex; gap: 8px; margin-top: 12px; }
+    .actions button { flex: 1; }
+    #view-unlocked .topbar { padding: 10px 12px; }
+    #view-unlocked .brand { font-size: 13px; letter-spacing: 0.22em; gap: 7px; }
+    #view-unlocked .brand svg { width: 15px; height: 18px; }
+    #view-unlocked .topbar-actions { gap: 6px; }
   </style>
 </head>
 <body>
-  <div class="container">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><linearGradient id="vv-mark-fill" x1="0" y1="0" x2="1" y2="1"><stop offset="0" style="stop-color: var(--mark-1)"/><stop offset="1" style="stop-color: var(--mark-2)"/></linearGradient><clipPath id="vv-mark-clip"><path d="M4,4 L104,4 L171,262 L238,4 L338,4 L171,399 Z"/></clipPath><mask id="vv-mark-mask"><g fill="#fff"><rect x="0" y="8.00" width="342" height="14.44"/><rect x="0" y="36.89" width="342" height="14.44"/><rect x="0" y="65.78" width="342" height="14.44"/><rect x="0" y="94.67" width="342" height="14.44"/><rect x="0" y="123.56" width="342" height="14.44"/><rect x="0" y="152.44" width="342" height="14.44"/><rect x="0" y="181.33" width="342" height="14.44"/><rect x="0" y="210.22" width="342" height="14.44"/><rect x="0" y="239.11" width="342" height="14.44"/><rect x="0" y="268.00" width="342" height="14.44"/><rect x="0" y="296.89" width="342" height="14.44"/><rect x="0" y="325.78" width="342" height="14.44"/><rect x="0" y="354.67" width="342" height="14.44"/><rect x="0" y="383.56" width="342" height="14.44"/></g></mask></defs><symbol id="vv-mark" viewBox="0 0 342 403"><g clip-path="url(#vv-mark-clip)"><rect width="342" height="403" fill="url(#vv-mark-fill)" mask="url(#vv-mark-mask)"/></g></symbol></svg>
 
-    <div id="view-setup" class="hidden">
-      <div class="wordmark solo">VALID VAULT</div>
-      <div class="section">
-        <div class="section-title">Set Up Your Vault</div>
-        <p>Set up how you unlock your vault. Fingerprint, your device PIN, or your password can unlock it. Enroll at least one.</p>
-
+  <div id="view-setup" class="hidden">
+    <div class="topbar">
+      <div class="brand"><svg viewBox="0 0 342 403" aria-hidden="true"><use href="#vv-mark"/></svg>VALID VAULT</div>
+      <div class="topbar-actions"><button class="icon-btn" data-theme-toggle title="Switch between day and night"><span class="when-night"><svg class="vv-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 14.6A8.6 8.6 0 0 1 9.4 3.5a8.6 8.6 0 1 0 11.1 11.1z"/></svg></span><span class="when-day"><svg class="vv-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.2M12 19.3v2.2M4.6 4.6l1.6 1.6M17.8 17.8l1.6 1.6M2.5 12h2.2M19.3 12h2.2M4.6 19.4l1.6-1.6M17.8 6.2l1.6-1.6"/></svg></span></button></div>
+    </div>
+    <div class="body">
+      <div class="mark"><svg viewBox="0 0 342 403" aria-hidden="true"><use href="#vv-mark"/></svg></div>
+      <div class="panel">
+        <div class="panel-title">Set Up Your Vault</div>
+        <p class="lead">Set up how you unlock your vault. Fingerprint, your device PIN, or your password can unlock it. Enroll at least one.</p>
         <div class="enroll-row">
           <span class="label">Fingerprint / PIN</span>
           <span class="state" id="setup-state-fp"></span>
           <button class="small enroll" id="btn-setup-fp">Enroll</button>
         </div>
-        <div id="setup-fp-note" class="hidden" style="font-size:12px;color:var(--text-dim);margin:-2px 0 8px;">
-          Fingerprint / PIN isn't available in this browser. Enroll a master password below.
-        </div>
-
+        <div id="setup-fp-note" class="fp-note hidden">Fingerprint / PIN isn't available in this browser. Enroll a master password below.</div>
         <div class="enroll-row">
-          <input type="password" id="setup-password" placeholder="Password (12+ chars, letter, number, symbol)">
+          <input type="password" id="setup-password" placeholder="Master password" autocomplete="new-password">
           <button class="small enroll" id="btn-setup-pw">Enroll</button>
         </div>
-
-        <button id="btn-setup-done" style="margin-top:10px;">Finish &amp; Unlock</button>
-        <div id="msg-setup" class="msg"></div>
+        <div class="note">12 or more characters, with a letter, a number, and a symbol</div>
+        <button class="block" id="btn-setup-done">Finish &amp; Unlock</button>
       </div>
+      <div id="msg-setup" class="msg"></div>
     </div>
+  </div>
 
-    <div id="view-locked" class="hidden">
-      <div class="wordmark solo">VALID VAULT</div>
-      <div class="status-bar">
-        <span class="status" id="status-fp">FP</span>
-        <span class="status" id="status-pw">PW</span>
-      </div>
-      <div class="section">
-        <button id="btn-fingerprint">Unlock with Fingerprint</button>
-        <div class="row" style="margin-top:8px;">
-          <input type="password" id="input-password" placeholder="Password">
-          <button class="small" id="btn-password">Go</button>
+  <div id="view-locked" class="hidden">
+    <div class="topbar">
+      <div class="brand"><svg viewBox="0 0 342 403" aria-hidden="true"><use href="#vv-mark"/></svg>VALID VAULT</div>
+      <div class="topbar-actions"><button class="icon-btn" data-theme-toggle title="Switch between day and night"><span class="when-night"><svg class="vv-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 14.6A8.6 8.6 0 0 1 9.4 3.5a8.6 8.6 0 1 0 11.1 11.1z"/></svg></span><span class="when-day"><svg class="vv-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.2M12 19.3v2.2M4.6 4.6l1.6 1.6M17.8 17.8l1.6 1.6M2.5 12h2.2M19.3 12h2.2M4.6 19.4l1.6-1.6M17.8 6.2l1.6-1.6"/></svg></span></button></div>
+    </div>
+    <div class="body">
+      <div class="mark"><svg viewBox="0 0 342 403" aria-hidden="true"><use href="#vv-mark"/></svg></div>
+      <div class="panel">
+        <button class="fp" id="btn-fingerprint"><svg viewBox="0 0 256 256" aria-hidden="true"><path d="M72,128a134.63,134.63,0,0,1-14.16,60.47,8,8,0,1,1-14.32-7.12A118.8,118.8,0,0,0,56,128,71.73,71.73,0,0,1,83,71.8,8,8,0,1,1,93,84.29,55.76,55.76,0,0,0,72,128Zm56-8a8,8,0,0,0-8,8,184.12,184.12,0,0,1-23,89.1,8,8,0,0,0,14,7.76A200.19,200.19,0,0,0,136,128,8,8,0,0,0,128,120Zm0-32a40,40,0,0,0-40,40,8,8,0,0,0,16,0,24,24,0,0,1,48,0,214.09,214.09,0,0,1-20.51,92A8,8,0,1,0,146,226.83,230,230,0,0,0,168,128,40,40,0,0,0,128,88Zm0-64A104.11,104.11,0,0,0,24,128a87.76,87.76,0,0,1-5,29.33,8,8,0,0,0,15.09,5.33A103.9,103.9,0,0,0,40,128a88,88,0,0,1,176,0,282.24,282.24,0,0,1-5.29,54.45,8,8,0,0,0,6.3,9.4,8.22,8.22,0,0,0,1.55.15,8,8,0,0,0,7.84-6.45A298.37,298.37,0,0,0,232,128,104.12,104.12,0,0,0,128,24ZM94.4,152.17A8,8,0,0,0,85,158.42a151,151,0,0,1-17.21,45.44,8,8,0,0,0,13.86,8,166.67,166.67,0,0,0,19-50.25A8,8,0,0,0,94.4,152.17ZM128,56a72.85,72.85,0,0,0-9,.56,8,8,0,0,0,2,15.87A56.08,56.08,0,0,1,184,128a252.12,252.12,0,0,1-1.92,31A8,8,0,0,0,189,168a8.39,8.39,0,0,0,1,.06,8,8,0,0,0,7.92-7,266.48,266.48,0,0,0,2-33A72.08,72.08,0,0,0,128,56Zm57.93,128.25a8,8,0,0,0-9.75,5.75c-1.46,5.69-3.15,11.4-5,17a8,8,0,0,0,5,10.13,7.88,7.88,0,0,0,2.55.42,8,8,0,0,0,7.58-5.46c2-5.92,3.79-12,5.35-18.05A8,8,0,0,0,185.94,184.26Z"/></svg>Unlock with Fingerprint</button>
+        <div class="or">OR</div>
+        <div class="row">
+          <input type="password" id="input-password" placeholder="Master password" autocomplete="current-password">
+          <button class="go" id="btn-password" aria-label="Unlock with password"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6"/></svg></button>
         </div>
       </div>
+      <div class="note">Fingerprint or PIN, or your master password</div>
       <div id="msg-locked" class="msg"></div>
     </div>
+  </div>
 
-    <div id="view-unlocked" class="hidden">
-      <div class="header">
-        <div class="header-left">
-          <div class="header-icon lock" id="btn-lock" title="Lock">&#128275;</div>
-          <div class="header-icon bookmark hidden" id="btn-bookmark" title="Bookmark this page"><svg viewBox="0 0 24 24"><path d="M6 3h12v18l-6-5-6 5z"/></svg></div>
-        </div>
-        <div class="wordmark">VALID VAULT</div>
+  <div id="view-unlocked" class="hidden">
+    <div class="topbar">
+      <div class="brand"><svg viewBox="0 0 342 403" aria-hidden="true"><use href="#vv-mark"/></svg>VALID VAULT</div>
+      <div class="topbar-actions">
+        <button class="icon-btn bookmark hidden" id="btn-bookmark" title="Bookmark this page"><svg class="vv-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 3.5h11v17l-5.5-4.5-5.5 4.5z"/></svg></button>
+        <button class="icon-btn" id="btn-lock" title="Lock"><svg class="vv-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="4.5" y="10.5" width="15" height="10" rx="2.2"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/><path d="M12 14.6v2.2"/></svg></button>
+        <button class="icon-btn" data-theme-toggle title="Switch between day and night"><span class="when-night"><svg class="vv-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 14.6A8.6 8.6 0 0 1 9.4 3.5a8.6 8.6 0 1 0 11.1 11.1z"/></svg></span><span class="when-day"><svg class="vv-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.2M12 19.3v2.2M4.6 4.6l1.6 1.6M17.8 17.8l1.6 1.6M2.5 12h2.2M19.3 12h2.2M4.6 19.4l1.6-1.6M17.8 6.2l1.6-1.6"/></svg></span></button>
         <div class="menu-wrap">
-          <div class="header-icon expand" id="btn-expand" title="Menu"><span class="ham"></span></div>
-          <div class="menu-dropdown hidden" id="menu-dropdown">
+          <button class="icon-btn" id="btn-expand" title="Menu"><svg class="vv-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M5 12h14M5 17h14"/></svg></button>
+          <div class="menu hidden" id="menu-dropdown">
             <div class="menu-item" id="menu-bookmarks">Bookmarks</div>
             <div class="menu-item" id="menu-guide">User Guide</div>
             <div class="menu-item" id="menu-settings">Settings Menu</div>
@@ -159,37 +104,36 @@
           </div>
         </div>
       </div>
-      <div class="status-bar">
-        <span class="status active" id="status-session">Session</span>
+    </div>
+    <div class="body stack">
+      <div class="panel" id="unlocked-info">
+        <p>Vault unlocked. Autofill is active on websites. Open the menu to manage credentials, sync, and settings.</p>
       </div>
-      <div class="section" id="unlocked-info">
-        <p style="color:var(--text-dim);font-size:13px;line-height:1.5;">Vault unlocked. Autofill is active on websites. Open the menu to manage credentials, sync, and settings.</p>
+      <div class="panel hidden" id="univault-reconnect">
+        <p class="lead">Your Uni-Vault file needs permission again.</p>
+        <button class="block" id="btn-univault-reconnect">Reconnect vault file</button>
       </div>
-      <div class="section hidden" id="univault-reconnect">
-        <p style="color:var(--text-dim);font-size:12px;line-height:1.5;margin-bottom:8px;">Your Uni-Vault file needs permission again.</p>
-        <button id="btn-univault-reconnect">Reconnect vault file</button>
-      </div>
-      <div class="section hidden" id="bookmark-add">
-        <div class="section-title">Add Bookmark</div>
+      <div class="panel hidden" id="bookmark-add">
+        <div class="panel-title">Add Bookmark</div>
         <input type="text" id="bookmark-name" placeholder="Name">
         <div class="bm-url" id="bookmark-add-url"></div>
-        <div class="row">
+        <div class="actions">
           <button id="btn-bookmark-save">Save</button>
           <button class="secondary" id="btn-bookmark-add-cancel">Cancel</button>
         </div>
       </div>
-      <div class="section hidden" id="bookmark-remove">
-        <div class="section-title">Remove Bookmark</div>
+      <div class="panel hidden" id="bookmark-remove">
+        <div class="panel-title">Remove Bookmark</div>
         <p>Remove <span class="bm-name" id="bookmark-remove-name"></span> from your bookmarks?</p>
-        <div class="row">
+        <div class="actions">
           <button class="danger" id="btn-bookmark-remove">Remove</button>
           <button class="secondary" id="btn-bookmark-remove-cancel">Cancel</button>
         </div>
       </div>
       <div id="msg-unlocked" class="msg"></div>
     </div>
-
   </div>
+
   <script src="popup.js" type="module"></script>
 </body>
 </html>
