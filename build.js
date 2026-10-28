@@ -9,8 +9,6 @@ const CLASSIC_SCRIPTS = [{ file: path.join(ROOT, 'extension', 'jsqr.js'), id: 'v
 const TEXT_SCRIPTS = [{ file: path.join(ROOT, 'extension', 'scanworker.js'), id: 'vv-scanworker' }]
 const OUTPUT_DIR = path.join(ROOT, 'www')
 const OUTPUT = path.join(OUTPUT_DIR, 'index.html')
-const FONT_NAME = 'Orbitron.ttf'
-const FONT_SOURCE = path.join(ROOT, 'extension', FONT_NAME)
 const PLACEHOLDER = '<!--BUNDLE-->'
 const IMPORT_PATTERN = /^import\s+([\s\S]*?)\s+from\s+['"]([^'"]+)['"]\s*;?[ \t]*$/gm
 const BARE_IMPORT_PATTERN = /^import\s+['"][^'"]+['"]/m
@@ -127,8 +125,6 @@ function main() {
   const html = template.replace(PLACEHOLDER, () => classic + '\n<script>\n' + guardScript(bundle) + '\n</script>')
   fs.mkdirSync(OUTPUT_DIR, { recursive: true })
   fs.writeFileSync(OUTPUT, html)
-  const fontTarget = path.join(OUTPUT_DIR, FONT_NAME)
-  if (!fs.existsSync(fontTarget) && fs.existsSync(FONT_SOURCE)) fs.copyFileSync(FONT_SOURCE, fontTarget)
   console.log('Built ' + path.relative(ROOT, OUTPUT) + ' (v' + version + ', ' + modules.length + ' modules, ' + Math.round(html.length / 1024) + ' KB)')
   for (const mod of modules) console.log('  ' + mod.id)
 }
