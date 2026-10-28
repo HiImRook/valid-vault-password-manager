@@ -1,5 +1,4 @@
-<img width="768" height="900" alt="valid-vault-stacked-spin-transparent-768x900" src="https://github.com/user-attachments/assets/5d3240bb-9d24-4cd3-b539-d529a2730cbc" />
-
+<img width="768" height="900" alt="valid-vault-v-768x900" src="docs/valid-vault-v.gif" />
 
 
 # Valid Vault Password Manager
