@@ -113,11 +113,19 @@ function wireDrag(row, grip, item, index) {
   }
 }
 
-function makeButton(label, title, className, handler) {
+const ICONS = {
+  rename: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg>',
+  remove: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+  confirm: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
+  keep: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14l-5-5 5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg>'
+}
+
+function makeButton(icon, title, className, handler) {
   const btn = document.createElement('button')
   btn.className = 'item-btn' + (className ? ' ' + className : '')
-  btn.textContent = label
+  btn.innerHTML = ICONS[icon]
   btn.title = title
+  btn.setAttribute('aria-label', title)
   btn.onclick = (e) => {
     e.stopPropagation()
     markActivity()
@@ -160,6 +168,7 @@ async function commitRemove(item) {
 }
 
 function renderEditing(row, item) {
+  row.classList.add('editing')
   const input = document.createElement('input')
   input.className = 'rename-input'
   input.value = item.title
@@ -190,8 +199,9 @@ function renderConfirming(row, item) {
   title.textContent = 'Remove ' + item.title + '?'
   text.appendChild(title)
   row.appendChild(text)
-  row.appendChild(makeButton('✓', 'Remove', 'del', () => commitRemove(item)))
-  row.appendChild(makeButton('↩', 'Keep', '', () => {
+  row.classList.add('confirming')
+  row.appendChild(makeButton('confirm', 'Remove', 'del', () => commitRemove(item)))
+  row.appendChild(makeButton('keep', 'Keep', '', () => {
     panelState.confirmingId = null
     render()
   }))
@@ -218,12 +228,12 @@ function renderNormal(row, item, index) {
   text.appendChild(host)
   row.title = item.url
   row.appendChild(text)
-  row.appendChild(makeButton('✎', 'Rename', '', () => {
+  row.appendChild(makeButton('rename', 'Rename', '', () => {
     panelState.editingId = item.id
     panelState.confirmingId = null
     render()
   }))
-  row.appendChild(makeButton('✕', 'Remove', 'del', () => {
+  row.appendChild(makeButton('remove', 'Remove', 'del', () => {
     panelState.confirmingId = item.id
     panelState.editingId = null
     render()
@@ -242,7 +252,7 @@ function render() {
   if (total === 0) {
     const empty = document.createElement('div')
     empty.className = 'empty'
-    empty.textContent = 'No bookmarks yet. Open the Valid Vault popup on any page and tap the bookmark icon next to the lock.'
+    empty.textContent = 'No bookmarks yet. Open the Valid Vault popup on any page and click the bookmark icon.'
     listEl.appendChild(empty)
     return
   }
