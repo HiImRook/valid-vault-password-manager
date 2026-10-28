@@ -135,6 +135,7 @@
     return false
   }
 
+  const LOGIN_TEXT_TYPES = new Set(['text', 'email', 'tel'])
   const USERNAME_SELECTORS = [
     'input[autocomplete="username"]',
     'input[autocomplete="email"]',
@@ -362,8 +363,10 @@
     for (const pwField of pwFields) {
       if (skipPasswordFields && skipPasswordFields.has(pwField)) continue
       const form = composedForm(pwField) || document
-      const candidates = deepQueryAll('input[type="text"], input[type="email"], input[type="tel"]', form)
+      const typed = deepQueryAll('input[type="text"], input[type="email"], input[type="tel"]', form)
         .filter((input) => input.offsetParent !== null)
+      const candidates = typed.length ? typed : deepQueryAll('input', form)
+        .filter((input) => LOGIN_TEXT_TYPES.has(input.type) && input.offsetParent !== null)
       if (candidates.length === 0) continue
 
       const best = candidates.find((input) => fieldMatchesSelectors(input, USERNAME_SELECTORS)) || candidates[0]
