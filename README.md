@@ -1,4 +1,4 @@
-<img width="768" height="900" alt="valid-vault-v-768x900" src="docs/valid-vault-v.gif" />
+<img width="576" height="675" alt="valid-vault-v-768x900" src="docs/valid-vault-v.gif" />
 
 
 # Valid Vault Password Manager
