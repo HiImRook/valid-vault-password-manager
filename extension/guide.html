@@ -4,78 +4,76 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Valid Vault - User Guide</title>
+  <link rel="stylesheet" href="theme.css">
+  <script src="theme.js"></script>
   <style>
-    @font-face { font-family: 'Orbitron'; src: url('Orbitron.ttf') format('truetype'); font-weight: 700 900; font-display: swap; }
-    :root {
-      --bg: #0a0e0a; --bg-raise: #0d130d; --panel: #101710;
-      --green: #33ff66; --green-dim: #1f9e40; --green-faint: #163020;
-      --text: #b8f0c4; --text-dim: #6fae7f; --danger: #ff5555; --amber: #ffb84d;
-    }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
     html { scroll-behavior: smooth; }
-    body { font-family: "Courier New", "Consolas", "DejaVu Sans Mono", monospace; background: var(--bg); color: var(--text); line-height: 1.7; font-size: 15px; }
+    body { line-height: 1.7; font-size: 15px; }
     .container { display: flex; min-height: 100vh; }
-    .sidebar { width: 240px; flex-shrink: 0; background: var(--bg-raise); border-right: 1px solid var(--green-faint); position: sticky; top: 0; height: 100vh; overflow-y: auto; }
-    .sidebar-brand { font-family: 'Orbitron', sans-serif; font-weight: 900; color: var(--green); font-size: 15px; letter-spacing: 2px; padding: 22px 20px 6px; text-shadow: 0 0 8px rgba(51,255,102,0.4); }
-    .sidebar-sub { color: var(--text-dim); font-size: 12px; letter-spacing: 1px; padding: 0 20px 18px; border-bottom: 1px solid var(--green-faint); }
-    .sidebar a { display: block; padding: 10px 20px; color: var(--text-dim); text-decoration: none; border-left: 3px solid transparent; font-size: 13px; letter-spacing: 0.5px; }
-    .sidebar a:hover { background: var(--panel); color: var(--green); border-left-color: var(--green-dim); }
-    .content { flex: 1; padding: 40px; min-width: 0; }
-    .page { max-width: 860px; margin: 0 auto; }
-    h1 { font-family: 'Orbitron', sans-serif; font-weight: 700; color: var(--green); font-size: 28px; margin-bottom: 10px; letter-spacing: 1px; text-shadow: 0 0 8px rgba(51,255,102,0.3); }
-    .lede { color: var(--text-dim); margin-bottom: 8px; }
-    section { padding: 36px 0 12px; border-top: 1px solid var(--green-faint); margin-top: 28px; scroll-margin-top: 12px; }
-    h2 { font-family: 'Orbitron', sans-serif; font-weight: 700; color: var(--green); font-size: 20px; letter-spacing: 1px; margin-bottom: 18px; text-shadow: 0 0 6px rgba(51,255,102,0.25); }
-    h3 { color: var(--green); font-size: 16px; letter-spacing: 0.5px; margin: 26px 0 10px; }
-    h3::before { content: "// "; color: var(--green-dim); }
-    p { margin-bottom: 14px; }
-    strong { color: var(--green); }
-    em { font-style: normal; color: var(--text); border-bottom: 1px solid var(--green-dim); }
+    .sidebar { width: 250px; flex-shrink: 0; background: var(--bg-raise); border-right: var(--line) solid var(--green-faint); position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; }
+    .sidebar-head { padding: 22px 20px 16px; border-bottom: var(--line) solid var(--green-faint); }
+    .sidebar-sub { color: var(--text-dim); font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; margin-top: 8px; padding-left: 26px; }
+    .sidebar-links { flex: 1; overflow-y: auto; padding: 12px 12px; }
+    .sidebar a { display: block; padding: 8px 12px; margin-bottom: 2px; color: var(--text-dim); text-decoration: none; font-size: 13px; border-radius: 8px; }
+    .sidebar a:hover { background: var(--green-faint); color: var(--text); }
+    .sidebar-foot { padding: 14px 16px; border-top: var(--line) solid var(--green-faint); }
+    .content { flex: 1; padding: 40px 40px 60px; min-width: 0; }
+    .page { max-width: 820px; margin: 0 auto; }
+    h1 { font-size: 30px; font-weight: 600; color: var(--text); margin-bottom: 10px; }
+    .lede { color: var(--text-dim); margin-bottom: 8px; font-size: 16px; }
+    section { padding: 34px 0 12px; border-top: var(--line) solid var(--green-faint); margin-top: 28px; scroll-margin-top: 12px; }
+    h2 { font-family: var(--font-brand); font-weight: 400; color: var(--text); font-size: 24px; letter-spacing: 0.02em; margin-bottom: 16px; }
+    h3 { color: var(--text); font-size: 16px; font-weight: 700; margin: 26px 0 10px; }
+    p { margin-bottom: 14px; color: var(--text); font-size: 15px; }
+    strong { color: var(--text); font-weight: 700; }
+    em { font-style: italic; color: var(--text); }
+    a { color: var(--text); text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--rim-a); }
     ul, ol { margin: 4px 0 16px 0; padding-left: 0; list-style: none; }
-    ul li { position: relative; padding-left: 22px; margin-bottom: 8px; color: var(--text-dim); }
-    ul li::before { content: ">"; position: absolute; left: 0; color: var(--green-dim); }
+    ul li { position: relative; padding-left: 20px; margin-bottom: 8px; color: var(--text-dim); }
+    ul li::before { content: ""; position: absolute; left: 4px; top: 0.72em; width: 6px; height: 6px; border-radius: 50%; background: var(--text-dim); }
     ul li strong, ol li strong { color: var(--text); }
     ol { counter-reset: s; }
-    ol li { counter-increment: s; position: relative; padding: 8px 0 8px 40px; color: var(--text-dim); border-bottom: 1px solid var(--green-faint); }
+    ol li { counter-increment: s; position: relative; padding: 10px 0 10px 44px; color: var(--text-dim); border-bottom: 1px solid var(--green-faint); }
     ol li:last-child { border-bottom: none; }
-    ol li::before { content: counter(s, decimal-leading-zero); position: absolute; left: 0; top: 8px; color: var(--green); font-weight: 700; }
-    .box { background: var(--bg-raise); border: 1px solid var(--green-faint); border-left: 3px solid var(--green-dim); padding: 16px 20px; margin: 16px 0 20px; }
+    ol li::before { content: counter(s); position: absolute; left: 0; top: 10px; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: var(--text); border: var(--line) solid transparent; background: linear-gradient(180deg, var(--raise-top), var(--raise-bottom)) padding-box, linear-gradient(135deg, var(--rim-a), var(--rim-b)) border-box; box-shadow: inset 0 1px 0 var(--hi), 0 2px 0 var(--drop); line-height: 1; }
+    .box, .profile, table, .search-bar {
+      border: var(--line) solid transparent;
+      background: linear-gradient(180deg, var(--sink-top), var(--sink-bottom)) padding-box, linear-gradient(135deg, var(--rim-a), var(--rim-b)) border-box;
+      box-shadow: inset 0 3px 7px var(--inner), 0 2px 0 var(--drop);
+    }
+    .box { border-radius: 12px; padding: 16px 20px; margin: 16px 0 20px; }
     .box p:last-child { margin-bottom: 0; }
-    .box.warn { border-left-color: var(--amber); }
-    .box.warn strong { color: var(--amber); }
-    .box-title { color: var(--green); font-weight: 700; margin-bottom: 6px; letter-spacing: 0.5px; }
-    .box.warn .box-title { color: var(--amber); }
-    table { width: 100%; border-collapse: collapse; margin: 12px 0 20px; font-size: 14px; }
-    th { text-align: left; color: var(--green); font-weight: 700; padding: 10px 12px; border-bottom: 1px solid var(--green-dim); background: var(--bg-raise); }
-    td { padding: 10px 12px; border-bottom: 1px solid var(--green-faint); color: var(--text-dim); vertical-align: top; }
+    .box.warn { background: linear-gradient(180deg, var(--sink-top), var(--sink-bottom)) padding-box, linear-gradient(135deg, var(--danger-rim-a), var(--danger-rim-b)) border-box; }
+    .box-title { color: var(--text); font-weight: 700; margin-bottom: 6px; }
+    .box.warn .box-title { color: var(--danger); }
+    table { width: 100%; border-collapse: separate; border-spacing: 0; border-radius: 12px; overflow: hidden; margin: 12px 0 20px; font-size: 14px; }
+    th { text-align: left; color: var(--text); font-weight: 700; padding: 11px 14px; border-bottom: 1px solid var(--green-faint); }
+    td { padding: 11px 14px; border-bottom: 1px solid var(--green-faint); color: var(--text-dim); vertical-align: top; }
+    tr:last-child td { border-bottom: none; }
     td:first-child { color: var(--text); white-space: nowrap; }
-    .profiles { display: grid; grid-template-columns: repeat(2, 1fr); gap: 2px; margin: 12px 0 20px; }
-    .profile { background: var(--bg-raise); border: 1px solid var(--green-faint); padding: 18px 20px; }
-    .profile-name { color: var(--green); font-weight: 700; letter-spacing: 0.5px; margin-bottom: 10px; }
-    .profile-name::before { content: "> "; color: var(--green-dim); }
+    .profiles { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; margin: 12px 0 20px; }
+    .profile { border-radius: 12px; padding: 18px 20px; }
+    .profile-name { color: var(--text); font-weight: 700; margin-bottom: 10px; font-size: 16px; }
     .profile dl { display: grid; grid-template-columns: 96px 1fr; gap: 4px 10px; font-size: 13px; margin-bottom: 10px; }
     .profile dt { color: var(--text-dim); }
     .profile dd { color: var(--text); }
     .profile p { font-size: 13px; color: var(--text-dim); margin: 0; }
-    .faq dt { color: var(--green); font-weight: 700; margin-top: 18px; }
+    .faq dt { color: var(--text); font-weight: 700; margin-top: 18px; }
     .faq dd { color: var(--text-dim); margin: 6px 0 0; }
-    .key { display: inline-block; border: 1px solid var(--green-dim); padding: 0 6px; font-size: 13px; color: var(--text); }
-    .foot { color: var(--text-dim); font-size: 13px; padding: 30px 0 10px; border-top: 1px solid var(--green-faint); margin-top: 36px; }
-    .search-bar { position: fixed; top: 16px; right: 24px; z-index: 50; display: flex; align-items: center; gap: 6px; background: var(--bg-raise); border: 1px solid var(--green-dim); border-radius: 8px; padding: 6px 8px; box-shadow: 0 4px 18px rgba(0,0,0,0.55); }
-    .search-bar input { background: var(--bg); border: 1px solid var(--green-faint); color: var(--text); font-family: inherit; font-size: 13px; padding: 7px 10px; border-radius: 6px; width: 220px; }
-    .search-bar input:focus { outline: none; border-color: var(--green-dim); box-shadow: 0 0 0 2px rgba(51,255,102,0.1); }
-    .search-bar input::placeholder { color: var(--text-dim); }
+    .key { display: inline-block; padding: 0 7px; font-size: 13px; color: var(--text); border-radius: 6px; border: 1px solid var(--rim-a); box-shadow: 0 2px 0 var(--drop); font-family: var(--font-mono); line-height: 1.5; }
+    .foot { color: var(--text-dim); font-size: 13px; padding: 30px 0 10px; border-top: var(--line) solid var(--green-faint); margin-top: 36px; }
+    .search-bar { position: fixed; top: 16px; right: 24px; z-index: 50; display: flex; align-items: center; gap: 6px; border-radius: 12px; padding: 6px 8px; }
+    .search-bar input { font-size: 13px; padding: 8px 32px 8px 10px; width: 230px; }
     .search-bar input::-webkit-search-cancel-button { -webkit-appearance: none; appearance: none; }
     .search-field { position: relative; display: flex; align-items: center; }
-    .search-field input { padding-right: 32px; }
-    .search-icon { position: absolute; right: 9px; width: 16px; height: 16px; pointer-events: none; filter: drop-shadow(0 0 3px rgba(51,255,102,0.45)); }
-    .search-bar button { background: transparent; color: var(--green); border: 1px solid var(--green-dim); border-radius: 6px; font-family: inherit; font-size: 12px; padding: 6px 9px; cursor: pointer; }
-    .search-bar button:disabled { opacity: 0.35; cursor: default; }
+    .search-icon { position: absolute; right: 10px; width: 16px; height: 16px; pointer-events: none; fill: none; stroke: var(--text-dim); stroke-width: 2; stroke-linecap: round; }
+    .search-bar button { width: 32px; min-height: 32px; height: 32px; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
+    .search-bar button svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
     .search-count { color: var(--text-dim); font-size: 12px; min-width: 74px; text-align: right; white-space: nowrap; }
-    mark.hit { background: rgba(51,255,102,0.22); color: var(--text); border-radius: 2px; padding: 0 1px; }
-    mark.hit-active { background: var(--green); color: #05140a; box-shadow: 0 0 8px rgba(51,255,102,0.6); }
+    mark.hit { background: var(--green-faint); color: var(--text); border-radius: 3px; padding: 0 1px; }
+    mark.hit-active { background: var(--text); color: var(--bg); }
     @media (max-width: 900px) {
-      .search-bar { position: sticky; top: 0; right: auto; border-radius: 0; border-left: none; border-right: none; }
+      .search-bar { position: sticky; top: 0; right: auto; border-radius: 0; }
       .search-field { flex: 1; min-width: 0; }
       .search-bar input { flex: 1; width: auto; min-width: 0; }
       .container { display: block; }
@@ -84,20 +82,18 @@
       .profiles { grid-template-columns: 1fr; }
       td:first-child { white-space: normal; }
     }
-    body::before { content:""; position: fixed; inset: 0; background: repeating-linear-gradient(to bottom, rgba(51,255,102,0.022) 0px, rgba(51,255,102,0.022) 1px, rgba(0,0,0,0) 1px, rgba(0,0,0,0) 2px, rgba(0,0,0,0.28) 2px, rgba(0,0,0,0.28) 3px); pointer-events: none; z-index: 100; animation: crt-flicker 6s steps(1,end) infinite; }
-    body::after { content:""; position: fixed; inset: 0; background: radial-gradient(ellipse at center, rgba(0,0,0,0) 55%, rgba(0,0,0,0.45) 100%); pointer-events: none; z-index: 99; }
-    .crt-roll { position: fixed; left: 0; right: 0; top: -25vh; height: 25vh; background: linear-gradient(to bottom, rgba(51,255,102,0) 0%, rgba(51,255,102,0.017) 70%, rgba(180,255,200,0.034) 96%, rgba(51,255,102,0) 100%); pointer-events: none; z-index: 98; animation: crt-roll 9s linear infinite; }
-    @keyframes crt-roll { from { transform: translateY(0); } to { transform: translateY(150vh); } }
-    @keyframes crt-flicker { 0% { opacity: 1; } 48% { opacity: 0.92; } 50% { opacity: 1; } 97% { opacity: 0.95; } }
-    @media (prefers-reduced-motion: reduce) { .crt-roll { display: none; } body::before { animation: none; } html { scroll-behavior: auto; } }
+    @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
   </style>
 </head>
 <body>
-  <div class="crt-roll"></div>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><linearGradient id="vv-mark-fill" x1="0" y1="0" x2="1" y2="1"><stop offset="0" style="stop-color: var(--mark-1)"/><stop offset="1" style="stop-color: var(--mark-2)"/></linearGradient><clipPath id="vv-mark-clip"><path d="M4,4 L104,4 L171,262 L238,4 L338,4 L171,399 Z"/></clipPath><mask id="vv-mark-mask"><g fill="#fff"><rect x="0" y="8.00" width="342" height="14.44"/><rect x="0" y="36.89" width="342" height="14.44"/><rect x="0" y="65.78" width="342" height="14.44"/><rect x="0" y="94.67" width="342" height="14.44"/><rect x="0" y="123.56" width="342" height="14.44"/><rect x="0" y="152.44" width="342" height="14.44"/><rect x="0" y="181.33" width="342" height="14.44"/><rect x="0" y="210.22" width="342" height="14.44"/><rect x="0" y="239.11" width="342" height="14.44"/><rect x="0" y="268.00" width="342" height="14.44"/><rect x="0" y="296.89" width="342" height="14.44"/><rect x="0" y="325.78" width="342" height="14.44"/><rect x="0" y="354.67" width="342" height="14.44"/><rect x="0" y="383.56" width="342" height="14.44"/></g></mask></defs><symbol id="vv-mark" viewBox="0 0 342 403"><g clip-path="url(#vv-mark-clip)"><rect width="342" height="403" fill="url(#vv-mark-fill)" mask="url(#vv-mark-mask)"/></g></symbol></svg>
   <div class="container">
     <nav class="sidebar">
-      <div class="sidebar-brand">VALID VAULT</div>
-      <div class="sidebar-sub">User Guide</div>
+      <div class="sidebar-head">
+        <div class="brand"><svg viewBox="0 0 342 403" aria-hidden="true"><use href="#vv-mark"/></svg>VALID VAULT</div>
+        <div class="sidebar-sub">User Guide</div>
+      </div>
+      <div class="sidebar-links">
       <a href="#start">Getting Started</a>
       <a href="#unlock">Fingerprint, PIN, or Password</a>
       <a href="#lock">Locking and Timers</a>
@@ -113,16 +109,18 @@
       <a href="#profiles">Setups for Different Users</a>
       <a href="#trouble">Troubleshooting</a>
       <a href="#limits">Honest Limits</a>
+      </div>
+      <div class="sidebar-foot"><button class="icon-btn" data-theme-toggle title="Switch between day and night"><span class="when-night"><svg class="vv-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 14.6A8.6 8.6 0 0 1 9.4 3.5a8.6 8.6 0 1 0 11.1 11.1z"/></svg></span><span class="when-day"><svg class="vv-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.2M12 19.3v2.2M4.6 4.6l1.6 1.6M17.8 17.8l1.6 1.6M2.5 12h2.2M19.3 12h2.2M4.6 19.4l1.6-1.6M17.8 6.2l1.6-1.6"/></svg></span></button></div>
     </nav>
 
     <div class="search-bar" role="search">
       <div class="search-field">
         <input type="search" id="guide-search" placeholder="Search the guide" autocomplete="off" spellcheck="false" aria-label="Search the guide">
-        <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="#33ff66" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><line x1="15.3" y1="15.3" x2="20.5" y2="20.5"/></svg>
+        <svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><line x1="15.3" y1="15.3" x2="20.5" y2="20.5"/></svg>
       </div>
       <span class="search-count" id="guide-search-count" aria-live="polite"></span>
-      <button type="button" id="guide-search-prev" title="Previous match (Shift+Enter)" aria-label="Previous match">&#9650;</button>
-      <button type="button" id="guide-search-next" title="Next match (Enter)" aria-label="Next match">&#9660;</button>
+      <button type="button" id="guide-search-prev" title="Previous match (Shift+Enter)" aria-label="Previous match"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 15l6-6 6 6"/></svg></button>
+      <button type="button" id="guide-search-next" title="Next match (Enter)" aria-label="Next match"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
     </div>
     <main class="content">
       <div class="page">
@@ -142,8 +140,8 @@
             <li><strong>Enroll Fingerprint / PIN.</strong> This uses Windows Hello, which covers your fingerprint reader and your Windows device PIN. This is the recommended method. The next section explains why.</li>
             <li><strong>Add a password only if you want one.</strong> It is optional. If you add it, it needs 12 or more characters with a letter, a number, and a symbol, and longer is much better.</li>
             <li><strong>Finish &amp; Unlock.</strong> You need at least one unlock method.</li>
-            <li><strong>Back up your key right away.</strong> In the menu, open Settings Menu, then Sync, and use Export Key. Store that file as described in <a href="#backups" style="color:var(--green);">Backups and Cold Storage</a>. Do this before you save anything important.</li>
-            <li><strong>Pick your timers</strong> in Settings using <a href="#profiles" style="color:var(--green);">Setups for Different Users</a> as a starting point.</li>
+            <li><strong>Back up your key right away.</strong> In the menu, open Settings Menu, then Sync, and use Export Key. Store that file as described in <a href="#backups">Backups and Cold Storage</a>. Do this before you save anything important.</li>
+            <li><strong>Pick your timers</strong> in Settings using <a href="#profiles">Setups for Different Users</a> as a starting point.</li>
           </ol>
         </section>
 
@@ -373,7 +371,7 @@
             <li><strong>Permission asked again:</strong> if the browser forgets your permission, unlocking asks for it again, so you are usually back in sync with no extra step. If it still needs your OK, a <strong>Reconnect</strong> button appears in the window you unlocked from and in Sync. If this browser loses the link itself, Sync names the file so you can pick it again with Import Vault.</li>
             <li><strong>If the browser empties its storage:</strong> Valid Vault keeps an encrypted backup copy of your vault and unlock setup in the extension's own settings storage. If the browser ever clears the main copy, Valid Vault restores it the next time it opens, and you unlock as usual. Clear Vault removes the backup copy too.</li>
             <li><strong>Keep the file on this computer's own drive.</strong> A USB drive is for backups, since Uni-Vault stops syncing whenever the drive is unplugged.</li>
-            <li><strong>Keep your backups.</strong> Uni-Vault keeps one file on one disk, so keep exporting backups to cold storage as described in <a href="#backups" style="color:var(--green);">Backups and Cold Storage</a>. When a browser is linked, Export Vault saves a separate backup copy and the link stays put.</li>
+            <li><strong>Keep your backups.</strong> Uni-Vault keeps one file on one disk, so keep exporting backups to cold storage as described in <a href="#backups">Backups and Cold Storage</a>. When a browser is linked, Export Vault saves a separate backup copy and the link stays put.</li>
             <li><strong>Unlink</strong> in Sync stops a browser from syncing. It keeps its own copy, and the file is not deleted.</li>
           </ul>
 
@@ -396,7 +394,7 @@
           <p>Every browser and device that should share a vault needs the <strong>same master key</strong>. Always move the key first, then the vault. Merging only works between browsers that hold the same key.</p>
 
           <h3>Adding another browser on the same computer</h3>
-          <p>A computer cannot scan its own screen, so use files. Linking the vault file sets up Uni-Vault, as described in <a href="#univault" style="color:var(--green);">Uni-Vault on One Computer</a>.</p>
+          <p>A computer cannot scan its own screen, so use files. Linking the vault file sets up Uni-Vault, as described in <a href="#univault">Uni-Vault on One Computer</a>.</p>
           <ol>
             <li>In your current browser: Sync, <strong>Export Key</strong> and <strong>Export Vault</strong>.</li>
             <li>Install Valid Vault in the new browser and complete first setup.</li>
