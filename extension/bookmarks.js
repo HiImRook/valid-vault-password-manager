@@ -198,16 +198,6 @@ function sameTrees(a, b) {
   return canonicalItems(a) === canonicalItems(b)
 }
 
-async function importRow(incomingRow, key) {
-  if (!incomingRow) return false
-  const incomingTree = await decryptRow(incomingRow, key)
-  const localTree = await readTree(key)
-  const merged = mergeTrees(localTree, incomingTree)
-  if (sameTrees(localTree, merged)) return false
-  await writeTree(merged, key)
-  return true
-}
-
 function planBookmarkImport(tree, entries) {
   const live = new Set(tree.items.filter((item) => !item.deleted).map((item) => item.url))
   const deleted = new Set(tree.items.filter((item) => item.deleted).map((item) => item.url))
@@ -265,7 +255,6 @@ export {
   sameTrees,
   writeTree,
   readTree,
-  importRow,
   planBookmarkImport,
   previewBookmarkImport,
   importBookmarkList

@@ -171,39 +171,6 @@ async function deleteWebCredential(credentialId) {
   return { success: false, error: 'Credential not found' }
 }
 
-async function reEncryptVault(vault, oldKey, newKey) {
-  const out = {
-    meta: { version: vault.meta.version, createdAt: vault.meta.createdAt, lastAccess: vault.meta.lastAccess },
-    credentials: {}
-  }
-
-  for (const category of Object.keys(vault.credentials)) {
-    const list = []
-    for (const cred of vault.credentials[category]) {
-      if (cred.deleted) {
-        const tomb = { id: cred.id, deleted: true, deletedAt: cred.deletedAt, updatedAt: cred.updatedAt }
-        if (cred.name) {
-          try { tomb.name = await encrypt(await decrypt(cred.name, oldKey), newKey) } catch (error) {}
-        }
-        list.push(tomb)
-        continue
-      }
-      const name = await decrypt(cred.name, oldKey)
-      const value = await decrypt(cred.value, oldKey)
-      list.push({
-        id: cred.id,
-        name: await encrypt(name, newKey),
-        value: await encrypt(value, newKey),
-        createdAt: cred.createdAt,
-        updatedAt: cred.updatedAt
-      })
-    }
-    out.credentials[category] = list
-  }
-
-  return out
-}
-
 async function identityFor(cred, masterKey) {
   if (!cred.name) return cred.deleted ? undefined : 'id:' + cred.id
   try {
@@ -260,7 +227,6 @@ export {
   getAllCategories,
   updateWebCredential,
   deleteWebCredential,
-  reEncryptVault,
   mergeWebCredsVaults,
   sameWebCreds
 }

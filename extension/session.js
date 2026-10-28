@@ -1,6 +1,5 @@
 const session = {
   masterKey: null,
-  unlockedDomains: new Set(),
   lastActivity: 0,
   timeoutId: null
 }
@@ -67,11 +66,6 @@ function hasMasterKey() {
   return session.masterKey !== null
 }
 
-function unlockDomain(domain) { session.unlockedDomains.add(domain) }
-function lockDomain(domain) { session.unlockedDomains.delete(domain) }
-function isDomainUnlocked(domain) { return session.unlockedDomains.has(domain) }
-function getUnlockedDomains() { return Array.from(session.unlockedDomains) }
-
 function resetActivity() { session.lastActivity = Date.now() }
 
 async function checkTimeout() {
@@ -102,7 +96,6 @@ function stopTimeout() {
 async function lockAll() {
   const wasUnlocked = session.masterKey !== null
   session.masterKey = null
-  session.unlockedDomains.clear()
   session.lastActivity = 0
   stopTimeout()
   await clearStorageSession()
@@ -112,14 +105,6 @@ async function lockAll() {
 async function clearStorageSession() {
   if (!haveStorage()) return
   try { await chrome.storage.session.remove(['masterKeyBytes', LEGACY_SOFT_KEY]) } catch (e) {}
-}
-
-async function getState() {
-  return {
-    hasMasterKey: hasMasterKey(),
-    unlockedDomains: getUnlockedDomains(),
-    lastActivity: session.lastActivity
-  }
 }
 
 function watchSharedLock() {
@@ -138,13 +123,8 @@ export {
   setMasterKey,
   getMasterKey,
   hasMasterKey,
-  unlockDomain,
-  lockDomain,
-  isDomainUnlocked,
-  getUnlockedDomains,
   resetActivity,
   checkTimeout,
   lockAll,
-  clearStorageSession,
-  getState
+  clearStorageSession
 }

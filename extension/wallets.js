@@ -421,16 +421,6 @@ function sameTrees(a, b) {
   return canonicalTree(a) === canonicalTree(b)
 }
 
-async function importRow(incomingRow, key) {
-  if (!incomingRow) return false
-  const incomingTree = await decryptRow(incomingRow, key)
-  const localTree = await readTree(key)
-  const merged = mergeTrees(localTree, incomingTree)
-  if (sameTrees(localTree, merged)) return false
-  await writeTree(merged, key)
-  return true
-}
-
 export {
   MAX_WORDS,
   STANDARD_LENGTHS,
@@ -452,6 +442,5 @@ export {
   mergeTrees,
   sameTrees,
   writeTree,
-  readTree,
-  importRow
+  readTree
 }

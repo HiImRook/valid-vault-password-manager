@@ -25,11 +25,6 @@ function readRawRecord(storeName, key) {
   })
 }
 
-async function getAuthRecord() {
-  try { await openVaultStore() } catch (e) {}
-  return readRawRecord('auth', 'primary')
-}
-
 openVaultStore().catch(() => {})
 
 async function getSessionKeyBytes() {

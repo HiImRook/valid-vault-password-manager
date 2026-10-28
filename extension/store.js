@@ -4,7 +4,7 @@ const VAULT_CHANGE_STAMP = 'vaultChangedAt'
 const MIRROR_PREFIX = 'vvMirror:'
 const MIRROR_READY_KEY = 'vvMirrorReady'
 const MIRROR_BYTES_TAG = '$vvBytes'
-const MIRROR_STORES = ['auth', 'passwords', 'wallets', 'webcreds', 'personalInfo', 'vaultMigration', 'bookmarks']
+const STORE_NAMES = ['auth', 'passwords', 'wallets', 'webcreds', 'personalInfo', 'vaultMigration', 'bookmarks']
 
 let db = null
 let readyPromise = null
@@ -102,7 +102,7 @@ async function restoreFromMirror(database, mirrored) {
     const rest = key.slice(MIRROR_PREFIX.length)
     const at = rest.indexOf(':')
     const storeName = rest.slice(0, at)
-    if (!MIRROR_STORES.includes(storeName) || !value || value.id === undefined) continue
+    if (!STORE_NAMES.includes(storeName) || !value || value.id === undefined) continue
     if (await readRecord(database, storeName, value.id)) continue
     pending.push({ storeName, record: fromMirror(value) })
   }
@@ -118,7 +118,7 @@ async function restoreFromMirror(database, mirrored) {
 
 async function seedMirror(database) {
   const entries = {}
-  for (const storeName of MIRROR_STORES) {
+  for (const storeName of STORE_NAMES) {
     for (const record of await readAllRecords(database, storeName)) {
       if (record && record.id !== undefined) entries[mirrorKey(storeName, record.id)] = toMirror(record)
     }
@@ -332,7 +332,6 @@ async function setBookmarksVault(vaultData) {
   return putVault('bookmarks', { id: 'vault', ...vaultData })
 }
 
-const ALL_STORES = ['auth', 'passwords', 'wallets', 'webcreds', 'personalInfo', 'vaultMigration', 'bookmarks']
 const VAULT_DATA_STORES = ['passwords', 'webcreds', 'personalInfo', 'vaultMigration', 'bookmarks', 'wallets']
 
 async function clearStores(names) {
@@ -348,7 +347,7 @@ async function clearStores(names) {
 }
 
 async function clearAll() {
-  await clearStores(ALL_STORES)
+  await clearStores(STORE_NAMES)
 }
 
 async function clearVaultData() {

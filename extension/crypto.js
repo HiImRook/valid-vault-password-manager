@@ -144,37 +144,6 @@ async function decrypt(encrypted, key) {
   return decoder.decode(plaintext)
 }
 
-async function createBackupSignature(payload, key) {
-  const encoder = new TextEncoder()
-  const keyBytes = await crypto.subtle.exportKey('raw', key)
-
-  const hmacKey = await crypto.subtle.importKey(
-    'raw',
-    keyBytes,
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign']
-  )
-
-  const signature = await crypto.subtle.sign('HMAC', hmacKey, encoder.encode(payload))
-  return Array.from(new Uint8Array(signature))
-}
-
-async function verifyBackupSignature(payload, signature, key) {
-  const encoder = new TextEncoder()
-  const keyBytes = await crypto.subtle.exportKey('raw', key)
-
-  const hmacKey = await crypto.subtle.importKey(
-    'raw',
-    keyBytes,
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['verify']
-  )
-
-  return crypto.subtle.verify('HMAC', hmacKey, new Uint8Array(signature), encoder.encode(payload))
-}
-
 export {
   PBKDF2_ITERATIONS,
   LEGACY_PBKDF2_ITERATIONS,
@@ -187,7 +156,5 @@ export {
   wrapMasterKey,
   unwrapMasterKey,
   encrypt,
-  decrypt,
-  createBackupSignature,
-  verifyBackupSignature
+  decrypt
 }

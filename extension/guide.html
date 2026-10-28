@@ -472,7 +472,7 @@
           <div class="box warn">
             <div class="box-title">What can and cannot be recovered</div>
             <p>As long as one of your devices can still unlock the vault, nothing is lost. Unlock it, use <strong>Change Key Passphrase</strong>, and <strong>Export Key</strong> again to make a fresh key file with a new passphrase and answers.</p>
-            <p>Your vault is gone only when no device can unlock it anymore and you have no key file you can open. The usual way that happens is uninstalling Valid Vault, or clearing the browser's site data, without exporting the key first. There is no reset link and no support desk, by design, so export your key before you uninstall, reset, or replace anything.</p>
+            <p>Your vault is gone only when no device can unlock it anymore and you have no key file you can open. The usual way that happens is uninstalling Valid Vault without exporting the key first. Clearing the browser's site data does not remove it, because the extension keeps an encrypted backup copy of the vault and restores it at the next start. Uninstalling and Clear Vault remove everything. There is no reset link and no support desk, by design, so export your key before you uninstall, reset, or replace anything.</p>
           </div>
         </section>
 
@@ -566,7 +566,6 @@
           <ul>
             <li><strong>Malware:</strong> Valid Vault shuts out the common tricks. Passwords never touch the clipboard, unlocking happens in Valid Vault's own window, and web pages only ever receive the one value you clicked to fill. Malware that has taken full control of your computer can still watch what you do on screen, which no password manager can fully prevent. Keeping your system updated and locking when you finish keep that risk small.</li>
             <li><strong>Someone at your unlocked computer</strong> can use autofill to sign in to your sites on that computer until the vault locks. They cannot view your logins, seed phrases, or personal info, change your unlock methods, or take a usable copy of your key without your fingerprint, PIN, or password. A short timer closes even that window.</li>
-            <li><strong>The phone app is catching up.</strong> The Android app is receiving the extension's newer features, including the protected key format, Personal Info, bookmarks, Crypto Wallets, and the password generator, in upcoming releases. Until then, this guide describes the browser extension.</li>
             <li><strong>Unusual form fields</strong>, such as custom drop-downs and editable text areas, are not filled.</li>
           </ul>
         </section>

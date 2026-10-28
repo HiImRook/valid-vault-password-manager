@@ -426,27 +426,6 @@ async function getCredentials(domain, masterKey) {
   return { success: true, credentials: result }
 }
 
-async function getAllDomains(masterKey) {
-  if (!masterKey) {
-    return { success: false, locked: true, domains: [] }
-  }
-
-  let tree
-  try {
-    tree = await readVaultTree(masterKey)
-  } catch (error) {
-    return { success: false, error: 'Decryption failed' }
-  }
-
-  const domains = []
-  for (const domain of Object.keys(tree.credentials)) {
-    const hasLive = tree.credentials[domain].some(isLive)
-    if (hasLive) domains.push(domain)
-  }
-
-  return { success: true, domains }
-}
-
 async function updateCredential(credentialId, updates, masterKey) {
   let tree
   try {
@@ -551,24 +530,6 @@ async function deleteCredential(credentialId, masterKey) {
   return { success: false, error: 'Credential not found' }
 }
 
-async function autofill(domain, credentialId, masterKey) {
-  const result = await getCredentials(domain, masterKey)
-  if (!result.success) return result
-
-  if (result.credentials.length === 0) {
-    return { success: false, error: 'No credentials for domain' }
-  }
-
-  if (credentialId) {
-    const cred = result.credentials.find((candidate) => candidate.id === credentialId)
-    if (cred) return { success: true, username: cred.username, password: cred.password }
-    return { success: false, error: 'Credential not found' }
-  }
-
-  const cred = result.credentials[0]
-  return { success: true, username: cred.username, password: cred.password }
-}
-
 function stamp(record) {
   return typeof record.updatedAt === 'number' && isFinite(record.updatedAt) ? record.updatedAt : 0
 }
@@ -659,13 +620,6 @@ function liveAppLinks(tree) {
     if (!link.deleted) out[pkg] = link.site
   }
   return out
-}
-
-async function getAppLink(pkg, masterKey) {
-  const tree = await readVaultTree(masterKey)
-  const link = (tree.appLinks || {})[pkg]
-  if (!link || link.deleted) return null
-  return link.site
 }
 
 async function listAppLinks(masterKey) {
@@ -981,7 +935,6 @@ export {
   getRelatedCredentials,
   relatedCredentials,
   siteOf,
-  getAllDomains,
   updateCredential,
   deleteCredential,
   noteCredentialUse,
@@ -994,8 +947,6 @@ export {
   importLogins,
   previousExpiresAt,
   PREVIOUS_KEEP_MS,
-  autofill,
-  getAppLink,
   setAppLink,
   removeAppLink,
   listAppLinks,

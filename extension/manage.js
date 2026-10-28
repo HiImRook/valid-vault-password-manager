@@ -7,10 +7,9 @@ import * as wallets from './wallets.js'
 import * as walletsTab from './wallets-tab.js'
 import * as session from './session.js'
 import * as store from './store.js'
-import { splitIntoFrames, createFrameCollector } from './frames.js'
 import { createEncoder, createDecoder, QR_FRAME_MS } from './fountain.js'
 import { qrSvg, openCamera, scanStream, scanReadout } from './qrtools.js'
-import { masterKeyToCryptoKey, decrypt } from './crypto.js'
+import { masterKeyToCryptoKey } from './crypto.js'
 import { formDialog, askSecret, closeAllDialogs } from './dialogs.js'
 import * as keypackage from './keypackage.js'
 import * as uniVault from './linkedvault.js'
@@ -115,7 +114,7 @@ function attachActivityListeners() {
 async function checkAndShowLockOverlay() {
   if (session.hasMasterKey()) { hideLockOverlay(); return }
   const restored = await restoreMasterKeyFromSession()
-  if (restored) { hideLockOverlay() } else { showLockOverlay(); loginCredsUnlocked = false; webCredsUnlocked = false; personalInfoUnlocked = false; walletsTab.lock() }
+  if (restored) { hideLockOverlay() } else { showLockOverlay(); loginCredsUnlocked = false; webCredsUnlocked = false; personalInfoUnlocked = false; walletsTab.lock(); loadAllCredentials(); loadAllWebCredentials(); loadPersonalInfo() }
 }
 setInterval(checkAndShowLockOverlay, 5000)
 session.onLock(() => { checkAndShowLockOverlay() })
