@@ -3,146 +3,202 @@
 <head>
   <meta charset="UTF-8">
   <title>Valid Vault - Manage</title>
+  <link rel="stylesheet" href="theme.css">
+  <script src="theme.js"></script>
   <style>
-    @font-face { font-family: 'Orbitron'; src: url('Orbitron.ttf') format('truetype'); font-weight: 700 900; font-display: swap; }
-    :root {
-      --bg: #0a0e0a; --bg-raise: #0d130d; --panel: #101710;
-      --green: #33ff66; --green-dim: #1f9e40; --green-faint: #163020;
-      --text: #b8f0c4; --text-dim: #6fae7f; --danger: #ff5555;
-    }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: "Courier New", "Consolas", "DejaVu Sans Mono", monospace; background: var(--bg); color: var(--text); }
+    html, body { height: 100%; }
     .container { display: flex; height: 100vh; }
-    .sidebar { width: 210px; background: var(--bg-raise); border-right: 1px solid var(--green-faint); }
-    .sidebar-brand { font-family: 'Orbitron', sans-serif; font-weight: 900; color: var(--green); font-size: 15px; letter-spacing: 2px; padding: 22px 20px; text-shadow: 0 0 8px rgba(51,255,102,0.4); border-bottom: 1px solid var(--green-faint); }
-    .sidebar-tab { padding: 15px 20px; cursor: pointer; color: var(--text-dim); border-left: 3px solid transparent; font-size: 14px; letter-spacing: 0.5px; transition: background 0.15s, color 0.15s; }
-    .sidebar-tab:hover { background: var(--panel); color: var(--text); }
-    .sidebar-tab.active { color: var(--green); border-left-color: var(--green); background: var(--panel); }
-    .content { flex: 1; padding: 40px; overflow-y: auto; }
-    .content > div[id^="tab-"] { max-width: 960px; margin: 0 auto; }
-    h1 { font-family: 'Orbitron', sans-serif; font-weight: 700; color: var(--green); font-size: 26px; margin-bottom: 24px; letter-spacing: 1px; text-shadow: 0 0 8px rgba(51,255,102,0.3); }
-    h2 { color: var(--text-dim); font-size: 13px; text-transform: uppercase; letter-spacing: 1px; margin: 32px 0 16px; }
-    .auth-methods { display: flex; gap: 16px; margin-bottom: 32px; }
-    .auth-card { background: var(--bg-raise); border: 1px solid var(--green-faint); border-radius: 8px; padding: 18px; flex: 1; }
-    .auth-card.active { border: 1px solid var(--green); box-shadow: inset 0 0 20px rgba(51,255,102,0.06); }
-    .auth-title { color: var(--green); font-size: 16px; margin-bottom: 8px; font-weight: 700; }
-    .auth-status { color: var(--text-dim); font-size: 12px; margin-bottom: 12px; }
+    .sidebar { width: 236px; flex: none; display: flex; flex-direction: column; background: var(--bg-raise); border-right: var(--line) solid var(--green-faint); }
+    .sidebar .brand { padding: 22px 20px 20px; border-bottom: var(--line) solid var(--green-faint); }
+    .sidebar-tabs { flex: 1; overflow-y: auto; padding: 14px 12px; display: flex; flex-direction: column; gap: 6px; }
+    .sidebar-tab { padding: 11px 14px; border: var(--line) solid transparent; border-radius: 10px; cursor: pointer; color: var(--text-dim); font-size: 14px; font-weight: 500; user-select: none; }
+    .sidebar-tab:hover { color: var(--text); background: var(--green-faint); }
+    .sidebar-tab.active { color: var(--text); font-weight: 700; background: linear-gradient(180deg, var(--sink-top), var(--sink-bottom)) padding-box, linear-gradient(135deg, var(--rim-a), var(--rim-b)) border-box; box-shadow: inset 0 3px 6px var(--inner), 0 2px 0 var(--drop); }
+    .sidebar-foot { padding: 14px 16px; border-top: var(--line) solid var(--green-faint); display: flex; align-items: center; gap: 10px; color: var(--text-dim); font-size: 12px; }
+    .content { flex: 1; overflow-y: auto; padding: 36px 40px 60px; }
+    .content > div[id^="tab-"] { max-width: 920px; margin: 0 auto; }
+    h1 { font-size: 26px; font-weight: 600; color: var(--text); margin-bottom: 8px; }
+    h2 { color: var(--text-dim); font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; margin: 30px 0 12px; }
+    .intro { color: var(--text-dim); font-size: 14px; line-height: 1.55; margin-bottom: 16px; max-width: 760px; }
+    .section-text { color: var(--text-dim); font-size: 13px; line-height: 1.55; margin-bottom: 14px; }
+    .btn-row { display: flex; gap: 10px; flex-wrap: wrap; }
+    .btn-row + .btn-row { margin-top: 10px; }
+    .btn-icon { width: 17px; height: 17px; margin-right: 8px; vertical-align: -3px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .panel, .list, .auth-card, .setting-row, .wv-wallet, .wv-editor, .wv-notes-view, .wv-cell, .wv-covered, .scan-box, .msg {
+      border: var(--line) solid transparent;
+      background: linear-gradient(180deg, var(--sink-top), var(--sink-bottom)) padding-box, linear-gradient(135deg, var(--rim-a), var(--rim-b)) border-box;
+      box-shadow: inset 0 3px 7px var(--inner), 0 2px 0 var(--drop);
+    }
+    .panel { border-radius: 12px; padding: 18px; }
+    .auth-methods { display: flex; gap: 14px; flex-wrap: wrap; }
+    .auth-card { flex: 1 1 240px; border-radius: 12px; padding: 16px; }
+    .auth-card.active { box-shadow: inset 0 3px 7px var(--inner), 0 2px 0 var(--drop), 0 0 0 1px var(--rim-a); }
+    .auth-title { color: var(--text); font-size: 16px; font-weight: 600; margin-bottom: 4px; }
+    .auth-status { color: var(--text-dim); font-size: 13px; margin-bottom: 12px; }
     .auth-actions { display: flex; gap: 8px; }
-    .credential-list { background: var(--bg-raise); border: 1px solid var(--green-faint); border-radius: 8px; }
-    .credential-item { display: flex; align-items: center; padding: 16px; border-bottom: 1px solid var(--green-faint); }
-    .credential-item:last-child { border-bottom: none; }
-    .credential-domain { color: var(--green); font-size: 14px; font-weight: 700; width: 200px; }
-    .credential-username { color: var(--text-dim); font-size: 13px; flex: 1 1 0; min-width: 190px; overflow-wrap: anywhere; text-wrap: balance; }
-    .credential-password { color: var(--text-dim); font-size: 13px; font-family: monospace; flex: 0 1 auto; min-width: 150px; text-align: left; overflow-wrap: anywhere; text-wrap: balance; }
+    .list { border-radius: 12px; overflow: hidden; }
+    .gate, .empty-note { padding: 26px 16px; text-align: center; color: var(--text-dim); font-size: 13px; }
+    .gate-error { color: var(--danger); }
+    .group + .group { border-top: 1px solid var(--green-faint); }
+    .credential-item { display: flex; align-items: center; gap: 10px; padding: 14px 16px; cursor: pointer; user-select: none; }
+    .credential-item:hover { background: var(--green-faint); }
+    .group-arrow { width: 16px; height: 16px; flex: none; fill: none; stroke: var(--text-dim); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; transition: transform 0.15s; }
+    .group.open .group-arrow { transform: rotate(90deg); }
+    .credential-domain { color: var(--text); font-size: 15px; font-weight: 600; flex: 1; word-break: break-all; }
+    .group-count { color: var(--text-dim); font-size: 12px; }
+    .group-body { display: none; padding: 0 16px 4px 42px; border-top: 1px solid var(--green-faint); }
+    .group.open .group-body { display: block; }
+    .cred-row { padding: 12px 0; }
+    .cred-row + .cred-row { border-top: 1px solid var(--green-faint); }
+    .cred-main { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .credential-logintype { width: auto; padding: 6px 8px; font-size: 12px; }
+    .credential-username { color: var(--text); font-size: 14px; flex: 1 1 0; min-width: 160px; overflow-wrap: anywhere; }
+    .credential-password { color: var(--text-dim); font-family: var(--font-mono); font-size: 13px; flex: 0 1 auto; min-width: 140px; overflow-wrap: anywhere; }
     .credential-actions { display: flex; gap: 8px; flex-shrink: 0; }
-    button { background: var(--green); color: #05140a; border: none; padding: 9px 16px; border-radius: 6px; cursor: pointer; font-family: inherit; font-size: 12px; font-weight: 700; letter-spacing: 0.5px; transition: background 0.15s, box-shadow 0.15s; }
-    button:hover { background: #5aff80; box-shadow: 0 0 14px rgba(51,255,102,0.25); }
-    button.secondary { background: transparent; color: var(--green); border: 1px solid var(--green-dim); font-weight: 400; }
-    button.secondary:hover { background: var(--green-faint); box-shadow: none; }
-    button.danger { background: transparent; color: var(--danger); border: 1px solid var(--danger); font-weight: 400; }
-    button.danger:hover { background: rgba(255,85,85,0.12); box-shadow: none; }
-    button.small { padding: 6px 10px; font-size: 11px; }
-    button.enroll { background: var(--green); color: #05140a; font-weight: 700; }
-    button.reenroll { background: transparent; color: var(--danger); border: 1px solid var(--danger); font-weight: 400; }
-    button.reenroll:hover { background: rgba(255,85,85,0.12); box-shadow: none; }
-    input { background: var(--bg); border: 1px solid var(--green-faint); color: var(--text); padding: 9px; border-radius: 6px; font-family: inherit; font-size: 13px; }
-    input:focus { outline: none; border-color: var(--green-dim); box-shadow: 0 0 0 2px rgba(51,255,102,0.1); }
-    input::placeholder { color: var(--text-dim); }
-    .setting-row { background: var(--bg-raise); border: 1px solid var(--green-faint); padding: 18px; margin-bottom: 12px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; }
-    .setting-label { font-size: 14px; color: var(--text); }
-    .setting-desc { font-size: 12px; color: var(--text-dim); margin-top: 4px; }
+    .credential-extra { display: none; margin-top: 10px; padding: 10px 0 2px; border-top: 1px dashed var(--green-faint); }
+    .credential-extra.open { display: block; }
+    .extra-meta { color: var(--text-dim); font-size: 12px; padding: 3px 0; }
+    .extra-row { display: flex; align-items: center; gap: 10px; padding: 5px 0; font-size: 13px; }
+    .extra-label { width: 150px; color: var(--text-dim); flex: none; overflow-wrap: anywhere; }
+    .extra-value { flex: 1; color: var(--text); font-family: var(--font-mono); overflow-wrap: anywhere; }
+    .extra-add { margin-top: 8px; }
+    .pi-section { padding: 6px 18px 12px; }
+    .pi-section + .pi-section { border-top: 1px solid var(--green-faint); }
+    .pi-heading { color: var(--text-dim); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; padding: 12px 0 4px; }
+    .pi-row { display: flex; align-items: center; gap: 12px; padding: 9px 0; }
+    .pi-row + .pi-row { border-top: 1px solid var(--green-faint); }
+    .pi-label { width: 120px; flex: none; color: var(--text-dim); font-size: 13px; }
+    .pi-value { flex: 1; color: var(--text); font-size: 14px; overflow-wrap: anywhere; }
+    .pi-unset { color: var(--text-dim); font-style: italic; }
+    .pi-badge { display: inline-block; margin-left: 8px; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; color: var(--text); border: 1px solid var(--rim-a); vertical-align: 1px; }
+    .pi-actions { display: flex; gap: 8px; flex: none; }
+    .pi-empty { color: var(--text-dim); font-size: 13px; padding: 8px 0; }
+    .pi-foot { padding: 8px 0 2px; }
+    button.icon-only { width: 34px; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
+    .mini-icon { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .msg { text-align: left; padding: 12px 14px; margin: 16px 0; border-radius: 10px; font-size: 13px; line-height: 1.45; color: var(--text); }
+    .msg.error { color: var(--danger); background: linear-gradient(180deg, var(--sink-top), var(--sink-bottom)) padding-box, linear-gradient(135deg, var(--danger-rim-a), var(--danger-rim-b)) border-box; }
+    .share-qr-wrap { position: relative; margin: 16px auto 0; max-width: 480px; }
+    .share-qr-head { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 10px; }
+    .share-qr-label { flex: 1; color: var(--text-dim); font-size: 13px; line-height: 1.45; }
+    .share-qr { background: #fff; padding: 10px; border-radius: 10px; box-shadow: 0 0 0 var(--line) var(--rim-b); }
+    .share-qr svg { display: block; width: 100%; height: auto; }
+    .share-qr-timer { color: var(--text-dim); font-size: 12px; margin-top: 8px; text-align: center; }
+    .univault-status { color: var(--text); font-size: 13px; line-height: 1.5; margin-bottom: 12px; }
+    .scan-box { width: 280px; max-width: 100%; aspect-ratio: 1 / 1; border-radius: 12px; display: flex; flex-direction: column; gap: 10px; align-items: center; justify-content: center; text-align: center; color: var(--text-dim); font-size: 13px; cursor: pointer; position: relative; overflow: hidden; }
+    .scan-box:hover { color: var(--text); }
+    .scan-box .scan-icon { width: 34px; height: 34px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+    .scan-box video { position: absolute; inset: 0; }
+    .setting-row { border-radius: 12px; padding: 16px 18px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; gap: 20px; }
+    .setting-label { font-size: 15px; font-weight: 600; color: var(--text); }
+    .setting-desc { font-size: 12px; color: var(--text-dim); margin-top: 4px; line-height: 1.45; max-width: 560px; }
+    .setting-control { display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
+    .setting-note { font-size: 12px; color: var(--text-dim); margin: -4px 0 12px; min-height: 8px; }
     .time-input { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
-    .time-readout { font-size: 13px; color: var(--green-dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
-    .toggle { position: relative; width: 50px; height: 24px; background: var(--panel); border: 1px solid var(--green-faint); border-radius: 12px; cursor: pointer; }
-    .toggle.active { background: var(--green); border-color: var(--green); }
-    .toggle-knob { position: absolute; width: 16px; height: 16px; background: var(--text-dim); border-radius: 50%; top: 3px; left: 4px; transition: 0.2s; }
-    .toggle.active .toggle-knob { left: 29px; background: #05140a; }
-    .clear-vault-section { margin-top: 64px; padding: 24px; background: var(--bg-raise); border: 1px solid var(--danger); border-radius: 8px; }
-    .hidden { display: none !important; }
-    #share-qr svg { display: block; width: 100%; height: auto; }
-    .msg { padding: 12px; margin: 16px 0; border-radius: 6px; font-size: 13px; border: 1px solid transparent; }
-    .msg.success { background: rgba(51,255,102,0.08); color: var(--green); border-color: var(--green-faint); }
-    .msg.error { background: rgba(255,85,85,0.08); color: var(--danger); border-color: rgba(255,85,85,0.3); }
-    a { color: var(--green); }
-    textarea { background: var(--bg); border: 1px solid var(--green-faint); color: var(--text); padding: 9px; border-radius: 6px; font-family: inherit; font-size: 13px; resize: vertical; }
-    textarea:focus { outline: none; border-color: var(--green-dim); box-shadow: 0 0 0 2px rgba(51,255,102,0.1); }
+    .time-input input { width: 96px; }
+    .time-readout { font-size: 13px; color: var(--text-dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .setting-select { min-width: 90px; }
+    .danger-zone { margin-top: 48px; border-radius: 12px; padding: 20px; border: var(--line) solid transparent; background: linear-gradient(180deg, var(--sink-top), var(--sink-bottom)) padding-box, linear-gradient(135deg, var(--danger-rim-a), var(--danger-rim-b)) border-box; box-shadow: inset 0 3px 7px var(--inner), 0 2px 0 var(--drop); }
+    .danger-zone h2 { color: var(--danger); margin-top: 0; }
+    .danger-zone p { margin-bottom: 16px; line-height: 1.6; }
+    .danger-zone strong.warn { color: var(--danger); }
+    .about { color: var(--text-dim); font-size: 14px; line-height: 1.8; max-width: 640px; }
+    .about-title { color: var(--text); font-weight: 700; }
+    .about a { color: var(--text); }
+    a { color: var(--text); }
+    textarea { resize: vertical; }
     .wv-toolbar { display: flex; gap: 8px; margin-bottom: 14px; }
     .wv-gate, .wv-empty { padding: 24px; text-align: center; color: var(--text-dim); font-size: 13px; }
     .wv-error { color: var(--danger); }
-    .wv-wallet { background: var(--bg-raise); border: 1px solid var(--green-faint); border-radius: 8px; margin-bottom: 14px; }
+    .wv-wallet { border-radius: 12px; margin-bottom: 14px; }
     .wv-wallet.dragging, .wv-account.dragging { opacity: 0.4; }
-    .wv-wallet.drop-before, .wv-account.drop-before { box-shadow: 0 -2px 0 var(--green); }
-    .wv-wallet.drop-after, .wv-account.drop-after { box-shadow: 0 2px 0 var(--green); }
+    .wv-wallet.drop-before, .wv-account.drop-before { box-shadow: 0 -3px 0 var(--rim-a); }
+    .wv-wallet.drop-after, .wv-account.drop-after { box-shadow: 0 3px 0 var(--rim-a); }
     .wv-wallet-head, .wv-account-head { display: flex; align-items: center; gap: 8px; padding: 14px 16px; flex-wrap: wrap; }
     .wv-wallet-head { border-bottom: 1px solid var(--green-faint); }
     .wv-wallet-info, .wv-account-info { flex: 1; min-width: 140px; }
-    .wv-wallet-name { color: var(--green); font-size: 16px; font-weight: 700; word-break: break-word; }
+    .wv-wallet-name { color: var(--text); font-size: 16px; font-weight: 600; word-break: break-word; }
     .wv-account-label { color: var(--text); font-size: 14px; font-weight: 700; word-break: break-word; }
     .wv-account-meta { color: var(--text-dim); font-size: 11px; margin-top: 2px; }
     .wv-accounts { padding: 4px 12px 8px 24px; }
     .wv-account { border-bottom: 1px solid var(--green-faint); }
     .wv-account:last-child { border-bottom: none; }
     .wv-grip { color: var(--text-dim); font-size: 14px; letter-spacing: -3px; cursor: grab; padding: 4px 6px 4px 0; user-select: none; }
-    .wv-grip:hover { color: var(--green); }
+    .wv-grip:hover { color: var(--text); }
     .wv-confirm-text { color: var(--danger); font-size: 12px; }
     .wv-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 12px 0; }
-    .wv-cell { display: flex; align-items: center; gap: 6px; background: var(--bg); border: 1px solid var(--green-faint); border-radius: 6px; padding: 4px 8px; }
+    .wv-cell { display: flex; align-items: center; gap: 6px; border-radius: 8px; padding: 4px 8px; }
     .wv-num { color: var(--text-dim); font-size: 11px; min-width: 18px; text-align: right; }
-    .wv-word { color: var(--green); font-size: 14px; font-weight: 700; padding: 5px 0; }
-    .wv-word-input { border: none; background: transparent; padding: 5px 0; width: 100%; min-width: 0; color: var(--green); font-weight: 700; }
+    .wv-word { color: var(--text); font-family: var(--font-mono); font-size: 14px; font-weight: 600; padding: 5px 0; }
+    .wv-word-input { border: none; background: transparent; box-shadow: none; padding: 5px 0; width: 100%; min-width: 0; color: var(--text); font-family: var(--font-mono); font-weight: 600; }
     .wv-word-input:focus { box-shadow: none; }
-    .wv-cell:focus-within { border-color: var(--green-dim); }
+    .wv-cell:focus-within { box-shadow: inset 0 3px 7px var(--inner), 0 2px 0 var(--drop), 0 0 0 2px var(--focus); }
     .wv-reveal { padding: 0 16px 14px; }
-    .wv-notes-view { background: var(--bg); border: 1px solid var(--green-faint); border-radius: 6px; padding: 10px 12px; }
-    .wv-notes-view-header { color: var(--green); font-size: 13px; font-weight: 700; margin-bottom: 4px; }
+    .wv-notes-view { border-radius: 8px; padding: 10px 12px; }
+    .wv-notes-view-header { color: var(--text); font-size: 13px; font-weight: 700; margin-bottom: 4px; }
     .wv-notes-view-body { color: var(--text); font-size: 13px; white-space: pre-wrap; word-break: break-word; }
-    .wv-editor { background: var(--panel); border: 1px solid var(--green-dim); border-radius: 8px; padding: 16px; margin: 10px 0 14px; }
-    .wv-editor-title { color: var(--green); font-size: 14px; font-weight: 700; margin-bottom: 10px; word-break: break-word; }
+    .wv-editor { border-radius: 12px; padding: 16px; margin: 10px 0 14px; }
+    .wv-editor-title { color: var(--text); font-size: 14px; font-weight: 700; margin-bottom: 10px; word-break: break-word; }
     .wv-fields { display: flex; gap: 8px; flex-wrap: wrap; }
     .wv-fields input { flex: 1; min-width: 180px; }
-    .wv-hint { color: var(--text-dim); font-size: 12px; margin: 10px 0 0; }
-    .wv-warning { color: var(--danger); font-size: 12px; border: 1px solid rgba(255,85,85,0.3); background: rgba(255,85,85,0.08); border-radius: 6px; padding: 10px; margin-bottom: 10px; line-height: 1.5; }
+    .wv-hint { color: var(--text-dim); font-size: 12px; margin: 10px 0 0; line-height: 1.45; }
+    .wv-warning { color: var(--danger); font-size: 12px; border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; line-height: 1.5; border: var(--line) solid transparent; background: linear-gradient(180deg, var(--sink-top), var(--sink-bottom)) padding-box, linear-gradient(135deg, var(--danger-rim-a), var(--danger-rim-b)) border-box; }
     .wv-notes-header { width: 100%; margin: 10px 0 8px; }
     .wv-notes-body { width: 100%; }
-    .wv-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
-    .wv-covered { display: flex; align-items: center; justify-content: center; min-height: 120px; border: 1px dashed var(--green-dim); border-radius: 6px; cursor: pointer; }
+    .wv-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; flex-wrap: wrap; }
+    .wv-covered { display: flex; align-items: center; justify-content: center; min-height: 120px; border-radius: 10px; cursor: pointer; }
     .wv-covered-text { color: var(--text-dim); font-size: 13px; }
-    .wv-suggest { position: absolute; z-index: 1000; background: var(--bg-raise); border: 1px solid var(--green-dim); border-radius: 6px; box-shadow: 0 4px 16px rgba(0,0,0,0.5); overflow: hidden; }
-    .wv-suggest-item { padding: 6px 10px; font-size: 13px; color: var(--text); cursor: pointer; }
-    .wv-suggest-item:first-child { background: var(--green-faint); color: var(--green); }
-    .wv-suggest-item:hover { background: var(--green); color: #05140a; }
-    .wv-dialog-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 2000; }
-    .wv-dialog { background: var(--bg-raise); border: 1px solid var(--green-dim); border-radius: 8px; padding: 20px; width: min(420px, calc(100vw - 32px)); }
-    .wv-dialog-title { color: var(--green); font-size: 15px; font-weight: 700; margin-bottom: 10px; }
-    .wv-dialog-text { color: var(--text); font-size: 13px; line-height: 1.5; margin-bottom: 14px; word-break: break-word; }
+    .wv-suggest { position: absolute; z-index: 1000; overflow: hidden; border-radius: 10px; border: var(--line) solid transparent; background: linear-gradient(180deg, var(--raise-top), var(--raise-bottom)) padding-box, linear-gradient(135deg, var(--rim-a), var(--rim-b)) border-box; box-shadow: 0 4px 0 var(--drop), 0 10px 24px var(--shadow); }
+    .wv-suggest-item { padding: 7px 12px; font-size: 13px; color: var(--text); cursor: pointer; }
+    .wv-suggest-item:first-child { background: var(--green-faint); font-weight: 600; }
+    .wv-suggest-item:hover { background: var(--green-faint); }
+    .wv-dialog-overlay { position: fixed; inset: 0; background: var(--overlay); display: flex; align-items: center; justify-content: center; z-index: 2000; padding: 16px; }
+    .wv-dialog { border-radius: 14px; padding: 20px; width: min(460px, 100%); border: var(--line) solid transparent; background: linear-gradient(180deg, var(--raise-top), var(--raise-bottom)) padding-box, linear-gradient(135deg, var(--rim-a), var(--rim-b)) border-box; box-shadow: inset 0 1px 0 var(--hi), 0 4px 0 var(--drop), 0 14px 40px var(--shadow); }
+    .wv-dialog-title { color: var(--text); font-size: 17px; font-weight: 600; margin-bottom: 10px; }
+    .wv-dialog-text { color: var(--text); font-size: 13px; line-height: 1.55; margin-bottom: 14px; word-break: break-word; white-space: pre-line; }
     .wv-dialog-input { width: 100%; margin-bottom: 14px; }
-    .wv-dialog-actions { display: flex; gap: 8px; justify-content: flex-end; }
+    .wv-dialog-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; margin-top: 4px; }
+    .wv-dialog-actions button { min-width: 110px; }
     .vv-form { max-height: calc(100vh - 32px); overflow-y: auto; }
-    .setting-select { background: var(--bg); border: 1px solid var(--green-faint); color: var(--text); padding: 8px 10px; border-radius: 6px; font-family: inherit; font-size: 13px; min-width: 80px; }
-    .setting-select:focus { outline: none; border-color: var(--green-dim); }
     .vv-field { margin-bottom: 12px; }
-    .vv-field-label { display: block; color: var(--text); font-size: 12px; margin-bottom: 4px; }
+    .vv-field-label { display: block; color: var(--text); font-size: 12px; font-weight: 600; margin-bottom: 5px; }
     .vv-field-row { display: flex; gap: 6px; }
-    .vv-field-input { flex: 1; min-width: 0; }
-    .vv-eye { padding: 6px 10px; font-size: 11px; }
-    .vv-field-select { background: var(--bg); border: 1px solid var(--green-faint); color: var(--text); padding: 9px; border-radius: 6px; font-family: inherit; font-size: 13px; }
-    .vv-field-select:focus { outline: none; border-color: var(--green-dim); }
+    .vv-field-input { flex: 1; min-width: 0; width: 100%; }
+    .vv-eye { padding: 6px 12px; font-size: 12px; }
+    .vv-field-select { width: 100%; }
     .vv-field-hint { color: var(--text-dim); font-size: 11px; margin-top: 4px; line-height: 1.4; }
     .vv-form-error { color: var(--danger); font-size: 12px; min-height: 16px; margin-bottom: 8px; }
-    @media (max-width: 760px) { .wv-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    .lock-overlay { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; background: var(--bg); }
+    .lock-card { width: min(380px, calc(100vw - 32px)); text-align: center; }
+    .lock-card .mark { margin-bottom: 18px; }
+    .lock-title { font-family: var(--font-brand); font-size: 22px; letter-spacing: 0.2em; color: var(--text); margin-bottom: 8px; }
+    .lock-text { color: var(--text-dim); font-size: 14px; margin-bottom: 20px; }
+    .lock-card .panel { text-align: left; }
+    .fp { width: 100%; min-height: 46px; display: flex; align-items: center; justify-content: center; gap: 9px; }
+    .fp svg { width: 22px; height: 22px; fill: currentColor; }
+    #btn-manage-unlock-fp.hidden + .or { display: none; }
+    .go { width: 46px; min-height: 46px; padding: 0; display: flex; align-items: center; justify-content: center; flex: none; }
+    .go svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    #msg-manage-lock { background: none; border: none; box-shadow: none; text-align: center; padding: 6px 0; margin: 10px 0 0; min-height: 30px; }
+    #msg-manage-lock.hidden { display: block !important; visibility: hidden; }
+    @media (max-width: 760px) { .wv-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .sidebar { width: 190px; } .content { padding: 24px 18px 48px; } }
   </style>
 </head>
 <body>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><linearGradient id="vv-mark-fill" x1="0" y1="0" x2="1" y2="1"><stop offset="0" style="stop-color: var(--mark-1)"/><stop offset="1" style="stop-color: var(--mark-2)"/></linearGradient><clipPath id="vv-mark-clip"><path d="M4,4 L104,4 L171,262 L238,4 L338,4 L171,399 Z"/></clipPath><mask id="vv-mark-mask"><g fill="#fff"><rect x="0" y="8.00" width="342" height="14.44"/><rect x="0" y="36.89" width="342" height="14.44"/><rect x="0" y="65.78" width="342" height="14.44"/><rect x="0" y="94.67" width="342" height="14.44"/><rect x="0" y="123.56" width="342" height="14.44"/><rect x="0" y="152.44" width="342" height="14.44"/><rect x="0" y="181.33" width="342" height="14.44"/><rect x="0" y="210.22" width="342" height="14.44"/><rect x="0" y="239.11" width="342" height="14.44"/><rect x="0" y="268.00" width="342" height="14.44"/><rect x="0" y="296.89" width="342" height="14.44"/><rect x="0" y="325.78" width="342" height="14.44"/><rect x="0" y="354.67" width="342" height="14.44"/><rect x="0" y="383.56" width="342" height="14.44"/></g></mask></defs><symbol id="vv-mark" viewBox="0 0 342 403"><g clip-path="url(#vv-mark-clip)"><rect width="342" height="403" fill="url(#vv-mark-fill)" mask="url(#vv-mark-mask)"/></g></symbol></svg>
   <div class="container">
     <div class="sidebar">
-      <div class="sidebar-brand">VALID VAULT</div>
-      <div class="sidebar-tab active" data-tab="manage">Manage</div>
-      <div class="sidebar-tab" data-tab="personal">Personal Info</div>
-      <div class="sidebar-tab" data-tab="webcreds">Misc Credentials</div>
-      <div class="sidebar-tab" data-tab="wallets">Crypto Wallets</div>
-      <div class="sidebar-tab" data-tab="sync">Sync</div>
-      <div class="sidebar-tab" data-tab="settings">Settings</div>
-      <div class="sidebar-tab" data-tab="about">About</div>
+      <div class="brand"><svg viewBox="0 0 342 403" aria-hidden="true"><use href="#vv-mark"/></svg>VALID VAULT</div>
+      <div class="sidebar-tabs">
+        <div class="sidebar-tab active" data-tab="manage">Manage</div>
+        <div class="sidebar-tab" data-tab="personal">Personal Info</div>
+        <div class="sidebar-tab" data-tab="webcreds">Misc Credentials</div>
+        <div class="sidebar-tab" data-tab="wallets">Crypto Wallets</div>
+        <div class="sidebar-tab" data-tab="sync">Sync</div>
+        <div class="sidebar-tab" data-tab="settings">Settings</div>
+        <div class="sidebar-tab" data-tab="about">About</div>
+      </div>
+      <div class="sidebar-foot"><button class="icon-btn" data-theme-toggle title="Switch between day and night"><span class="when-night"><svg class="vv-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 14.6A8.6 8.6 0 0 1 9.4 3.5a8.6 8.6 0 1 0 11.1 11.1z"/></svg></span><span class="when-day"><svg class="vv-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.2M12 19.3v2.2M4.6 4.6l1.6 1.6M17.8 17.8l1.6 1.6M2.5 12h2.2M19.3 12h2.2M4.6 19.4l1.6-1.6M17.8 6.2l1.6-1.6"/></svg></span></button></div>
     </div>
 
     <div class="content">
@@ -170,28 +226,28 @@
         </div>
 
         <h2>Website Credentials</h2>
-        <div class="credential-list" id="credentials-list"></div>
+        <div class="list" id="credentials-list"></div>
         <div id="msg-manage" class="msg hidden"></div>
       </div>
 
       <div id="tab-webcreds" class="hidden">
         <h1>Misc Credentials</h1>
-        <p style="color:var(--text-dim);font-size:13px;margin-bottom:14px;">Store a secret under a category, like a Wi-Fi password, license key, or security code.</p>
-        <button id="btn-add-webcred">Add</button>
-        <div id="webcreds-list" style="margin-top:14px;"></div>
+        <p class="intro">Store a secret under a category, like a Wi-Fi password, license key, or security code.</p>
+        <div class="btn-row"><button id="btn-add-webcred">Add</button></div>
+        <div id="webcreds-list" class="list" style="margin-top:14px;"></div>
         <div id="msg-webcreds" class="msg hidden"></div>
       </div>
 
       <div id="tab-personal" class="hidden">
         <h1>Personal Info</h1>
-        <p style="color:var(--text-dim);font-size:13px;margin-bottom:14px;">Used by autofill on signup and profile forms. Viewing requires unlock; adding or editing any field asks for your fingerprint or device PIN, with your master password as the fallback. Social Security numbers and card info are deferred for now, held back for later, added security work.</p>
-        <div id="personalinfo-content"></div>
+        <p class="intro">Used by autofill on signup and profile forms. Viewing requires unlock; adding or editing any field asks for your fingerprint or device PIN, with your master password as the fallback. Social Security numbers and card info are deferred for now, held back for later, added security work.</p>
+        <div id="personalinfo-content" class="list"></div>
         <div id="msg-personalinfo" class="msg hidden"></div>
       </div>
 
       <div id="tab-wallets" class="hidden">
         <h1>Crypto Wallets</h1>
-        <p style="color:var(--text-dim);font-size:13px;margin-bottom:14px;">Store seed phrases by wallet and account. Words stay hidden until you click Show, and hide again when you switch tabs, leave the window, or the timer runs out.</p>
+        <p class="intro">Store seed phrases by wallet and account. Words stay hidden until you click Show, and hide again when you switch tabs, leave the window, or the timer runs out.</p>
         <div id="wallets-toolbar" class="wv-toolbar hidden">
           <button id="btn-add-wallet">Add Wallet</button>
           <button class="secondary" id="btn-sort-wallets">Sort A-Z</button>
@@ -204,74 +260,87 @@
         <h1>Sync</h1>
 
         <h2>Share</h2>
-        <p style="color:var(--text-dim);font-size:13px;margin-bottom:10px;">Show a QR for another device to scan. The vault stays encrypted under your master key, and the master key is wrapped under your passphrase and three security answers, so the receiving device must enter them before it can use the key.</p>
-        <div style="display:flex;gap:10px;flex-wrap:wrap;">
-          <button id="btn-share-vault">Share Vault</button>
-          <button id="btn-share-key" class="secondary">Share Master Key</button>
-        </div>
-        <div id="share-qr-wrap" class="hidden" style="position:relative;margin-top:14px;margin-left:auto;margin-right:auto;max-width:480px;">
-          <button id="btn-stop-share" style="position:absolute;top:0;right:0;background:none;border:1px solid var(--green-dim);color:var(--green);border-radius:6px;padding:4px 10px;font-size:12px;z-index:2;">Close</button>
-          <div id="share-qr-label" style="color:var(--text-dim);font-size:12px;margin-bottom:8px;"></div>
-          <div id="share-qr" style="background:#fff;padding:10px;border-radius:8px;"></div>
-          <div id="share-qr-timer" style="color:var(--text-dim);font-size:11px;margin-top:6px;"></div>
-        </div>
-
-        <h2 style="margin-top:28px;">Backup Files</h2>
-        <p style="color:var(--text-dim);font-size:13px;margin-bottom:10px;">Save an encrypted copy offline, or restore one. Files stay useless without your master key.</p>
-        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
-          <button id="btn-export-vault">Export Vault</button>
-          <button id="btn-import-vault" class="secondary">Import Vault</button>
-        </div>
-        <div style="display:flex;gap:10px;flex-wrap:wrap;">
-          <button id="btn-export-key">Export Key</button>
-          <button id="btn-import-key" class="secondary">Import Key</button>
-          <button id="btn-change-key-protection" class="secondary">Change Key Passphrase</button>
+        <div class="panel">
+          <p class="section-text">Show a QR for another device to scan. The vault stays encrypted under your master key, and the master key is wrapped under your passphrase and three security answers, so the receiving device must enter them before it can use the key.</p>
+          <div class="btn-row">
+            <button id="btn-share-vault">Share Vault</button>
+            <button id="btn-share-key" class="secondary">Share Master Key</button>
+          </div>
+          <div id="share-qr-wrap" class="share-qr-wrap hidden">
+            <div class="share-qr-head">
+              <div id="share-qr-label" class="share-qr-label"></div>
+              <button id="btn-stop-share" class="small secondary">Close</button>
+            </div>
+            <div id="share-qr" class="share-qr"></div>
+            <div id="share-qr-timer" class="share-qr-timer"></div>
+          </div>
         </div>
 
-        <h2 style="margin-top:28px;">Import From Another App</h2>
-        <p style="color:var(--text-dim);font-size:13px;margin-bottom:10px;">Bring your logins over from another password manager's export file: CSV, Samsung Pass, Bitwarden JSON, 1Password 1PUX, or a Dashlane zip. Bring your bookmarks straight from this browser, or from another browser's bookmarks HTML file. Everything is encrypted into your vault as it comes in. Valid Vault never exports passwords unencrypted.</p>
-        <div style="display:flex;gap:10px;flex-wrap:wrap;">
-          <button id="btn-import-passwords" class="secondary">Import Passwords</button>
-          <button id="btn-import-browser-bookmarks" class="secondary">Import This Browser's Bookmarks</button>
-          <button id="btn-import-bookmarks" class="secondary">Import Bookmarks File</button>
+        <h2>Backup Files</h2>
+        <div class="panel">
+          <p class="section-text">Save an encrypted copy offline, or restore one. Files stay useless without your master key.</p>
+          <div class="btn-row">
+            <button id="btn-export-vault">Export Vault</button>
+            <button id="btn-import-vault" class="secondary">Import Vault</button>
+          </div>
+          <div class="btn-row">
+            <button id="btn-export-key">Export Key</button>
+            <button id="btn-import-key" class="secondary">Import Key</button>
+            <button id="btn-change-key-protection" class="secondary">Change Key Passphrase</button>
+          </div>
         </div>
 
-        <h2 style="margin-top:28px;">Uni-Vault</h2>
-        <p style="color:var(--text-dim);font-size:13px;margin-bottom:10px;">Link every browser on this computer to one encrypted vault file so they share one vault and stay in sync automatically. Export Vault creates the file; Import Vault links another browser to it.</p>
-        <div id="univault-status" style="color:var(--text);font-size:13px;margin-bottom:10px;">Checking...</div>
-        <div style="display:flex;gap:10px;flex-wrap:wrap;">
-          <button id="btn-univault-reconnect" class="hidden">Reconnect</button>
-          <button id="btn-univault-unlink" class="secondary hidden">Unlink</button>
+        <h2>Import From Another App</h2>
+        <div class="panel">
+          <p class="section-text">Bring your logins over from another password manager's export file: CSV, Samsung Pass, Bitwarden JSON, 1Password 1PUX, or a Dashlane zip. Bring your bookmarks straight from this browser, or from another browser's bookmarks HTML file. Everything is encrypted into your vault as it comes in. Valid Vault never exports passwords unencrypted.</p>
+          <div class="btn-row">
+            <button id="btn-import-passwords" class="secondary">Import Passwords</button>
+            <button id="btn-import-browser-bookmarks" class="secondary">Import This Browser's Bookmarks</button>
+            <button id="btn-import-bookmarks" class="secondary">Import Bookmarks File</button>
+          </div>
         </div>
 
-        <h2 style="margin-top:28px;">Scan a Device</h2>
-        <p style="color:var(--text-dim);font-size:13px;margin-bottom:10px;">Read a key or vault streamed from another device.</p>
-        <div id="qr-scan-box" style="border:1px dashed var(--green-dim);border-radius:8px;width:280px;max-width:100%;aspect-ratio:1/1;display:flex;align-items:center;justify-content:center;text-align:center;color:var(--green);cursor:pointer;position:relative;overflow:hidden;">Tap to open scanner</div>
+        <h2>Uni-Vault</h2>
+        <div class="panel">
+          <p class="section-text">Link every browser on this computer to one encrypted vault file so they share one vault and stay in sync automatically. Export Vault creates the file; Import Vault links another browser to it.</p>
+          <div id="univault-status" class="univault-status">Checking...</div>
+          <div class="btn-row">
+            <button id="btn-univault-reconnect" class="hidden">Reconnect</button>
+            <button id="btn-univault-unlink" class="secondary hidden">Unlink</button>
+          </div>
+        </div>
 
-        <div id="msg-sync" class="msg hidden" style="margin-top:16px;"></div>
+        <h2>Scan a Device</h2>
+        <div class="panel">
+          <p class="section-text">Read a key or vault streamed from another device.</p>
+          <div id="qr-scan-box" class="scan-box"><svg class="scan-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8V5.5A1.5 1.5 0 0 1 5.5 4H8M16 4h2.5A1.5 1.5 0 0 1 20 5.5V8M20 16v2.5a1.5 1.5 0 0 1-1.5 1.5H16M8 20H5.5A1.5 1.5 0 0 1 4 18.5V16"/><path d="M4 12h16"/></svg><span>Click to open the scanner</span></div>
+        </div>
+
+        <div id="msg-sync" class="msg hidden"></div>
       </div>
 
       <div id="tab-settings" class="hidden">
         <h1>Settings</h1>
 
+        <h2>Vault</h2>
         <div class="setting-row">
           <div>
             <div class="setting-label">Key and Vault Name</div>
             <div class="setting-desc">One name for your master key and your vault. Key and vault files you export use it. It is a label only and is never needed to import.</div>
           </div>
-          <div style="display:flex;gap:8px;align-items:center;">
-            <input type="text" id="key-nickname-input" placeholder="My Master Key" autocomplete="off" style="width:160px;">
+          <div class="setting-control">
+            <input type="text" id="key-nickname-input" placeholder="My Master Key" autocomplete="off" style="width:180px;">
             <button class="small" id="btn-rename-key">Rename</button>
           </div>
         </div>
-        <div id="key-nickname-msg" style="font-size:12px;color:var(--text-dim);margin:-4px 0 12px;min-height:8px;"></div>
+        <div id="key-nickname-msg" class="setting-note"></div>
 
         <div class="setting-row">
           <div>
             <div class="setting-label">Auto-lock timeout (seconds)</div>
             <div class="setting-desc">Idle seconds before the vault locks.</div>
           </div>
-          <div class="time-input"><span class="time-readout" id="readout-autolock-timeout">00h 01m 00s</span><input type="number" min="10" max="7200" value="60" id="input-autolock-timeout" style="width:80px;"></div>
+          <div class="time-input"><span class="time-readout" id="readout-autolock-timeout">00h 01m 00s</span><input type="number" min="10" max="7200" value="60" id="input-autolock-timeout"></div>
         </div>
 
         <div class="setting-row">
@@ -279,7 +348,7 @@
             <div class="setting-label">QR stream timeout (seconds)</div>
             <div class="setting-desc">Seconds a shared QR stays visible before it auto-closes.</div>
           </div>
-          <div class="time-input"><span class="time-readout" id="readout-qr-timeout">00m 30s</span><input type="number" min="5" max="600" value="30" id="input-qr-timeout" style="width:80px;"></div>
+          <div class="time-input"><span class="time-readout" id="readout-qr-timeout">00m 30s</span><input type="number" min="5" max="600" value="30" id="input-qr-timeout"></div>
         </div>
 
         <h2>Password Generator</h2>
@@ -306,14 +375,14 @@
           </select>
         </div>
 
-        <div class="clear-vault-section">
-          <h2 style="color:var(--danger);margin-top:0;">Clear Vault</h2>
-          <p style="color:var(--text-dim);font-size:13px;line-height:1.6;margin-bottom:16px;">
-            This will permanently delete all stored credentials, auth methods, and settings. 
-            <strong style="color:var(--danger);">This cannot be undone.</strong><br><br>
+        <div class="danger-zone">
+          <h2>Clear Vault</h2>
+          <p class="section-text">
+            This will permanently delete all stored credentials, auth methods, and settings.
+            <strong class="warn">This cannot be undone.</strong><br><br>
             <strong>Recommendation:</strong> Back up your vault to another device using Secure Sync before clearing.
           </p>
-          <div style="display:flex;gap:12px;">
+          <div class="btn-row">
             <button class="secondary" id="btn-backup-sync">Back up with Secure Sync</button>
             <button class="danger" id="btn-clear-vault">Clear Vault</button>
           </div>
@@ -324,8 +393,8 @@
 
       <div id="tab-about" class="hidden">
         <h1>About Valid Vault</h1>
-        <p style="color:var(--text-dim);font-size:14px;line-height:1.8;max-width:600px;">
-          <strong style="color:var(--green);">Valid Vault Password Manager <span id="about-version"></span></strong><br><br>
+        <p class="about">
+          <strong class="about-title">Valid Vault Password Manager <span id="about-version"></span></strong><br><br>
           Hi, I'm Rook.<br><br>
           I made a password manager. I found myself wanting two things I just wasn't getting: relevant features and far less betrayal.<br><br>
           This is my best effort at common sense features with low friction, and how about we try zero betrayal?<br><br>
@@ -334,29 +403,30 @@
           Regards,<br>
           Rook<br><br>
 
-          <a href="https://discord.gg/2SP383cJs9" target="_blank" rel="noopener noreferrer" style="color:var(--green);">Discord</a><br>
-          <a href="https://github.com/HiImRook/valid-vault-password-manager" target="_blank" rel="noopener noreferrer" style="color:var(--green);">GitHub Repository</a><br>
-          <a href="https://hiimrook.github.io/valid-vault-password-manager/" target="_blank" rel="noopener noreferrer" style="color:var(--green);">Website</a>
+          <a href="https://discord.gg/2SP383cJs9" target="_blank" rel="noopener noreferrer">Discord</a><br>
+          <a href="https://github.com/HiImRook/valid-vault-password-manager" target="_blank" rel="noopener noreferrer">GitHub Repository</a><br>
+          <a href="https://hiimrook.github.io/valid-vault-password-manager/" target="_blank" rel="noopener noreferrer">Website</a>
         </p>
       </div>
     </div>
   </div>
   <script src="jsqr.js"></script>
   <script src="manage.js" type="module"></script>
-<div id="manage-lock-overlay" class="hidden" style="position:fixed;top:0;left:0;right:0;bottom:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:1000;">
-  <div style="text-align:center;padding:40px;max-width:400px;">
-    <div style="font-family:'Orbitron',sans-serif;font-size:24px;color:var(--green);margin-bottom:32px;text-shadow:0 0 8px rgba(51,255,102,0.4);">UNLOCK VAULT</div>
-    <div style="color:var(--text-dim);margin-bottom:24px;font-size:14px;">Session timed out. Unlock to continue.</div>
-
-    <button id="btn-manage-unlock-fp" style="background:var(--green);color:#05140a;border:none;padding:12px 24px;border-radius:6px;font-weight:700;cursor:pointer;width:100%;margin-bottom:12px;">Unlock with Fingerprint</button>
-
-    <div style="display:flex;gap:8px;margin-bottom:16px;">
-      <input type="password" id="input-manage-password" placeholder="Password" style="flex:1;background:var(--bg);border:1px solid var(--green-faint);color:var(--text);padding:10px;border-radius:6px;font-family:inherit;font-size:13px;">
-      <button id="btn-manage-unlock-pw" style="background:var(--green);color:#05140a;border:none;padding:10px 16px;border-radius:6px;font-weight:700;cursor:pointer;">Go</button>
+  <div id="manage-lock-overlay" class="lock-overlay hidden">
+    <div class="lock-card">
+      <div class="mark"><svg viewBox="0 0 342 403" aria-hidden="true"><use href="#vv-mark"/></svg></div>
+      <div class="lock-title">VAULT LOCKED</div>
+      <div class="lock-text">Session timed out. Unlock to continue.</div>
+      <div class="panel">
+        <button class="fp" id="btn-manage-unlock-fp"><svg viewBox="0 0 256 256" aria-hidden="true"><path d="M72,128a134.63,134.63,0,0,1-14.16,60.47,8,8,0,1,1-14.32-7.12A118.8,118.8,0,0,0,56,128,71.73,71.73,0,0,1,83,71.8,8,8,0,1,1,93,84.29,55.76,55.76,0,0,0,72,128Zm56-8a8,8,0,0,0-8,8,184.12,184.12,0,0,1-23,89.1,8,8,0,0,0,14,7.76A200.19,200.19,0,0,0,136,128,8,8,0,0,0,128,120Zm0-32a40,40,0,0,0-40,40,8,8,0,0,0,16,0,24,24,0,0,1,48,0,214.09,214.09,0,0,1-20.51,92A8,8,0,1,0,146,226.83,230,230,0,0,0,168,128,40,40,0,0,0,128,88Zm0-64A104.11,104.11,0,0,0,24,128a87.76,87.76,0,0,1-5,29.33,8,8,0,0,0,15.09,5.33A103.9,103.9,0,0,0,40,128a88,88,0,0,1,176,0,282.24,282.24,0,0,1-5.29,54.45,8,8,0,0,0,6.3,9.4,8.22,8.22,0,0,0,1.55.15,8,8,0,0,0,7.84-6.45A298.37,298.37,0,0,0,232,128,104.12,104.12,0,0,0,128,24ZM94.4,152.17A8,8,0,0,0,85,158.42a151,151,0,0,1-17.21,45.44,8,8,0,0,0,13.86,8,166.67,166.67,0,0,0,19-50.25A8,8,0,0,0,94.4,152.17ZM128,56a72.85,72.85,0,0,0-9,.56,8,8,0,0,0,2,15.87A56.08,56.08,0,0,1,184,128a252.12,252.12,0,0,1-1.92,31A8,8,0,0,0,189,168a8.39,8.39,0,0,0,1,.06,8,8,0,0,0,7.92-7,266.48,266.48,0,0,0,2-33A72.08,72.08,0,0,0,128,56Zm57.93,128.25a8,8,0,0,0-9.75,5.75c-1.46,5.69-3.15,11.4-5,17a8,8,0,0,0,5,10.13,7.88,7.88,0,0,0,2.55.42,8,8,0,0,0,7.58-5.46c2-5.92,3.79-12,5.35-18.05A8,8,0,0,0,185.94,184.26Z"/></svg>Unlock with Fingerprint</button>
+        <div class="or">OR</div>
+        <div class="row">
+          <input type="password" id="input-manage-password" placeholder="Master password">
+          <button class="go" id="btn-manage-unlock-pw" aria-label="Unlock with password"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6"/></svg></button>
+        </div>
+      </div>
+      <div id="msg-manage-lock" class="msg hidden"></div>
     </div>
-
-    <div id="msg-manage-lock" style="color:var(--danger);font-size:12px;min-height:16px;"></div>
   </div>
-</div>
 </body>
 </html>

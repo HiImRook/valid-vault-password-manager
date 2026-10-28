@@ -10,12 +10,22 @@ import * as store from './store.js'
 import { createEncoder, createDecoder, QR_FRAME_MS } from './fountain.js'
 import { qrSvg, openCamera, scanStream, scanReadout } from './qrtools.js'
 import { masterKeyToCryptoKey } from './crypto.js'
-import { formDialog, askSecret, closeAllDialogs } from './dialogs.js'
+import { formDialog, confirmDialog, askSecret, closeAllDialogs } from './dialogs.js'
 import * as keypackage from './keypackage.js'
 import * as uniVault from './linkedvault.js'
 import * as vaultFile from './vaultfile.js'
 import * as importFlow from './importflow.js'
 
+
+const LOCK_ICON = '<svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="4.5" y="10.5" width="15" height="10" rx="2.2"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/><path d="M12 14.6v2.2"/></svg>'
+const ARROW_UP_ICON = '<svg class="mini-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6"/></svg>'
+const ARROW_DOWN_ICON = '<svg class="mini-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M6 13l6 6 6-6"/></svg>'
+const CHEVRON_ICON = '<svg class="group-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>'
+const HIDDEN_SECRET = '\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022'
+
+function gateHtml(id, label) {
+  return '<div class="gate"><button id="' + id + '">' + LOCK_ICON + label + '</button></div>'
+}
 
 async function restoreMasterKeyFromSession() {
   try {
@@ -204,7 +214,7 @@ var loginCredsUnlocked = false
 
 async function loadAllCredentials() {
   if (!loginCredsUnlocked) {
-    credentialsList.innerHTML = '<div style="padding:24px;text-align:center;"><button id="btn-unlock-creds">\ud83d\udd10 Unlock to view credentials</button></div>'
+    credentialsList.innerHTML = gateHtml('btn-unlock-creds', 'Unlock to view credentials')
     const btn = document.getElementById('btn-unlock-creds')
     if (btn) btn.onclick = async () => {
       const authResult = await promptAuth()
@@ -219,12 +229,12 @@ async function loadAllCredentials() {
   try {
     tree = await passwords.readVaultTree(session.getMasterKey())
   } catch (e) {
-    credentialsList.innerHTML = '<div style="padding:24px;text-align:center;color:var(--danger);">Could not open saved credentials with the current master key</div>'
+    credentialsList.innerHTML = '<div class="gate gate-error">Could not open saved credentials with the current master key</div>'
     return
   }
   const domains = Object.keys(tree.credentials).filter((d) => tree.credentials[d].some((c) => !c.deleted)).sort()
   if (domains.length === 0) {
-    credentialsList.innerHTML = '<div style="padding:24px;text-align:center;color:#666;">No saved credentials</div>'
+    credentialsList.innerHTML = '<div class="empty-note">No saved credentials</div>'
     return
   }
 
@@ -234,51 +244,40 @@ async function loadAllCredentials() {
     const domainCreds = tree.credentials[domain].filter((c) => !c.deleted)
     
     const domainItem = document.createElement('div')
-    domainItem.style.cssText = 'border-bottom:1px solid #2a2a2a;'
-    
+    domainItem.className = 'group'
+
     const domainHeader = document.createElement('div')
     domainHeader.className = 'credential-item'
-    domainHeader.style.cursor = 'pointer'
-    domainHeader.innerHTML = 
-      '<span style="color:#666;margin-right:8px;">▶</span>' +
+    domainHeader.innerHTML =
+      CHEVRON_ICON +
       '<div class="credential-domain">' + escapeHtml(domain) + '</div>' +
-      '<div style="flex:1;"></div>' +
-      '<div style="color:#666;font-size:12px;">' + domainCreds.length + ' account' + (domainCreds.length !== 1 ? 's' : '') + '</div>'
-    
+      '<div class="group-count">' + domainCreds.length + ' account' + (domainCreds.length !== 1 ? 's' : '') + '</div>'
+
     const domainContent = document.createElement('div')
-    domainContent.style.cssText = 'display:none;background:#111;padding:0 16px;'
-    
-    domainHeader.onclick = () => {
-      const isExpanded = domainContent.style.display !== 'none'
-      if (isExpanded) {
-        domainContent.style.display = 'none'
-        domainHeader.querySelector('span').textContent = '▶'
-      } else {
-        domainContent.style.display = 'block'
-        domainHeader.querySelector('span').textContent = '▼'
-      }
-    }
+    domainContent.className = 'group-body'
+
+    domainHeader.onclick = () => { domainItem.classList.toggle('open') }
     
     for (let i = 0; i < domainCreds.length; i++) {
       const cred = domainCreds[i]
       const credRow = document.createElement('div')
-      credRow.style.cssText = 'padding:12px 0;border-bottom:1px solid #1a1a1a;'
+      credRow.className = 'cred-row'
       credRow.innerHTML =
-        '<div style="display:flex;align-items:center;gap:12px;">' +
-        '<select class="credential-logintype small" style="width:auto;">' +
-        '<option value="username">👤 Username</option>' +
-        '<option value="email">📧 Email</option>' +
-        '<option value="phone">📱 Phone</option>' +
+        '<div class="cred-main">' +
+        '<select class="credential-logintype">' +
+        '<option value="username">Username</option>' +
+        '<option value="email">Email</option>' +
+        '<option value="phone">Phone</option>' +
         '</select>' +
         '<div class="credential-username">Account ' + (i + 1) + '</div>' +
-        '<div class="credential-password">••••••••</div>' +
+        '<div class="credential-password">' + HIDDEN_SECRET + '</div>' +
         '<div class="credential-actions">' +
-        '<button class="small secondary btn-show">👁️</button>' +
-        '<button class="small secondary btn-edit">✏️</button>' +
-        '<button class="small danger btn-delete">🗑️</button>' +
+        '<button class="small secondary btn-show">Show</button>' +
+        '<button class="small secondary btn-edit">Edit</button>' +
+        '<button class="small danger btn-delete">Delete</button>' +
         '</div>' +
         '</div>' +
-        '<div class="credential-extra" style="display:none;margin-top:8px;padding-left:4px;"></div>'
+        '<div class="credential-extra"></div>'
 
       credRow.dataset.credId = cred.id
       credRow.dataset.credIndex = i
@@ -314,12 +313,14 @@ async function loadAllCredentials() {
         const usernameEl = credRow.querySelector('.credential-username')
         const pwEl = credRow.querySelector('.credential-password')
         const extraEl = credRow.querySelector('.credential-extra')
+        const showBtn = credRow.querySelector('.btn-show')
 
-        if (pwEl.textContent !== '••••••••') {
-          pwEl.textContent = '••••••••'
+        if (pwEl.textContent !== HIDDEN_SECRET) {
+          pwEl.textContent = HIDDEN_SECRET
           usernameEl.textContent = 'Account ' + (i + 1)
-          extraEl.style.display = 'none'
+          extraEl.classList.remove('open')
           extraEl.innerHTML = ''
+          showBtn.textContent = 'Show'
           return
         }
 
@@ -341,6 +342,7 @@ async function loadAllCredentials() {
           if (credential) {
             usernameEl.textContent = credential.username
             pwEl.textContent = credential.password
+            showBtn.textContent = 'Hide'
             renderExtraFields(extraEl, credential, masterKey)
           }
         }
@@ -390,7 +392,7 @@ async function loadAllCredentials() {
         const result = await passwords.getCredentials(domain, masterKey)
         if (result.success) {
           const credential = result.credentials.find(c => c.id === cred.id)
-          if (credential && confirm('Delete credential for ' + credential.username + ' on ' + domain + '?')) {
+          if (credential && await confirmDialog({ title: 'Delete login', text: 'Delete the login for ' + credential.username + ' on ' + domain + '?', okLabel: 'Delete', danger: true })) {
             const delResult = await passwords.deleteCredential(cred.id, masterKey)
             if (delResult.success) {
               showMsg(msgManage, 'Credential deleted', 'success')
@@ -415,28 +417,28 @@ async function loadAllCredentials() {
 
 
 function renderExtraFields(container, credential, masterKey) {
-  container.style.display = 'block'
+  container.classList.add('open')
   container.innerHTML = ''
   const fields = credential.extraFields || []
 
   const used = document.createElement('div')
-  used.style.cssText = 'color:#666;font-size:12px;padding:4px 0;'
+  used.className = 'extra-meta'
   used.textContent = credential.lastUsedAt ? 'Last used ' + new Date(credential.lastUsedAt).toLocaleString() : 'Last used: not recorded yet'
   container.appendChild(used)
 
   if (fields.length === 0) {
     const none = document.createElement('div')
-    none.style.cssText = 'color:#666;font-size:12px;padding:4px 0;'
+    none.className = 'extra-meta'
     none.textContent = 'No additional fields saved'
     container.appendChild(none)
   }
 
   fields.forEach((field, idx) => {
     const row = document.createElement('div')
-    row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12px;'
+    row.className = 'extra-row'
     row.innerHTML =
-      '<span style="width:140px;color:var(--text-dim);">' + escapeHtml(field.label) + '</span>' +
-      '<span style="flex:1;">' + escapeHtml(field.value) + '</span>' +
+      '<span class="extra-label">' + escapeHtml(field.label) + '</span>' +
+      '<span class="extra-value">' + escapeHtml(field.value) + '</span>' +
       '<button class="small secondary btn-edit-extra">Edit</button>' +
       '<button class="small danger btn-delete-extra">Delete</button>'
 
@@ -451,7 +453,7 @@ function renderExtraFields(container, credential, masterKey) {
     }
 
     row.querySelector('.btn-delete-extra').onclick = async () => {
-      if (!confirm('Delete "' + field.label + '"?')) return
+      if (!(await confirmDialog({ title: 'Delete field', text: 'Delete "' + field.label + '" from this login?', okLabel: 'Delete', danger: true }))) return
       const updated = fields.filter((f, i2) => i2 !== idx)
       const result = await passwords.updateCredential(credential.id, { extraFields: updated }, masterKey)
       if (result.success) { showMsg(msgManage, 'Deleted', 'success'); loadAllCredentials() }
@@ -462,9 +464,8 @@ function renderExtraFields(container, credential, masterKey) {
   })
 
   const addBtn = document.createElement('button')
-  addBtn.className = 'small secondary'
-  addBtn.style.marginTop = '4px'
-  addBtn.textContent = '+ Add Field'
+  addBtn.className = 'small secondary extra-add'
+  addBtn.textContent = 'Add Field'
   addBtn.onclick = async () => {
     const added = await formDialog({
       title: 'Add field',
@@ -491,7 +492,7 @@ var webCredsUnlocked = false
 
 async function loadAllWebCredentials() {
   if (!webCredsUnlocked) {
-    webCredsListEl.innerHTML = '<div style="padding:24px;text-align:center;"><button id="btn-unlock-webcreds">\ud83d\udd10 Unlock to view web credentials</button></div>'
+    webCredsListEl.innerHTML = gateHtml('btn-unlock-webcreds', 'Unlock to view misc credentials')
     const btn = document.getElementById('btn-unlock-webcreds')
     if (btn) btn.onclick = async () => {
       const authResult = await promptAuth()
@@ -504,7 +505,7 @@ async function loadAllWebCredentials() {
   }
   const catResult = await webcreds.getAllCategories()
   if (!catResult.success || catResult.categories.length === 0) {
-    webCredsListEl.innerHTML = '<div style="padding:24px;text-align:center;color:#666;">No web credentials saved</div>'
+    webCredsListEl.innerHTML = '<div class="empty-note">No misc credentials saved</div>'
     return
   }
 
@@ -516,41 +517,30 @@ async function loadAllWebCredentials() {
     const catCreds = (vaultData?.credentials?.[category] || []).filter(c => !c.deleted)
 
     const catItem = document.createElement('div')
-    catItem.style.cssText = 'border-bottom:1px solid #2a2a2a;'
+    catItem.className = 'group'
 
     const catHeader = document.createElement('div')
     catHeader.className = 'credential-item'
-    catHeader.style.cursor = 'pointer'
     catHeader.innerHTML =
-      '<span style="color:#666;margin-right:8px;">\u25b6</span>' +
+      CHEVRON_ICON +
       '<div class="credential-domain">' + escapeHtml(category) + '</div>' +
-      '<div style="flex:1;"></div>' +
-      '<div style="color:#666;font-size:12px;">' + catCreds.length + ' item' + (catCreds.length !== 1 ? 's' : '') + '</div>'
+      '<div class="group-count">' + catCreds.length + ' item' + (catCreds.length !== 1 ? 's' : '') + '</div>'
 
     const catContent = document.createElement('div')
-    catContent.style.cssText = 'display:none;background:#111;padding:0 16px;'
+    catContent.className = 'group-body'
 
-    catHeader.onclick = () => {
-      const isExpanded = catContent.style.display !== 'none'
-      if (isExpanded) {
-        catContent.style.display = 'none'
-        catHeader.querySelector('span').textContent = '\u25b6'
-      } else {
-        catContent.style.display = 'block'
-        catHeader.querySelector('span').textContent = '\u25bc'
-      }
-    }
+    catHeader.onclick = () => { catItem.classList.toggle('open') }
 
     for (const cred of catCreds) {
       const row = document.createElement('div')
-      row.style.cssText = 'padding:12px 0;border-bottom:1px solid #1a1a1a;display:flex;align-items:center;gap:12px;'
+      row.className = 'cred-row cred-main'
       row.innerHTML =
         '<div class="credential-username">Item</div>' +
-        '<div class="credential-password">\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022</div>' +
+        '<div class="credential-password">' + HIDDEN_SECRET + '</div>' +
         '<div class="credential-actions">' +
-        '<button class="small secondary btn-show">\ud83d\udc41\ufe0f</button>' +
-        '<button class="small secondary btn-edit">\u270f\ufe0f</button>' +
-        '<button class="small danger btn-delete">\ud83d\uddd1\ufe0f</button>' +
+        '<button class="small secondary btn-show">Show</button>' +
+        '<button class="small secondary btn-edit">Edit</button>' +
+        '<button class="small danger btn-delete">Delete</button>' +
         '</div>'
 
       const nameEl = row.querySelector('.credential-username')
@@ -559,9 +549,11 @@ async function loadAllWebCredentials() {
 
       row.querySelector('.btn-show').onclick = async (e) => {
         e.stopPropagation()
-        if (valueEl.textContent !== '\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022') {
-          valueEl.textContent = '\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022'
+        const showBtn = row.querySelector('.btn-show')
+        if (valueEl.textContent !== HIDDEN_SECRET) {
+          valueEl.textContent = HIDDEN_SECRET
           nameEl.textContent = 'Item'
+          showBtn.textContent = 'Show'
           return
         }
         let masterKey = session.getMasterKey()
@@ -574,7 +566,7 @@ async function loadAllWebCredentials() {
         const result = await webcreds.getWebCredentials(category, masterKey)
         if (result.success) {
           const item = result.credentials.find(c => c.id === cred.id)
-          if (item) { nameEl.textContent = item.name; valueEl.textContent = item.value }
+          if (item) { nameEl.textContent = item.name; valueEl.textContent = item.value; showBtn.textContent = 'Hide' }
         }
       }
 
@@ -606,7 +598,7 @@ async function loadAllWebCredentials() {
         const result = await webcreds.getWebCredentials(category, masterKey)
         const item = result.success ? result.credentials.find(c => c.id === cred.id) : null
         const label = item ? item.name : 'this item'
-        if (confirm('Delete "' + label + '" from ' + category + '?')) {
+        if (await confirmDialog({ title: 'Delete item', text: 'Delete "' + label + '" from ' + category + '?', okLabel: 'Delete', danger: true })) {
           const delResult = await webcreds.deleteWebCredential(cred.id)
           if (delResult.success) { showMsg(msgWebcreds, 'Deleted', 'success'); loadAllWebCredentials() }
           else { showMsg(msgWebcreds, 'Delete failed: ' + delResult.error, 'error') }
@@ -663,7 +655,7 @@ var personalInfoUnlocked = false
 
 async function loadPersonalInfo() {
   if (!personalInfoUnlocked) {
-    personalInfoContent.innerHTML = '<div style="padding:24px;text-align:center;"><button id="btn-unlock-personalinfo">\ud83d\udd10 Unlock to view Personal Info</button></div>'
+    personalInfoContent.innerHTML = gateHtml('btn-unlock-personalinfo', 'Unlock to view Personal Info')
     const btn = document.getElementById('btn-unlock-personalinfo')
     if (btn) btn.onclick = async () => {
       const authResult = await promptAuth()
@@ -679,36 +671,39 @@ async function loadPersonalInfo() {
   if (!masterKey) { personalInfoUnlocked = false; loadPersonalInfo(); return }
 
   const result = await personalinfo.getProfile(masterKey)
-  if (!result.success) { personalInfoContent.innerHTML = '<p style="color:var(--danger);">' + result.error + '</p>'; return }
+  if (!result.success) { personalInfoContent.innerHTML = '<div class="gate gate-error">' + escapeHtml(result.error) + '</div>'; return }
   const p = result.profile
 
-  var html = ''
-  html += fieldRow('First Name', p.firstName || '(not set)', 'firstName')
-  html += fieldRow('Last Name', p.lastName || '(not set)', 'lastName')
-  html += fieldRow('Phone', p.phone || '(not set)', 'phone')
+  var html = '<div class="pi-section"><div class="pi-heading">Name and Phone</div>'
+  html += fieldRow('First Name', p.firstName, 'firstName')
+  html += fieldRow('Last Name', p.lastName, 'lastName')
+  html += fieldRow('Phone', p.phone, 'phone')
+  html += '</div>'
 
-  html += '<h3 style="margin-top:18px;">Emails</h3>'
+  html += '<div class="pi-section"><div class="pi-heading">Emails</div>'
   if (!p.emails || p.emails.length === 0) {
-    html += '<p style="color:var(--text-dim);font-size:13px;">No emails saved.</p>'
+    html += '<div class="pi-empty">No emails saved.</div>'
   } else {
     const sorted = p.emails.slice().sort((a, b) => a.position - b.position)
     sorted.forEach(function (e, i) {
-      html += '<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #1a1a1a;">'
-      html += '<span style="flex:1;">' + escapeHtml(e.value) + (i === 0 ? ' <span style="color:var(--green);font-size:11px;">(Primary)</span>' : '') + '</span>'
-      html += '<button class="small secondary" data-email-up="' + e.id + '"' + (i === 0 ? ' disabled' : '') + '>\u2191</button>'
-      html += '<button class="small secondary" data-email-down="' + e.id + '"' + (i === sorted.length - 1 ? ' disabled' : '') + '>\u2193</button>'
+      html += '<div class="pi-row">'
+      html += '<span class="pi-value">' + escapeHtml(e.value) + (i === 0 ? ' <span class="pi-badge">Primary</span>' : '') + '</span>'
+      html += '<span class="pi-actions">'
+      html += '<button class="small secondary icon-only" title="Move up" aria-label="Move up" data-email-up="' + e.id + '"' + (i === 0 ? ' disabled' : '') + '>' + ARROW_UP_ICON + '</button>'
+      html += '<button class="small secondary icon-only" title="Move down" aria-label="Move down" data-email-down="' + e.id + '"' + (i === sorted.length - 1 ? ' disabled' : '') + '>' + ARROW_DOWN_ICON + '</button>'
       html += '<button class="small danger" data-email-del="' + e.id + '">Delete</button>'
-      html += '</div>'
+      html += '</span></div>'
     })
   }
-  html += '<button style="margin-top:8px;" id="btn-add-email">+ Add Email</button>'
+  html += '<div class="pi-foot"><button class="small" id="btn-add-email">Add Email</button></div></div>'
 
-  html += '<h3 style="margin-top:18px;">Address</h3>'
-  html += fieldRow('Street', (p.address && p.address.street) || '(not set)', 'address.street')
-  html += fieldRow('City', (p.address && p.address.city) || '(not set)', 'address.city')
-  html += fieldRow('State', (p.address && p.address.state) || '(not set)', 'address.state')
-  html += fieldRow('ZIP', (p.address && p.address.zip) || '(not set)', 'address.zip')
-  html += fieldRow('Country', (p.address && p.address.country) || '(not set)', 'address.country')
+  html += '<div class="pi-section"><div class="pi-heading">Address</div>'
+  html += fieldRow('Street', p.address && p.address.street, 'address.street')
+  html += fieldRow('City', p.address && p.address.city, 'address.city')
+  html += fieldRow('State', p.address && p.address.state, 'address.state')
+  html += fieldRow('ZIP', p.address && p.address.zip, 'address.zip')
+  html += fieldRow('Country', p.address && p.address.country, 'address.country')
+  html += '</div>'
 
   personalInfoContent.innerHTML = html
 
@@ -729,11 +724,13 @@ async function loadPersonalInfo() {
   if (addEmailBtn) addEmailBtn.onclick = addEmail
 }
 
+const PERSONAL_INFO_LABELS = { firstName: 'First Name', lastName: 'Last Name', phone: 'Phone', 'address.street': 'Street', 'address.city': 'City', 'address.state': 'State', 'address.zip': 'ZIP', 'address.country': 'Country' }
+
 function fieldRow(label, value, fieldKey) {
-  return '<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #1a1a1a;">' +
-    '<span style="width:100px;color:var(--text-dim);font-size:13px;">' + label + '</span>' +
-    '<span style="flex:1;">' + escapeHtml(value) + '</span>' +
-    '<button class="small secondary" data-edit-field="' + fieldKey + '">Edit</button>' +
+  return '<div class="pi-row">' +
+    '<span class="pi-label">' + label + '</span>' +
+    (value ? '<span class="pi-value">' + escapeHtml(value) + '</span>' : '<span class="pi-value pi-unset">Not set</span>') +
+    '<span class="pi-actions"><button class="small secondary" data-edit-field="' + fieldKey + '">Edit</button></span>' +
     '</div>'
 }
 
@@ -756,7 +753,7 @@ async function editPersonalInfoField(fieldKey) {
   const profile = current.profile
 
   const currentValue = await getFieldValue(profile, fieldKey)
-  const edited = await formDialog({ title: 'Edit', fields: [{ label: 'New value', value: currentValue }], okLabel: 'Save' })
+  const edited = await formDialog({ title: 'Edit ' + (PERSONAL_INFO_LABELS[fieldKey] || 'field'), fields: [{ label: PERSONAL_INFO_LABELS[fieldKey] || 'New value', value: currentValue }], okLabel: 'Save' })
   if (!edited) return
   const newValue = edited[0]
 
@@ -825,7 +822,7 @@ async function deleteEmail(emailId) {
   const masterKey = authResult.masterKey
   session.setMasterKey(masterKey)
 
-  if (!window.confirm('Delete this email?')) return
+  if (!(await confirmDialog({ title: 'Delete email', text: 'Delete this email from Personal Info?', okLabel: 'Delete', danger: true }))) return
 
   const current = await personalinfo.getProfile(masterKey)
   if (!current.success) { showMsg(msgPersonalInfo, current.error, 'error'); return }
@@ -936,7 +933,7 @@ btnEditPw.onclick = async () => {
 
 btnDelFp.onclick = async () => {
   if (!(await requirePasswordFirstAuth())) { showMsg(msgManage, 'Authentication required', 'error'); return }
-  if (confirm('Delete fingerprint authentication?')) {
+  if (await confirmDialog({ title: 'Delete fingerprint unlock', text: 'Turn off fingerprint and device PIN unlock on this browser?', okLabel: 'Delete', danger: true })) {
     const result = await auth.removeFingerprint()
     if (result.success) {
       showMsg(msgManage, 'Fingerprint removed', 'success')
@@ -950,7 +947,7 @@ btnDelFp.onclick = async () => {
 
 btnDelPw.onclick = async () => {
   if (!(await requireFreshAuth())) { showMsg(msgManage, 'Authentication required', 'error'); return }
-  if (confirm('Delete password authentication?')) {
+  if (await confirmDialog({ title: 'Delete password unlock', text: 'Turn off master password unlock on this browser?', okLabel: 'Delete', danger: true })) {
     const result = await auth.removePassword()
     if (result.success) {
       showMsg(msgManage, 'Password removed', 'success')
@@ -965,16 +962,17 @@ btnDelPw.onclick = async () => {
 
 btnClearVault.onclick = async () => {
   if (!(await requireFreshAuth())) { showMsg(msgSettings, 'Authentication required to clear the vault', 'error'); return }
-  const confirm1 = confirm(
-    'Delete all vault data permanently?\n\n' +
-    'Recommendation: Back up to another device first.\n\n' +
-    'This cannot be undone.'
-  )
-  
+  const confirm1 = await confirmDialog({
+    title: 'Clear Vault',
+    text: 'Delete all vault data permanently?\n\nRecommendation: Back up to another device first.\n\nThis cannot be undone.',
+    okLabel: 'Delete everything',
+    danger: true
+  })
+
   if (!confirm1) return
-  
-  const confirm2 = confirm('Final confirmation: This will delete everything. Continue?')
-  
+
+  const confirm2 = await confirmDialog({ title: 'Final confirmation', text: 'This will delete everything. Continue?', okLabel: 'Clear Vault', danger: true })
+
   if (confirm2) {
     await uniVault.clearLink()
     await store.clearAll()
@@ -1480,7 +1478,7 @@ if (btnUniVaultReconnect) btnUniVaultReconnect.onclick = async () => {
 }
 
 if (btnUniVaultUnlink) btnUniVaultUnlink.onclick = async () => {
-  if (!window.confirm('Unlink this browser from the vault file? This browser keeps its own copy of everything. The file is not deleted.')) return
+  if (!(await confirmDialog({ title: 'Unlink vault file', text: 'Unlink this browser from the vault file? This browser keeps its own copy of everything. The file is not deleted.', okLabel: 'Unlink' }))) return
   await uniVault.clearLink()
   syncMsg('Unlinked. This browser keeps its own copy.', 'success')
   refreshUniVault()
@@ -1667,7 +1665,12 @@ async function lockWithDevice(importedKey, status) {
 
 async function planBackupPassword(status) {
   if (!status.hasPassword) return { password: null, removePassword: false }
-  const keep = window.confirm('Keep a master password on this browser as a backup unlock?\n\nOK: set the password for the imported key (you can reuse this browser\'s current password).\nCancel: turn password unlock off. You can add one later in Manage.')
+  const keep = await confirmDialog({
+    title: 'Keep a backup password?',
+    text: 'Keep a master password on this browser as a backup unlock?\n\nKeep a password: set the password for the imported key (you can reuse this browser\'s current password).\nTurn it off: password unlock is off. You can add one later in Manage.',
+    okLabel: 'Keep a password',
+    cancelLabel: 'Turn it off'
+  })
   if (keep) {
     const pw = await askSecret('Backup password', 'Master password', 'Set a backup password to unlock the imported key on this browser: 12+ characters with a letter, a number, and a symbol. It stays on this browser and is never put in a key file.')
     if (pw && passwordMeetsRule(pw)) return { password: pw, removePassword: false }
@@ -1675,9 +1678,14 @@ async function planBackupPassword(status) {
   return { password: null, removePassword: true }
 }
 
-function planRelink(status) {
+async function planRelink(status) {
   if (!status.hasFingerprint) return false
-  return window.confirm('Relink fingerprint unlock to the imported key? You will be asked for your fingerprint or device PIN. Cancel turns fingerprint unlock off until you re-enroll it in Manage.')
+  return confirmDialog({
+    title: 'Relink fingerprint unlock?',
+    text: 'Relink fingerprint unlock to the imported key? You will be asked for your fingerprint or device PIN. Turn it off leaves fingerprint unlock off until you re-enroll it in Manage.',
+    okLabel: 'Relink fingerprint',
+    cancelLabel: 'Turn it off'
+  })
 }
 
 async function relinkFingerprint(importedKey) {
@@ -1731,12 +1739,15 @@ async function adoptImportedKey(importedKey) {
   const currentKey = session.getMasterKey()
   const holdsData = !matches && (!currentKey || await vaultFile.localVaultHasLiveData(currentKey))
   if (holdsData) {
-    const proceed = window.confirm(
-      'WARNING: This browser\'s current vault was made with a different master key.\n\n' +
-      'Importing this key makes that vault unusable, so it will be cleared from this browser.\n\n' +
-      'This is how you get ready to receive the vault from your other device: import the key first, then import or scan the vault.\n\n' +
-      'Continue?'
-    )
+    const proceed = await confirmDialog({
+      title: 'Replace this browser\'s vault?',
+      text: 'This browser\'s current vault was made with a different master key.\n\n' +
+        'Importing this key makes that vault unusable, so it will be cleared from this browser.\n\n' +
+        'This is how you get ready to receive the vault from your other device: import the key first, then import or scan the vault.\n\n' +
+        'Continue?',
+      okLabel: 'Import key',
+      danger: true
+    })
     if (!proceed) { syncMsg('Key import cancelled. Nothing changed.', 'error'); return false }
   }
 
@@ -1751,7 +1762,7 @@ async function adoptImportedKey(importedKey) {
     if (device.locked) {
       note = device.note
     } else {
-      if (!window.confirm('Fingerprint or device PIN did not complete. Lock the imported key with a master password instead?')) {
+      if (!(await confirmDialog({ title: 'Use a master password?', text: 'Fingerprint or device PIN did not complete. Lock the imported key with a master password instead?', okLabel: 'Use a password' }))) {
         syncMsg('Key import cancelled. Nothing changed.', 'error')
         return false
       }
@@ -1762,7 +1773,7 @@ async function adoptImportedKey(importedKey) {
   if (method === 'password') {
     const password = await choosePasswordForImport(status)
     if (!password) return false
-    const relink = planRelink(status)
+    const relink = await planRelink(status)
     const locked = await commitPasswordLock(importedKey, status, password, relink)
     if (!locked.success) { syncMsg('Could not save the imported key: ' + locked.error, 'error'); return false }
     note = locked.note
@@ -1800,8 +1811,9 @@ const _qrScanBox = document.getElementById('qr-scan-box'); if (_qrScanBox) _qrSc
   const video = document.createElement('video'); video.setAttribute('playsinline', 'true'); video.muted = true
   video.style.cssText = 'width:100%;height:100%;object-fit:cover;'
   const cancel = document.createElement('button'); cancel.textContent = 'Cancel'
-  cancel.style.cssText = 'position:absolute;top:8px;left:8px;z-index:3;background:var(--danger);color:#fff;border:none;border-radius:6px;padding:6px 14px;font-weight:700;'
-  const status = document.createElement('div'); status.style.cssText = 'position:absolute;bottom:8px;left:0;right:0;text-align:center;color:#33ff66;font-family:monospace;font-size:12px;z-index:3;'
+  cancel.className = 'small'
+  cancel.style.cssText = 'position:absolute;top:8px;left:8px;z-index:3;'
+  const status = document.createElement('div'); status.style.cssText = 'position:absolute;bottom:8px;left:0;right:0;text-align:center;color:#fff;font-size:12px;z-index:3;text-shadow:0 0 4px #000;'
   status.textContent = 'Point at the other device'
   box.appendChild(video); box.appendChild(cancel); box.appendChild(status)
   function cleanup() {
