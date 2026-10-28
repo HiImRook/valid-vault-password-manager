@@ -165,7 +165,31 @@
     return 'username'
   }
 
-  const LOGIN_TYPE_ICON = { email: '📧', phone: '📱', username: '👤' }
+  const LOGIN_TYPE_ICON = { email: 'mail', phone: 'phone', username: 'user' }
+  const SVG_NS = 'http://www.w3.org/2000/svg'
+  const V_MARK_PATH = 'M5.7 8L105 8L108.8 22.4L11.8 22.4ZM237 8L336.3 8L330.2 22.4L233.2 22.4ZM17.9 36.9L112.5 36.9L116.3 51.3L24 51.3ZM229.5 36.9L324.1 36.9L318 51.3L225.7 51.3ZM30.1 65.8L120 65.8L123.8 80.2L36.2 80.2ZM222 65.8L311.9 65.8L305.8 80.2L218.2 80.2ZM42.3 94.7L127.5 94.7L131.3 109.1L48.4 109.1ZM214.5 94.7L299.7 94.7L293.6 109.1L210.7 109.1ZM54.5 123.6L135 123.6L138.8 138L60.7 138ZM207 123.6L287.5 123.6L281.3 138L203.2 138ZM66.8 152.4L142.6 152.4L146.3 166.9L72.9 166.9ZM199.4 152.4L275.2 152.4L269.1 166.9L195.7 166.9ZM79 181.3L150.1 181.3L153.8 195.8L85.1 195.8ZM191.9 181.3L263 181.3L256.9 195.8L188.2 195.8ZM91.2 210.2L157.6 210.2L161.3 224.7L97.3 224.7ZM184.4 210.2L250.8 210.2L244.7 224.7L180.7 224.7ZM103.4 239.1L165.1 239.1L168.8 253.6L109.5 253.6ZM176.9 239.1L238.6 239.1L232.5 253.6L173.2 253.6ZM115.6 268L226.4 268L220.3 282.4L121.7 282.4ZM127.8 296.9L214.2 296.9L208.1 311.3L133.9 311.3ZM140 325.8L202 325.8L195.8 340.2L146.2 340.2ZM152.3 354.7L189.7 354.7L183.6 369.1L158.4 369.1ZM164.5 383.6L177.5 383.6L171.4 398L170.6 398Z'
+  const PICKER_ICONS = {
+    user: '<path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8z"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/>',
+    mail: '<rect x="3.5" y="5.5" width="17" height="13" rx="2"/><path d="M4 7l8 6 8-6"/>',
+    phone: '<rect x="7" y="2.5" width="10" height="19" rx="2.2"/><path d="M11 18h2"/>',
+    history: '<path d="M4 12a8 8 0 1 0 2.3-5.6"/><path d="M4 4v4.5h4.5"/><path d="M12 8v4.5l3 2"/>'
+  }
+  const TAG_LOOKS = {
+    fill: { title: 'Fill with Valid Vault', background: 'linear-gradient(180deg,#ffffff,#ebe7df) padding-box,linear-gradient(135deg,#4a4c52,#0e0f11) border-box', mark: '#1d1e21' },
+    generate: { title: 'Generate a strong password with Valid Vault', background: 'linear-gradient(180deg,#2d3238,#1a1d21) padding-box,linear-gradient(135deg,#f4f6f8,#8a9098) border-box', mark: '#f4f6f8' }
+  }
+  const THEME_KEY = 'vv-theme'
+  const POPUP_CSS = `
+    :host { all: initial; --bg-raise: #fbfaf7; --text: #1d1e21; --text-dim: #66645f; --faint: #ddd7cc; --raise-top: #ffffff; --raise-bottom: #ebe7df; --sink-top: #e4dfd5; --sink-bottom: #fbfaf7; --rim-a: #4a4c52; --rim-b: #0e0f11; --inner: rgba(29,30,33,0.16); --drop: rgba(29,30,33,0.24); --hi: rgba(255,255,255,0.85); --shadow: rgba(29,30,33,0.14); --danger: #b42318; --overlay: rgba(20,20,22,0.45); --emboss: 0 1px 0 rgba(255,255,255,0.6); }
+    :host([data-theme="dark"]) { --bg-raise: #1e2125; --text: #e9ebee; --text-dim: #9aa0a6; --faint: #33383e; --raise-top: #2d3238; --raise-bottom: #1a1d21; --sink-top: #111316; --sink-bottom: #22262b; --rim-a: #f4f6f8; --rim-b: #8a9098; --inner: rgba(0,0,0,0.5); --drop: rgba(0,0,0,0.55); --hi: rgba(255,255,255,0.1); --shadow: rgba(0,0,0,0.35); --danger: #f97066; --overlay: rgba(0,0,0,0.6); --emboss: 0 1px 0 rgba(0,0,0,0.6); }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    .raised { border: 2px solid transparent; border-radius: 12px; background: linear-gradient(180deg, var(--raise-top), var(--raise-bottom)) padding-box, linear-gradient(135deg, var(--rim-a), var(--rim-b)) border-box; box-shadow: inset 0 1px 0 var(--hi), 0 2px 0 var(--drop), 0 6px 14px var(--shadow); font-family: "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; color: var(--text); }
+    .sunken { border: 2px solid transparent; border-radius: 10px; background: linear-gradient(180deg, var(--sink-top), var(--sink-bottom)) padding-box, linear-gradient(135deg, var(--rim-a), var(--rim-b)) border-box; box-shadow: inset 0 3px 6px var(--inner), 0 2px 0 var(--drop); }
+    .vmark { width: 13px; height: 15px; flex: none; fill: var(--text); }
+    button { flex: 1; font: inherit; font-size: 14px; font-weight: 500; color: var(--text); text-shadow: var(--emboss); padding: 10px 14px; min-height: 42px; cursor: pointer; border: 2px solid transparent; border-radius: 10px; background: linear-gradient(180deg, var(--raise-top), var(--raise-bottom)) padding-box, linear-gradient(135deg, var(--rim-a), var(--rim-b)) border-box; box-shadow: inset 0 1px 0 var(--hi), 0 3px 0 var(--drop), 0 4px 8px var(--shadow); transition: transform 0.06s, box-shadow 0.06s; }
+    button:active { transform: translateY(2px); background: linear-gradient(180deg, var(--sink-top), var(--sink-bottom)) padding-box, linear-gradient(135deg, var(--rim-a), var(--rim-b)) border-box; box-shadow: inset 0 3px 6px var(--inner), 0 1px 0 var(--drop); }
+    button.primary { font-weight: 700; }
+  `
 
   const GEN_MIN_CHOICES = [16, 20]
   const GEN_MAX_CHOICES = [24, 32, 48, 64]
@@ -467,6 +491,27 @@
     return div.innerHTML
   }
 
+  let popupTheme = 'light'
+  const themedHosts = new Set()
+
+  function applyThemeTo(host) {
+    themedHosts.add(host)
+    if (popupTheme === 'dark') host.setAttribute('data-theme', 'dark')
+    else host.removeAttribute('data-theme')
+  }
+
+  function setPopupTheme(value) {
+    popupTheme = value === 'dark' ? 'dark' : 'light'
+    for (const host of themedHosts) applyThemeTo(host)
+  }
+
+  try {
+    chrome.storage.local.get(THEME_KEY).then((r) => setPopupTheme(r && r[THEME_KEY])).catch(() => {})
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area === 'local' && changes[THEME_KEY]) setPopupTheme(changes[THEME_KEY].newValue)
+    })
+  } catch (e) {}
+
   let savePrompt = null
 
   function createSavePrompt() {
@@ -478,32 +523,38 @@
     const shadow = host.attachShadow({ mode: 'closed' })
     shadow.innerHTML = `
       <style>
-        .backdrop { position:fixed; inset:0; background:rgba(0,0,0,0.6); display:flex; align-items:center; justify-content:center; }
-        .card { background:#0d130d; border:1px solid #1f9e40; border-radius:10px; padding:20px; width:300px; max-width:90vw;
-          font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; box-shadow:0 8px 30px rgba(0,0,0,0.6); }
-        .title { color:#33ff66; font-size:15px; font-weight:700; margin-bottom:6px; }
-        .sub { color:#6fae7f; font-size:12px; margin-bottom:4px; word-break:break-all; }
-        .user { color:#b8f0c4; font-size:13px; margin:4px 0 8px; word-break:break-all; }
-        .extra-note { color:#6fae7f; font-size:11px; margin-bottom:12px; }
-        .row { display:flex; gap:10px; }
-        button { flex:1; padding:11px; border-radius:6px; border:none; font-size:13px; font-weight:700; cursor:pointer; }
-        .save { background:#33ff66; color:#05140a; }
-        .cancel { background:transparent; color:#33ff66; border:1px solid #1f9e40; font-weight:400; }
+        ${POPUP_CSS}
+        .backdrop { position: fixed; inset: 0; background: var(--overlay); display: flex; align-items: center; justify-content: center; padding: 16px; }
+        .card { padding: 18px; width: 330px; max-width: 100%; }
+        .head { display: flex; align-items: center; gap: 9px; margin-bottom: 12px; }
+        .brand { font-family: Georgia, "Noto Serif", "Times New Roman", serif; font-size: 12px; letter-spacing: 0.26em; color: var(--text-dim); }
+        .title { font-size: 17px; font-weight: 600; margin-bottom: 10px; }
+        .details { padding: 10px 12px; margin-bottom: 10px; }
+        .sub { color: var(--text-dim); font-size: 12px; word-break: break-all; }
+        .user { color: var(--text); font-size: 14px; font-weight: 600; margin-top: 3px; word-break: break-all; }
+        .extra-note { color: var(--text-dim); font-size: 12px; margin-bottom: 4px; }
+        .extra-note:empty { display: none; }
+        .msg { color: var(--danger); font-size: 12px; min-height: 16px; margin: 4px 0 10px; line-height: 1.4; }
+        .row { display: flex; gap: 10px; }
       </style>
       <div class="backdrop" id="backdrop">
-        <div class="card">
+        <div class="card raised">
+          <div class="head"><svg class="vmark" viewBox="0 0 342 403" aria-hidden="true"><path d="${V_MARK_PATH}"/></svg><span class="brand">VALID VAULT</span></div>
           <div class="title" id="sp-title">Save to Valid Vault?</div>
-          <div class="sub" id="sp-domain"></div>
-          <div class="user" id="sp-user"></div>
+          <div class="details sunken">
+            <div class="sub" id="sp-domain"></div>
+            <div class="user" id="sp-user"></div>
+          </div>
           <div class="extra-note" id="sp-extra"></div>
-          <div class="sub" id="sp-msg" style="color:#ff8866;min-height:14px;"></div>
+          <div class="msg" id="sp-msg"></div>
           <div class="row">
-            <button class="save" id="sp-save">Save</button>
-            <button class="cancel" id="sp-cancel">Not now</button>
+            <button class="primary" id="sp-save">Save</button>
+            <button id="sp-cancel">Not now</button>
           </div>
         </div>
       </div>
     `
+    applyThemeTo(host)
     return { host, shadow }
   }
 
@@ -615,7 +666,7 @@
     addPickerSection(itemsContainer, 'Saved on other parts of this site')
     for (const cred of related) {
       const icon = LOGIN_TYPE_ICON[cred.loginType || 'username'] || LOGIN_TYPE_ICON.username
-      addPickerItem(itemsContainer, icon + ' ' + cred.username + ' · ' + cred.domain, () => onPick(cred))
+      addPickerItem(itemsContainer, cred.username + ' · ' + cred.domain, () => onPick(cred), icon)
     }
   }
 
@@ -1020,33 +1071,46 @@
   }
 
   function applyTagVariant(tag, variant) {
-    const generate = variant === 'generate'
-    tag.title = generate ? 'Generate a strong password with Valid Vault' : 'Fill with Valid Vault'
-    tag.style.setProperty('background', generate ? '#05140a' : '#33ff66', 'important')
-    tag.style.setProperty('color', generate ? '#33ff66' : '#05140a', 'important')
-    tag.style.setProperty('box-shadow', generate ? '0 0 0 2px #33ff66,0 1px 6px rgba(0,0,0,0.5)' : '0 0 0 2px #05140a,0 1px 6px rgba(0,0,0,0.5)', 'important')
-    tag.dataset.variant = generate ? 'generate' : 'fill'
+    const look = variant === 'generate' ? TAG_LOOKS.generate : TAG_LOOKS.fill
+    tag.title = look.title
+    tag.style.setProperty('background', look.background, 'important')
+    const mark = tag.firstChild
+    if (mark && mark.style) mark.style.setProperty('fill', look.mark, 'important')
+    tag.dataset.variant = variant === 'generate' ? 'generate' : 'fill'
+  }
+
+  function createVaultMark() {
+    const svg = document.createElementNS(SVG_NS, 'svg')
+    svg.setAttribute('viewBox', '0 0 342 403')
+    svg.setAttribute('aria-hidden', 'true')
+    svg.setAttribute('focusable', 'false')
+    svg.style.cssText = ['display:block', 'width:9px', 'height:11px', 'margin:1px 0 0', 'padding:0', 'border:0', 'pointer-events:none', 'overflow:visible'].map((rule) => rule + ' !important').join(';')
+    const path = document.createElementNS(SVG_NS, 'path')
+    path.setAttribute('d', V_MARK_PATH)
+    svg.appendChild(path)
+    return svg
   }
 
   function createVaultTag(variant) {
     const tag = document.createElement('div')
-    tag.textContent = 'V'
-    tag.title = 'Fill with Valid Vault'
+    tag.appendChild(createVaultMark())
+    tag.title = TAG_LOOKS.fill.title
     tag.style.cssText = [
       'position:absolute',
       'z-index:2147483646',
+      'box-sizing:border-box',
       'width:22px',
       'height:22px',
+      'margin:0',
+      'padding:0',
+      'border:2px solid transparent',
       'border-radius:50%',
-      'background:#33ff66',
-      'color:#05140a',
       'display:flex',
       'align-items:center',
       'justify-content:center',
-      'font:800 12px/1 -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif',
       'cursor:pointer',
       'user-select:none',
-      'box-shadow:0 0 0 2px #05140a,0 1px 6px rgba(0,0,0,0.5)',
+      'box-shadow:inset 0 1px 0 rgba(255,255,255,0.45),0 1px 0 rgba(0,0,0,0.2),0 1px 3px rgba(0,0,0,0.2)',
       'opacity:1',
       'visibility:visible',
       'pointer-events:auto'
@@ -1190,21 +1254,21 @@
     const shadow = host.attachShadow({ mode: 'closed' })
     shadow.innerHTML = `
       <style>
-        .dropdown { position:absolute; background:#1a1a1a; border:1px solid #333; border-radius:8px;
-          box-shadow:0 4px 12px rgba(0,0,0,0.5); min-width:220px; max-width:340px; overflow:hidden;
-          font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; }
-        .header { padding:10px 14px; background:#0a0a0a; color:#33ff66; font-size:12px; font-weight:500; border-bottom:1px solid #333; }
-        .item { padding:10px 14px; cursor:pointer; border-bottom:1px solid #2a2a2a; color:#e0e0e0; font-size:13px; word-break:break-all; }
-        .item:hover { background:#2a2a2a; }
-        .item:last-child { border-bottom:none; }
-        .empty { padding:10px 14px; color:#888; font-size:12px; }
-        .section { padding:6px 14px; background:#111; color:#6fae7f; font-size:11px; text-transform:uppercase; letter-spacing:0.5px; border-bottom:1px solid #2a2a2a; }
+        ${POPUP_CSS}
+        .dropdown { position: absolute; min-width: 240px; max-width: 360px; overflow: hidden; padding: 4px; }
+        .header { display: flex; align-items: center; gap: 8px; padding: 9px 10px 8px; font-size: 12px; font-weight: 600; color: var(--text); border-bottom: 1px solid var(--faint); margin-bottom: 4px; }
+        .item { display: flex; align-items: center; gap: 9px; padding: 9px 10px; border-radius: 8px; cursor: pointer; color: var(--text); font-size: 13px; word-break: break-all; }
+        .item:hover { background: var(--faint); }
+        .item svg { width: 16px; height: 16px; flex: none; fill: none; stroke: var(--text-dim); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+        .empty { padding: 8px 10px; color: var(--text-dim); font-size: 12px; line-height: 1.45; }
+        .section { padding: 8px 10px 4px; color: var(--text-dim); font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; }
       </style>
-      <div class="dropdown">
-        <div class="header" id="header"></div>
+      <div class="dropdown raised">
+        <div class="header"><svg class="vmark" viewBox="0 0 342 403" aria-hidden="true"><path d="${V_MARK_PATH}"/></svg><span id="header"></span></div>
         <div id="items"></div>
       </div>
     `
+    applyThemeTo(host)
     return { host, shadow }
   }
 
@@ -1249,10 +1313,19 @@
     container.appendChild(section)
   }
 
-  function addPickerItem(container, text, onPick) {
+  function addPickerItem(container, text, onPick, icon) {
     const item = document.createElement('div')
     item.className = 'item'
-    item.textContent = text
+    if (icon && PICKER_ICONS[icon]) {
+      const svg = document.createElementNS(SVG_NS, 'svg')
+      svg.setAttribute('viewBox', '0 0 24 24')
+      svg.setAttribute('aria-hidden', 'true')
+      svg.innerHTML = PICKER_ICONS[icon]
+      item.appendChild(svg)
+    }
+    const label = document.createElement('span')
+    label.textContent = text
+    item.appendChild(label)
     item.onclick = (e) => { if (!e.isTrusted) return; onPick(); hideFieldPicker() }
     container.appendChild(item)
   }
@@ -1313,23 +1386,23 @@
       addPickerSection(itemsContainer, 'Saved logins for this site')
       for (const cred of ranked) {
         const icon = LOGIN_TYPE_ICON[cred.loginType || 'username'] || LOGIN_TYPE_ICON.username
-        addPickerItem(itemsContainer, icon + ' ' + cred.username, () => fillCredentials(cred, formFields))
+        addPickerItem(itemsContainer, cred.username, () => fillCredentials(cred, formFields), icon)
       }
     }
     const withPrevious = ranked.filter((cred) => cred.previousPassword)
     if (withPrevious.length > 0) {
       addPickerSection(itemsContainer, 'Previous passwords')
       for (const cred of withPrevious) {
-        addPickerItem(itemsContainer, '↩ ' + cred.username + ' (replaced ' + shortDate(cred.previousSetAt) + (cred.previousUntil ? ', kept until ' + shortDate(cred.previousUntil) : '') + ')', () => {
+        addPickerItem(itemsContainer, cred.username + ' (replaced ' + shortDate(cred.previousSetAt) + (cred.previousUntil ? ', kept until ' + shortDate(cred.previousUntil) : '') + ')', () => {
           fillCredentials({ username: cred.username, password: cred.previousPassword, extraFields: [], isPrevious: true }, formFields)
           setTimeout(() => offerRestore(field, cred), 0)
-        })
+        }, 'history')
       }
     }
     addRelatedSection(itemsContainer, data.related, (cred) => fillCredentials(cred, formFields))
     if (data.emails.length > 0) {
       addPickerSection(itemsContainer, 'Your emails')
-      for (const email of data.emails) addPickerItem(itemsContainer, email, () => fillFieldValue(field, email))
+      for (const email of data.emails) addPickerItem(itemsContainer, email, () => fillFieldValue(field, email), 'mail')
     }
     if (ranked.length === 0 && data.related.length === 0 && data.emails.length === 0) {
       addPickerEmpty(itemsContainer, data.locked ? 'Vault is locked' : 'No saved logins for this site yet. Log in or sign up and Valid Vault will offer to save it.')
@@ -1376,21 +1449,21 @@
     addPickerSection(itemsContainer, 'Fill your current password')
     for (const cred of creds) {
       const icon = LOGIN_TYPE_ICON[cred.loginType || 'username'] || LOGIN_TYPE_ICON.username
-      addPickerItem(itemsContainer, icon + ' ' + cred.username, () => {
+      addPickerItem(itemsContainer, cred.username, () => {
         record.accountUsername = cred.username
         fillFieldValue(field, cred.password)
         noteCredentialUse(cred.username)
-      })
+      }, icon)
     }
     const withPrevious = creds.filter((cred) => cred.previousPassword)
     if (withPrevious.length > 0) {
       addPickerSection(itemsContainer, 'Previous passwords')
       for (const cred of withPrevious) {
-        addPickerItem(itemsContainer, '↩ ' + cred.username + ' (replaced ' + shortDate(cred.previousSetAt) + (cred.previousUntil ? ', kept until ' + shortDate(cred.previousUntil) : '') + ')', () => {
+        addPickerItem(itemsContainer, cred.username + ' (replaced ' + shortDate(cred.previousSetAt) + (cred.previousUntil ? ', kept until ' + shortDate(cred.previousUntil) : '') + ')', () => {
           record.accountUsername = cred.username
           fillFieldValue(field, cred.previousPassword)
           setTimeout(() => offerRestore(field, cred), 0)
-        })
+        }, 'history')
       }
     }
   }
