@@ -5,6 +5,33 @@ All notable changes to Valid Vault will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.3] - 2026-10-28
+
+The browser extension gets the phone's new look, with day and night modes, the striped V, and the raised and recessed design, from the popup to the V tags on websites. Logins on more sites are found and saved, and leftover code is removed.
+
+### Added
+
+* **Day and night modes in the extension.** Ink for day and Platinum for night, switched with the sun and moon button. Every extension page shares the choice, and the login picker and save prompt on websites follow it too.
+* **A 32 pixel toolbar icon** for high-DPI screens, so the icon stays sharp at 125% and 150% scaling.
+
+### Changed
+
+* **The popup and unlock window redrawn.** The striped V and serif wordmark, a raised Unlock with Fingerprint button with a drawn fingerprint, and a recessed master password field. The FP and PW chips are gone, and the unlock window shows which site asked.
+* **Manage redrawn.** A sidebar with the striped V, recessed panels for every section, and Show, Edit, and Delete buttons in place of emoji. Personal Info is grouped into Name and Phone, Emails, and Address, and the lock screen matches the unlock window.
+* **Valid Vault dialogs replace the browser's confirm boxes.** Deleting a login, a field, a misc credential, an email, or an unlock method, Clear Vault, Unlink, and the key import questions all use Valid Vault dialogs, with a red rim on destructive choices.
+* **The bookmarks side panel redrawn.** Bookmarks are raised cards with drawn rename and remove icons, and removing one asks first.
+* **The User Guide redrawn.** The green terminal look and scanline effects are replaced by the new design, with a day and night toggle.
+* **New V tags on websites.** The V tag is a white circle with the striped V, and the inverted V that generates passwords is a charcoal circle with a white V. They look the same on every site so they stand out on any page. The login picker, the password generator, and the save prompt are redrawn with drawn icons in place of emoji.
+* **New toolbar and store icon.** The white rounded-square striped V from the phone app replaces the green globe.
+* **Logins found on more sites.** A username box with no type, or a type the browser does not recognize, is now found, so those logins get a V tag and are offered for saving.
+* **Revealed items cleared on lock.** Logins, misc credentials, and personal info shown in Manage are cleared from the page when the vault locks, the same as the phone app.
+* **Docs updated.** The User Guides describe the new V tags and the extension's backup copy, and the privacy policy describes the extra form fields saved with a login.
+* **Older code removed.** Functions with no callers, an unused frame encoder, and the Orbitron font are removed.
+
+### Notes
+
+* The fingerprint icon comes from Phosphor Icons, used under the MIT License.
+
 ## [0.9.2] - 2026-10-26
 
 A new look across the phone app, the private browser, and the home screen, with day and night modes. The extension now keeps an encrypted backup copy of the vault so a browser that clears site data doesn't take the vault with it.

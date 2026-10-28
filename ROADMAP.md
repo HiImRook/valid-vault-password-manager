@@ -1,10 +1,21 @@
 # Valid Vault - Development Roadmap
 
-**Current Version:** v0.9.2 - **Status: Active Testing**
+**Current Version:** v0.9.3 - **Status: Late Beta**
 
 ---
 
 ## Version History (Completed)
+
+### v0.9.3 - The Extension's New Look (Oct 2026)
+
+* ✅ Ink for day and Platinum for night in the extension, switched with the sun and moon button and shared by every extension page
+* ✅ Popup, unlock window, Manage, bookmarks side panel, and User Guide redrawn with raised buttons, recessed panels, and the striped V
+* ✅ Valid Vault dialogs replace the browser's confirm boxes in Manage
+* ✅ V tags on websites redrawn as a white circle with the striped V, and a charcoal one for generating passwords, with the login picker and save prompt following day and night mode
+* ✅ New toolbar and store icon, the white striped V
+* ✅ Logins found on sites whose username box has no type
+* ✅ Revealed logins, misc credentials, and personal info cleared from Manage when the vault locks
+* ✅ Leftover code removed
 
 ### v0.9.2 - A New Look (Oct 2026)
 
@@ -242,7 +253,7 @@
 * ✅ Background auto-lock follows the seconds setting; a fresh unlock and Manage activity count as activity
 * ✅ Click-to-fill V tags on Personal Info, login email/username, and password fields; no fill on page load and no focus popup
 * ✅ Locked save prompt unlocks in place with a masked password box and show/hide toggle; clicking outside no longer discards the capture
-* ⚠️ Extension-only - the phone app still needs the same key import, QR, and whole-vault fixes
+* ✅ Extension-only; the phone app got the same key import, QR, and whole-vault fixes when it was rebuilt in v0.8.0
 
 ### v0.6.3 - Single-Blob Vault Encryption and Migration Hardening (Sep 2026)
 
@@ -277,7 +288,7 @@
 * ✅ Inline unlock directly on a locked page when a tagged field is clicked - password-only, since a WebAuthn platform credential can't be triggered from a page's own origin
 * ✅ Fixed a `VersionError` bug: background.js had `indexedDB.open('ValidVault', 1)` hardcoded in three places, silently breaking background vault access once the database reached version 3
 * ✅ Fixed a popup/background race condition that could drop the session key on a fast tab switch, by delegating the session-key write to background.js
-* ⚠️ Website Credentials still does not reliably save new logins captured from a real signup flow - a fix was built, caused a regression, and was rolled back; root cause understood, not yet resolved
+* ✅ Saving new logins from real signup flows, rolled back here after a regression, was fixed at the root in v0.6.2
 
 ### v0.6.0 - Web Credentials, Personal Info, Uni-Vault Key Fix (Sep 2026)
 
@@ -307,50 +318,15 @@
 
 ---
 
-## Upcoming After v0.9.2
+## Upcoming After v0.9.3
 
-### v0.8.x - The Phone App
+### Before 1.0
 
-Built in this order, each step shipping as its own release. The phone de-drift shipped in v0.8.0, the vault QR rebuild in v0.8.1, Android Autofill with Share to Bookmarks in v0.8.2, the private browser core in v0.8.3, importing from other managers in v0.8.4, the browser's Tor mode and downloads in v0.8.5, tabs with a start page in v0.8.6, Valid Vault autofill in the browser in v0.8.7, autofill matching the extension in v0.8.7.1, the faster vault QR in v0.8.8, and importing from more apps in v0.9.0.
-
-**1. Android Autofill** - shipped in v0.8.2
-
-* Confirm autofill and save across apps and browsers on phones, and widen browser support from what testing shows
-
-**2. Modified Chromium browser** - core shipped in v0.8.3
-
-* Tor mode, downloads, the EasyPrivacy and EasyList lists, empty ad space removed, and Global Privacy Control shipped in v0.8.5
-* Tabs and the start page shipped in v0.8.6
-* Valid Vault autofill with V tags, Fill login, and save prompts shipped in v0.8.7
-* Personal Info, the password generator, and pull down to reload shipped in v0.8.7.1
-* Reorder or choose the widget buttons
-* Confirm the browser on phones, and grow the tracker list from what testing shows
-
-**3. QR transport**
-
-* Faster vault QR, off-center scanning, and a live readout shipped in v0.8.8
-* Bookmarks in the vault QR shipped in v0.9.1
-* Scanner reliability across more phones and cameras, tuned from what the readout shows
-* Unlock behavior quirks reported by community testing
-
-Encrypted files on a USB drive remain a dependable device-to-device path, already verified in use.
-
-**4. App injection**
-
+* Bring the new look to the website
 * Filling apps that Android Autofill can't reach
-
-**5. Importing from other managers** - shipped in v0.8.4
-
-* Samsung Pass, Bitwarden JSON, 1Password, Dashlane, and logins for phone apps shipped in v0.9.0
-* Confirm imports from more password managers on phones and computers, and add formats from what testing shows
-
-### v0.9.x - Hardening and Polish
-
-* Security hardening across the extension and the phone app
-* Visual overhaul of the phone app, the private browser, and the widgets shipped in v0.9.2
-* Bring the new look to the extension, the User Guide, and the website
-* Final features and fixes before 1.0
-* Polish throughout
+* Scanner reliability across more phones and cameras, tuned from what the live readout shows
+* Imports from more password managers, added as people ask for them
+* Final bug fixes and polish
 
 ### Autofill Hardening
 
@@ -372,8 +348,6 @@ Encrypted files on a USB drive remain a dependable device-to-device path, alread
 
 ## Known Limitations
 
-⚠️ **This build is under active testing** - expect frequent changes
-
 ⚠️ **Autofill matching quality varies site to site** - this is something I am very aware of. The foundation works, polish is ongoing and improves with each site reported to have issues
 
 ⚠️ **Save prompts are matched to your browser tab, not the exact page** - so they survive a login redirect (like SSO or MFA) instead of getting lost. In rare cases, navigating elsewhere in that same tab within the 45-second window could bring the prompt up there too - a minor UX quirk, not a credential leak.
@@ -383,15 +357,11 @@ Encrypted files on a USB drive remain a dependable device-to-device path, alread
 ⚠️ **SSN and card storage deliberately deferred**, pending security work
 
 
-⚠️ **QR needs v0.8.8 on both sides** - an older scanner can't read a 0.8.8 QR, while the 0.8.8 scanner still reads codes from older versions
+⚠️ **Android Autofill needs a setting in Chrome** - Chrome needs its Autofill using another service setting turned on, and browsers without support for third-party autofill do not ask Valid Vault at all
 
-⚠️ **Android Autofill is new and not yet confirmed on a phone** - it is verified in Chromium with Android's autofill calls simulated. Chrome needs its Autofill using another service setting turned on, and browsers without support for third-party autofill do not ask Valid Vault at all
-
-⚠️ **The private browser and widgets are new** - the first browser build runs on a Samsung phone, and the v0.8.3 layout and widgets are being tested on phones now. The browser needs Android 9 or newer
+⚠️ **The private browser needs Android 9 or newer**
 
 ⚠️ **Delete export files after importing** - CSV, JSON, and zip exports hold your passwords unencrypted, and a protected file like a Samsung Pass export is only as safe as its export password. Cards, addresses, and notes in a Samsung Pass file are not imported
-
-⚠️ **Phones upgraded from an older version may need fingerprint re-enrolled once** - unlock with your password, which removes the old fingerprint setting, and re-enroll in Manage, or use Can't unlock? on the lock screen with your key file
 
 ⚠️ **Uni-Vault needs a browser setting in Brave** - Brave ships the File System Access API switched off; Chrome and Edge work out of the box, and Brave users can switch it on or keep using Export and Import
 
@@ -415,4 +385,4 @@ MIT License - See LICENSE file for details
 
 ---
 
-**Last Updated:** Oct 26, 2026
+**Last Updated:** Oct 28, 2026

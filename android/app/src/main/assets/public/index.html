@@ -10796,7 +10796,7 @@ self.onmessage = (event) => {
 <script>
 (function () {
 'use strict'
-const VALID_VAULT_VERSION = "0.9.1"
+const VALID_VAULT_VERSION = "0.9.3"
 const __modules = Object.create(null)
 __modules["extension/crypto.js"] = (function () {
 const SALT_LENGTH = 16
@@ -10944,38 +10944,7 @@ async function decrypt(encrypted, key) {
 
   return decoder.decode(plaintext)
 }
-
-async function createBackupSignature(payload, key) {
-  const encoder = new TextEncoder()
-  const keyBytes = await crypto.subtle.exportKey('raw', key)
-
-  const hmacKey = await crypto.subtle.importKey(
-    'raw',
-    keyBytes,
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign']
-  )
-
-  const signature = await crypto.subtle.sign('HMAC', hmacKey, encoder.encode(payload))
-  return Array.from(new Uint8Array(signature))
-}
-
-async function verifyBackupSignature(payload, signature, key) {
-  const encoder = new TextEncoder()
-  const keyBytes = await crypto.subtle.exportKey('raw', key)
-
-  const hmacKey = await crypto.subtle.importKey(
-    'raw',
-    keyBytes,
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['verify']
-  )
-
-  return crypto.subtle.verify('HMAC', hmacKey, new Uint8Array(signature), encoder.encode(payload))
-}
-return Object.freeze({ "PBKDF2_ITERATIONS": PBKDF2_ITERATIONS, "LEGACY_PBKDF2_ITERATIONS": LEGACY_PBKDF2_ITERATIONS, "generateSalt": generateSalt, "generateIV": generateIV, "generateMasterKey": generateMasterKey, "deriveKeyFromSecret": deriveKeyFromSecret, "deriveKeyFromPrfOutput": deriveKeyFromPrfOutput, "masterKeyToCryptoKey": masterKeyToCryptoKey, "wrapMasterKey": wrapMasterKey, "unwrapMasterKey": unwrapMasterKey, "encrypt": encrypt, "decrypt": decrypt, "createBackupSignature": createBackupSignature, "verifyBackupSignature": verifyBackupSignature })
+return Object.freeze({ "PBKDF2_ITERATIONS": PBKDF2_ITERATIONS, "LEGACY_PBKDF2_ITERATIONS": LEGACY_PBKDF2_ITERATIONS, "generateSalt": generateSalt, "generateIV": generateIV, "generateMasterKey": generateMasterKey, "deriveKeyFromSecret": deriveKeyFromSecret, "deriveKeyFromPrfOutput": deriveKeyFromPrfOutput, "masterKeyToCryptoKey": masterKeyToCryptoKey, "wrapMasterKey": wrapMasterKey, "unwrapMasterKey": unwrapMasterKey, "encrypt": encrypt, "decrypt": decrypt })
 })()
 
 __modules["extension/store.js"] = (function () {
@@ -10985,7 +10954,7 @@ const VAULT_CHANGE_STAMP = 'vaultChangedAt'
 const MIRROR_PREFIX = 'vvMirror:'
 const MIRROR_READY_KEY = 'vvMirrorReady'
 const MIRROR_BYTES_TAG = '$vvBytes'
-const MIRROR_STORES = ['auth', 'passwords', 'wallets', 'webcreds', 'personalInfo', 'vaultMigration', 'bookmarks']
+const STORE_NAMES = ['auth', 'passwords', 'wallets', 'webcreds', 'personalInfo', 'vaultMigration', 'bookmarks']
 
 let db = null
 let readyPromise = null
@@ -11083,7 +11052,7 @@ async function restoreFromMirror(database, mirrored) {
     const rest = key.slice(MIRROR_PREFIX.length)
     const at = rest.indexOf(':')
     const storeName = rest.slice(0, at)
-    if (!MIRROR_STORES.includes(storeName) || !value || value.id === undefined) continue
+    if (!STORE_NAMES.includes(storeName) || !value || value.id === undefined) continue
     if (await readRecord(database, storeName, value.id)) continue
     pending.push({ storeName, record: fromMirror(value) })
   }
@@ -11099,7 +11068,7 @@ async function restoreFromMirror(database, mirrored) {
 
 async function seedMirror(database) {
   const entries = {}
-  for (const storeName of MIRROR_STORES) {
+  for (const storeName of STORE_NAMES) {
     for (const record of await readAllRecords(database, storeName)) {
       if (record && record.id !== undefined) entries[mirrorKey(storeName, record.id)] = toMirror(record)
     }
@@ -11313,7 +11282,6 @@ async function setBookmarksVault(vaultData) {
   return putVault('bookmarks', { id: 'vault', ...vaultData })
 }
 
-const ALL_STORES = ['auth', 'passwords', 'wallets', 'webcreds', 'personalInfo', 'vaultMigration', 'bookmarks']
 const VAULT_DATA_STORES = ['passwords', 'webcreds', 'personalInfo', 'vaultMigration', 'bookmarks', 'wallets']
 
 async function clearStores(names) {
@@ -11329,7 +11297,7 @@ async function clearStores(names) {
 }
 
 async function clearAll() {
-  await clearStores(ALL_STORES)
+  await clearStores(STORE_NAMES)
 }
 
 async function clearVaultData() {
@@ -12243,27 +12211,6 @@ async function getCredentials(domain, masterKey) {
   return { success: true, credentials: result }
 }
 
-async function getAllDomains(masterKey) {
-  if (!masterKey) {
-    return { success: false, locked: true, domains: [] }
-  }
-
-  let tree
-  try {
-    tree = await readVaultTree(masterKey)
-  } catch (error) {
-    return { success: false, error: 'Decryption failed' }
-  }
-
-  const domains = []
-  for (const domain of Object.keys(tree.credentials)) {
-    const hasLive = tree.credentials[domain].some(isLive)
-    if (hasLive) domains.push(domain)
-  }
-
-  return { success: true, domains }
-}
-
 async function updateCredential(credentialId, updates, masterKey) {
   let tree
   try {
@@ -12368,24 +12315,6 @@ async function deleteCredential(credentialId, masterKey) {
   return { success: false, error: 'Credential not found' }
 }
 
-async function autofill(domain, credentialId, masterKey) {
-  const result = await getCredentials(domain, masterKey)
-  if (!result.success) return result
-
-  if (result.credentials.length === 0) {
-    return { success: false, error: 'No credentials for domain' }
-  }
-
-  if (credentialId) {
-    const cred = result.credentials.find((candidate) => candidate.id === credentialId)
-    if (cred) return { success: true, username: cred.username, password: cred.password }
-    return { success: false, error: 'Credential not found' }
-  }
-
-  const cred = result.credentials[0]
-  return { success: true, username: cred.username, password: cred.password }
-}
-
 function stamp(record) {
   return typeof record.updatedAt === 'number' && isFinite(record.updatedAt) ? record.updatedAt : 0
 }
@@ -12476,13 +12405,6 @@ function liveAppLinks(tree) {
     if (!link.deleted) out[pkg] = link.site
   }
   return out
-}
-
-async function getAppLink(pkg, masterKey) {
-  const tree = await readVaultTree(masterKey)
-  const link = (tree.appLinks || {})[pkg]
-  if (!link || link.deleted) return null
-  return link.site
 }
 
 async function listAppLinks(masterKey) {
@@ -12790,7 +12712,7 @@ async function importLogins(entries, masterKey, decide, links) {
   }
   return Object.assign({ cancelled: false, fileDuplicates: dedup.dropped, previousUntil }, stats)
 }
-return Object.freeze({ "ensureVault": ensureVault, "saveCredential": saveCredential, "getCredentials": getCredentials, "getRelatedCredentials": getRelatedCredentials, "relatedCredentials": relatedCredentials, "siteOf": siteOf, "getAllDomains": getAllDomains, "updateCredential": updateCredential, "deleteCredential": deleteCredential, "noteCredentialUse": noteCredentialUse, "restorePreviousPassword": restorePreviousPassword, "previewLoginImport": previewLoginImport, "previewLoginImportFor": previewLoginImportFor, "matchImportedApps": matchImportedApps, "matchImportedAppsFor": matchImportedAppsFor, "isPublicSuffix": isPublicSuffix, "importLogins": importLogins, "previousExpiresAt": previousExpiresAt, "PREVIOUS_KEEP_MS": PREVIOUS_KEEP_MS, "autofill": autofill, "getAppLink": getAppLink, "setAppLink": setAppLink, "removeAppLink": removeAppLink, "listAppLinks": listAppLinks, "mergeVaults": mergeVaults, "mergeRecordLists": mergeRecordLists, "laterRecord": laterRecord, "sameCredentials": sameCredentials, "migrateLegacyVault": migrateLegacyVault, "readVaultTree": readVaultTree, "writeVaultTree": writeVaultTree, "decryptAnyRowToTree": decryptAnyRowToTree })
+return Object.freeze({ "ensureVault": ensureVault, "saveCredential": saveCredential, "getCredentials": getCredentials, "getRelatedCredentials": getRelatedCredentials, "relatedCredentials": relatedCredentials, "siteOf": siteOf, "updateCredential": updateCredential, "deleteCredential": deleteCredential, "noteCredentialUse": noteCredentialUse, "restorePreviousPassword": restorePreviousPassword, "previewLoginImport": previewLoginImport, "previewLoginImportFor": previewLoginImportFor, "matchImportedApps": matchImportedApps, "matchImportedAppsFor": matchImportedAppsFor, "isPublicSuffix": isPublicSuffix, "importLogins": importLogins, "previousExpiresAt": previousExpiresAt, "PREVIOUS_KEEP_MS": PREVIOUS_KEEP_MS, "setAppLink": setAppLink, "removeAppLink": removeAppLink, "listAppLinks": listAppLinks, "mergeVaults": mergeVaults, "mergeRecordLists": mergeRecordLists, "laterRecord": laterRecord, "sameCredentials": sameCredentials, "migrateLegacyVault": migrateLegacyVault, "readVaultTree": readVaultTree, "writeVaultTree": writeVaultTree, "decryptAnyRowToTree": decryptAnyRowToTree })
 })()
 
 __modules["extension/webcreds.js"] = (function () {
@@ -12966,39 +12888,6 @@ async function deleteWebCredential(credentialId) {
   return { success: false, error: 'Credential not found' }
 }
 
-async function reEncryptVault(vault, oldKey, newKey) {
-  const out = {
-    meta: { version: vault.meta.version, createdAt: vault.meta.createdAt, lastAccess: vault.meta.lastAccess },
-    credentials: {}
-  }
-
-  for (const category of Object.keys(vault.credentials)) {
-    const list = []
-    for (const cred of vault.credentials[category]) {
-      if (cred.deleted) {
-        const tomb = { id: cred.id, deleted: true, deletedAt: cred.deletedAt, updatedAt: cred.updatedAt }
-        if (cred.name) {
-          try { tomb.name = await encrypt(await decrypt(cred.name, oldKey), newKey) } catch (error) {}
-        }
-        list.push(tomb)
-        continue
-      }
-      const name = await decrypt(cred.name, oldKey)
-      const value = await decrypt(cred.value, oldKey)
-      list.push({
-        id: cred.id,
-        name: await encrypt(name, newKey),
-        value: await encrypt(value, newKey),
-        createdAt: cred.createdAt,
-        updatedAt: cred.updatedAt
-      })
-    }
-    out.credentials[category] = list
-  }
-
-  return out
-}
-
 async function identityFor(cred, masterKey) {
   if (!cred.name) return cred.deleted ? undefined : 'id:' + cred.id
   try {
@@ -13047,7 +12936,7 @@ function canonicalWebCreds(vault) {
 function sameWebCreds(a, b) {
   return canonicalWebCreds(a) === canonicalWebCreds(b)
 }
-return Object.freeze({ "ensureVault": ensureVault, "saveWebCredential": saveWebCredential, "getWebCredentials": getWebCredentials, "getAllCategories": getAllCategories, "updateWebCredential": updateWebCredential, "deleteWebCredential": deleteWebCredential, "reEncryptVault": reEncryptVault, "mergeWebCredsVaults": mergeWebCredsVaults, "sameWebCreds": sameWebCreds })
+return Object.freeze({ "ensureVault": ensureVault, "saveWebCredential": saveWebCredential, "getWebCredentials": getWebCredentials, "getAllCategories": getAllCategories, "updateWebCredential": updateWebCredential, "deleteWebCredential": deleteWebCredential, "mergeWebCredsVaults": mergeWebCredsVaults, "sameWebCreds": sameWebCreds })
 })()
 
 __modules["extension/personalinfo.js"] = (function () {
@@ -13347,16 +13236,6 @@ function sameTrees(a, b) {
   return canonicalItems(a) === canonicalItems(b)
 }
 
-async function importRow(incomingRow, key) {
-  if (!incomingRow) return false
-  const incomingTree = await decryptRow(incomingRow, key)
-  const localTree = await readTree(key)
-  const merged = mergeTrees(localTree, incomingTree)
-  if (sameTrees(localTree, merged)) return false
-  await writeTree(merged, key)
-  return true
-}
-
 function planBookmarkImport(tree, entries) {
   const live = new Set(tree.items.filter((item) => !item.deleted).map((item) => item.url))
   const deleted = new Set(tree.items.filter((item) => item.deleted).map((item) => item.url))
@@ -13397,7 +13276,7 @@ async function importBookmarkList(entries, key) {
   await writeTree(tree, key)
   return Object.assign({ added: plan.fresh.length }, plan)
 }
-return Object.freeze({ "normalizeUrl": normalizeUrl, "isBookmarkable": isBookmarkable, "decryptRow": decryptRow, "rowOpensWith": rowOpensWith, "listBookmarks": listBookmarks, "findByUrl": findByUrl, "saveBookmark": saveBookmark, "renameBookmark": renameBookmark, "moveBookmark": moveBookmark, "removeBookmark": removeBookmark, "orderItems": orderItems, "mergeTrees": mergeTrees, "sameTrees": sameTrees, "writeTree": writeTree, "readTree": readTree, "importRow": importRow, "planBookmarkImport": planBookmarkImport, "previewBookmarkImport": previewBookmarkImport, "importBookmarkList": importBookmarkList })
+return Object.freeze({ "normalizeUrl": normalizeUrl, "isBookmarkable": isBookmarkable, "decryptRow": decryptRow, "rowOpensWith": rowOpensWith, "listBookmarks": listBookmarks, "findByUrl": findByUrl, "saveBookmark": saveBookmark, "renameBookmark": renameBookmark, "moveBookmark": moveBookmark, "removeBookmark": removeBookmark, "orderItems": orderItems, "mergeTrees": mergeTrees, "sameTrees": sameTrees, "writeTree": writeTree, "readTree": readTree, "planBookmarkImport": planBookmarkImport, "previewBookmarkImport": previewBookmarkImport, "importBookmarkList": importBookmarkList })
 })()
 
 __modules["extension/bip39-words.js"] = (function () {
@@ -13962,17 +13841,7 @@ function canonicalTree(tree) {
 function sameTrees(a, b) {
   return canonicalTree(a) === canonicalTree(b)
 }
-
-async function importRow(incomingRow, key) {
-  if (!incomingRow) return false
-  const incomingTree = await decryptRow(incomingRow, key)
-  const localTree = await readTree(key)
-  const merged = mergeTrees(localTree, incomingTree)
-  if (sameTrees(localTree, merged)) return false
-  await writeTree(merged, key)
-  return true
-}
-return Object.freeze({ "MAX_WORDS": MAX_WORDS, "STANDARD_LENGTHS": STANDARD_LENGTHS, "isBip39Word": isBip39Word, "suggestWords": suggestWords, "checkPhrase": checkPhrase, "decryptRow": decryptRow, "rowOpensWith": rowOpensWith, "listWallets": listWallets, "defaultLabelFor": defaultLabelFor, "addAccount": addAccount, "updateAccount": updateAccount, "renameWallet": renameWallet, "deleteAccount": deleteAccount, "deleteWallet": deleteWallet, "moveWallet": moveWallet, "moveAccount": moveAccount, "sortWalletsAZ": sortWalletsAZ, "mergeTrees": mergeTrees, "sameTrees": sameTrees, "writeTree": writeTree, "readTree": readTree, "importRow": importRow })
+return Object.freeze({ "MAX_WORDS": MAX_WORDS, "STANDARD_LENGTHS": STANDARD_LENGTHS, "isBip39Word": isBip39Word, "suggestWords": suggestWords, "checkPhrase": checkPhrase, "decryptRow": decryptRow, "rowOpensWith": rowOpensWith, "listWallets": listWallets, "defaultLabelFor": defaultLabelFor, "addAccount": addAccount, "updateAccount": updateAccount, "renameWallet": renameWallet, "deleteAccount": deleteAccount, "deleteWallet": deleteWallet, "moveWallet": moveWallet, "moveAccount": moveAccount, "sortWalletsAZ": sortWalletsAZ, "mergeTrees": mergeTrees, "sameTrees": sameTrees, "writeTree": writeTree, "readTree": readTree })
 })()
 
 __modules["extension/wallets-tab.js"] = (function () {
@@ -14775,7 +14644,6 @@ return Object.freeze({ "init": init, "lock": lock, "onTabHidden": onTabHidden, "
 __modules["extension/session.js"] = (function () {
 const session = {
   masterKey: null,
-  unlockedDomains: new Set(),
   lastActivity: 0,
   timeoutId: null
 }
@@ -14842,11 +14710,6 @@ function hasMasterKey() {
   return session.masterKey !== null
 }
 
-function unlockDomain(domain) { session.unlockedDomains.add(domain) }
-function lockDomain(domain) { session.unlockedDomains.delete(domain) }
-function isDomainUnlocked(domain) { return session.unlockedDomains.has(domain) }
-function getUnlockedDomains() { return Array.from(session.unlockedDomains) }
-
 function resetActivity() { session.lastActivity = Date.now() }
 
 async function checkTimeout() {
@@ -14877,7 +14740,6 @@ function stopTimeout() {
 async function lockAll() {
   const wasUnlocked = session.masterKey !== null
   session.masterKey = null
-  session.unlockedDomains.clear()
   session.lastActivity = 0
   stopTimeout()
   await clearStorageSession()
@@ -14889,14 +14751,6 @@ async function clearStorageSession() {
   try { await chrome.storage.session.remove(['masterKeyBytes', LEGACY_SOFT_KEY]) } catch (e) {}
 }
 
-async function getState() {
-  return {
-    hasMasterKey: hasMasterKey(),
-    unlockedDomains: getUnlockedDomains(),
-    lastActivity: session.lastActivity
-  }
-}
-
 function watchSharedLock() {
   if (!haveStorage() || !chrome.storage.onChanged) return
   chrome.storage.onChanged.addListener((changes, area) => {
@@ -14906,7 +14760,7 @@ function watchSharedLock() {
 }
 
 watchSharedLock()
-return Object.freeze({ "setAutoLockProvider": setAutoLockProvider, "onLock": onLock, "setMasterKey": setMasterKey, "getMasterKey": getMasterKey, "hasMasterKey": hasMasterKey, "unlockDomain": unlockDomain, "lockDomain": lockDomain, "isDomainUnlocked": isDomainUnlocked, "getUnlockedDomains": getUnlockedDomains, "resetActivity": resetActivity, "checkTimeout": checkTimeout, "lockAll": lockAll, "clearStorageSession": clearStorageSession, "getState": getState })
+return Object.freeze({ "setAutoLockProvider": setAutoLockProvider, "onLock": onLock, "setMasterKey": setMasterKey, "getMasterKey": getMasterKey, "hasMasterKey": hasMasterKey, "resetActivity": resetActivity, "checkTimeout": checkTimeout, "lockAll": lockAll, "clearStorageSession": clearStorageSession })
 })()
 
 __modules["extension/keypackage.js"] = (function () {

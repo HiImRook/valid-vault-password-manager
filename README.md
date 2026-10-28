@@ -16,21 +16,13 @@ A local, encrypted, QR code portable password manager that works without a cloud
 
 ---
 
-> ✅ **Faster Vault QR - v0.8.8**
->
-> Sharing the vault by QR is about twice as fast, and much less fussy about aim. Each frame carries its data as raw bytes, so it holds a third more at the same density, and frames change twice as often. The scanner reads frames on several processor cores at once and also looks at the whole camera image, so a code that drifts off center keeps reading. A live readout shows pieces received, the share of frames caught, and reads per second. The extension draws the QR as large as the window allows, and the phone goes to full brightness while it shows one. Master Key Name is now Key and Vault Name, so key and vault files always carry the same name. Update the phone and the extension together, since older scanners can't read the new QR. See [CHANGELOG.md](CHANGELOG.md) for full details.
-
-> ✅ **Import From More Apps - v0.9.0**
->
-> Import Passwords now reads Samsung Pass .spass files, Bitwarden JSON exports, including ones protected with a file password, 1Password .1pux files, and Dashlane's zipped export, alongside CSV. Every file shows in the picker, and the format is worked out from what is inside. For a protected file, enter its export password once. It opens the file on the device and is never saved. Logins saved for phone apps come over too, matched to their website from the file or your vault, or from a site you confirm, and the app is linked so the login fills there. A linked app asks once before its first fill, then fills only into that exact app, and the autofill button in other apps is redrawn with the logo and the site or app it fills. See [CHANGELOG.md](CHANGELOG.md) for full details.
-
-> ✅ **Bookmarks in the Vault QR - v0.9.1**
->
-> Share Vault now carries your bookmarks along with logins, misc credentials, and personal info, on the extension and the phone. Crypto wallets still travel only in vault files, so seed phrases never go over a QR. The extension's password generator no longer stalls on sites with empty password rules, and fits a site's required pattern, like a short PIN, the same way the phone browser does. Code left over from retired features is cleaned out. See [CHANGELOG.md](CHANGELOG.md) for full details.
-
 > ✅ **A New Look - v0.9.2**
 >
 > The phone app, the private browser, and the widgets are redesigned, with Ink for day and Platinum for night, switched with the sun and moon button and shared between the app and the browser. Buttons are raised, panels are recessed, and the green and the globe give way to the striped V, which is also the new white app icon. The start page backgrounds are redrawn and split by mode, 11 for day and 12 for night, with rare versions hidden in some. The widgets come in day and night versions, and new 1x1 icon widgets open the app. The extension now keeps an encrypted backup copy of the vault, so a browser that clears site data no longer takes the vault with it, and renaming the key and vault offers new files under the new name. See [CHANGELOG.md](CHANGELOG.md) for full details.
+
+> ✅ **The Extension's New Look - v0.9.3**
+>
+> The browser extension gets the same design as the phone: Ink for day and Platinum for night, raised buttons, recessed panels, and the striped V. The popup, the unlock window, Manage, the bookmarks side panel, and the User Guide are redrawn, and every confirmation in Manage is a Valid Vault dialog. On websites, the V tag is a white circle with the striped V, the inverted V that generates passwords is its charcoal twin, and the login picker and save prompt follow day and night mode. The toolbar icon is the white striped V. Logins on sites whose username box has no type are now found and saved. See [CHANGELOG.md](CHANGELOG.md) for full details.
 
 ---
 
@@ -85,7 +77,7 @@ Your data stays on your own devices, so there is nothing on a company's server t
 * Logins saved on one part of a site, such as www.example.com, are offered on its other parts, such as a separate sign-in page at login.example.com, in their own labeled section; shared hosting addresses where each subdomain has a different owner are kept apart
 * Passwords are never copied to the clipboard; autofill places them directly into the field you clicked
 * Website Credentials reliably saves new logins from real signup flows, including submit-triggered navigation, cross-domain SSO/MFA redirects, and multi-form pages
-* Each saved login now classifies its `loginType` (username, email, or phone) for more reliable matching
+* Each saved login records its `loginType` (username, email, or phone) for more reliable matching
 * Works with standard form controls (`<input>`, `<select>`, and `<textarea>`), which is how sites build login, signup, and checkout forms
 
 **Autofill (Android):**
@@ -129,10 +121,11 @@ Your data stays on your own devices, so there is nothing on a company's server t
 * In Tor mode there are no V tags, no save prompts, no Personal Info, and no password generator; Fill login in the menu works on https pages with Safer off, and reminds you once each session that signing in tells the site who you are
 * Also works with a VPN, or Orbot in VPN mode
 
-**Day and Night (Android):**
+**Day and Night:**
 
-* Ink for day and Platinum for night, switched with the sun and moon button in the app and beside the browser's address bar; the app and the browser keep the same choice
-* Raised buttons and recessed panels drawn with one line weight, with embossed labels and icons, and widgets and system bars that match
+* Ink for day and Platinum for night, switched with the sun and moon button in the phone app, beside the private browser's address bar, and in the extension's popup, Manage, bookmarks panel, and User Guide; the phone app and its browser share one choice, and every extension page shares another
+* Raised buttons and recessed panels drawn with one line weight, with embossed labels and icons, and widgets and system bars that match on the phone
+* On websites, the extension's login picker and save prompt follow day and night mode, and the V tags look the same on every site so they stand out on any page
 
 **Sync and Backup:**
 
@@ -175,7 +168,7 @@ Your data stays on your own devices, so there is nothing on a company's server t
 * Android via Capacitor, with native plugins for biometric auth, file saving, autofill, sharing, and the private browser
 * Every library is vendored into the bundle, and the scan path runs without Google SDKs
 
-## Current Status: v0.9.2 - Final Bug Fixes and Polish
+## Current Status: v0.9.3 - Final Bug Fixes and Polish
 
 **Completed:**
 
@@ -230,10 +223,11 @@ Your data stays on your own devices, so there is nothing on a company's server t
 * ✅ Bookmarks travel in the vault QR alongside logins, misc credentials, and personal info
 * ✅ New look on the phone: day and night modes, the striped V, raised and recessed design, redrawn start page backgrounds, and day and night widgets
 * ✅ Encrypted backup copy in the extension that restores the vault after the browser clears site data
+* ✅ New look in the extension: day and night modes, the striped V, and the raised and recessed design across the popup, Manage, the bookmarks panel, the User Guide, and the V tags on websites
 
 **Before 1.0:**
 
-* 📋 The new look brought to the extension, the User Guide, and the website
+* 📋 The new look brought to the website
 * 📋 Filling apps that Android Autofill can't reach
 * 📋 Final bug fixes and polish
 
@@ -245,7 +239,7 @@ Because importing a key persists, the same vault file works the same way everywh
 
 Merging requires both devices to hold the same master key. If the keys don't match, sync stops with a clear error and nothing is merged.
 
-Recovery follows from the same model. As long as any device still unlocks the vault, a lost key file or a forgotten passphrase is fixed in place: unlock, use Change Key Passphrase, and export a fresh key file. A vault becomes unrecoverable only when no device can unlock it and no key file can be opened, which in practice means uninstalling the extension or clearing browser data without exporting the key first.
+Recovery follows from the same model. As long as any device still unlocks the vault, a lost key file or a forgotten passphrase is fixed in place: unlock, use Change Key Passphrase, and export a fresh key file. A vault becomes unrecoverable only when no device can unlock it and no key file can be opened, which in practice means uninstalling the extension or the app without exporting the key first.
 
 ## Security Model
 
@@ -348,7 +342,7 @@ npx cap open android
 There are no stored password hashes. Authentication is the act of deriving a wrapping key and attempting the AES-GCM unwrap. The auth tag rejects wrong keys, so the cheapest offline attack is the full KDF.
 
 **Persistent Key Import:**
-Importing a master key re-wraps it under the browser's existing password (and fingerprint, if enrolled), so it stays that browser's key from then on. This is the piece that makes the same vault file usable across Chrome, Firefox, and other browsers with one shared master key.
+Importing a master key re-wraps it under the browser's existing password (and fingerprint, if enrolled), so it stays that browser's key from then on. This is the piece that makes the same vault file usable across Chrome, Edge, and Brave with one shared master key.
 
 **Single-Blob Vault Encryption:**
 The Website Credentials tree (meta plus every domain's credentials) is serialized and encrypted as one AES-GCM blob. Any change to the storage format runs as a verified migration: the data is first backed up encrypted in a short-lived journal, then converted, then checked with a full-tree fingerprint against what was written back, with automatic rollback from the encrypted backup on any mismatch.
@@ -421,7 +415,7 @@ Edge is built on the same engine as Chrome and installs extensions straight from
 3. Click the install button on the listing, then **Add extension**.
 4. Click the puzzle piece icon in the toolbar and pin Valid Vault so its icon stays visible.
 
-Edge keeps Chrome Web Store extensions updated automatically, the same as Chrome does. Since v0.7.4.1, each browser keeps its own fingerprint, so Edge, Chrome, and Brave can all unlock with fingerprint on the same computer.
+Edge keeps Chrome Web Store extensions updated automatically, the same as Chrome does. Each browser keeps its own fingerprint, so Edge, Chrome, and Brave can all unlock with fingerprint on the same computer.
 
 **Why Valid Vault is not on the Edge Add-ons store:**
 
@@ -469,6 +463,8 @@ Pre-1.0, in final bug fixes and polish. Community review welcome. auth.js, crypt
 MIT License - See LICENSE file
 
 The browser's EasyPrivacy and EasyList domain file, android/app/src/main/assets/browser/easylist-domains.txt, comes from the EasyList authors (https://easylist.to/) and keeps its own GPLv3 or CC BY-SA 3.0 license, described in EASYLIST-NOTICE.txt beside it.
+
+The fingerprint icon in the extension comes from Phosphor Icons (https://phosphoricons.com/), copyright (c) 2023 Phosphor Icons, used under the MIT License.
 
 Copyright (c) 2025-2026 by Rook
 
