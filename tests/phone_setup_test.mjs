@@ -1,0 +1,120 @@
+import { test, before, after } from 'node:test'
+import assert from 'node:assert/strict'
+import { REPO_ROOT, PASSWORD, startServer, launchBrowser, fillDialog } from './harness.mjs'
+import { newPhone, visible, message, waitMessage, phoneTab, setUpWithPassword, setUpWithFingerprintAndPassword, addLogin, loginGroups, revealAll } from './phone_harness.mjs'
+
+let server
+let browser
+
+before(async () => {
+  server = await startServer(REPO_ROOT)
+  browser = await launchBrowser()
+})
+
+after(async () => {
+  await browser.close()
+  await server.close()
+})
+
+test('setup with a password works when fingerprint is unavailable', async () => {
+  const phone = await newPhone(browser, server.url, { noBiometrics: true })
+  const { page } = phone
+  assert.equal(await visible(page, '#view-setup'), true)
+  assert.equal(await visible(page, '#btn-setup-fp'), false)
+  assert.equal(await visible(page, '#setup-fp-note'), true)
+  assert.equal(await page.locator('#btn-setup-done').isDisabled(), true)
+  await page.fill('#setup-password', 'short')
+  await page.click('#btn-setup-pw')
+  assert.match(await message(page, 'msg-setup'), /at least 12/)
+  await setUpWithPassword(phone)
+  assert.equal(await visible(page, '#view-app'), true)
+  assert.equal(await visible(page, '#btn-lock'), true)
+  assert.equal(await page.textContent('#status-fp'), 'Not available on this device')
+  assert.equal(await visible(page, '#credentials-list .gate'), true)
+  await addLogin(phone, 'https://Accounts.Example.com/login', 'rook@example.com', 'pw-one-111!')
+  assert.deepEqual(await loginGroups(phone), [{ site: 'accounts.example.com', count: 1 }])
+  assert.deepEqual(await revealAll(phone), ['rook@example.com=pw-one-111!'])
+  assert.deepEqual(page.errors, [])
+  await phone.context.close()
+})
+
+test('fingerprint unlock, password unlock, and fallbacks after cancel or a reset fingerprint', async () => {
+  const phone = await newPhone(browser, server.url)
+  const { page } = phone
+  assert.equal(await visible(page, '#btn-setup-fp'), true)
+  await page.click('#btn-setup-fp')
+  await waitMessage(page, 'msg-setup', /Fingerprint enrolled/)
+  assert.equal(await page.locator('#btn-setup-done').isDisabled(), false)
+  await setUpWithPassword(phone)
+  assert.equal(await page.textContent('#status-fp'), 'Enrolled')
+  await page.click('#btn-lock')
+  await page.waitForSelector('#view-locked:not(.hidden)')
+  assert.equal(await visible(page, '#btn-unlock-fp'), true)
+  await page.click('#btn-unlock-fp')
+  await page.waitForSelector('#view-app:not(.hidden)')
+  await page.click('#btn-lock')
+  await page.waitForSelector('#view-locked:not(.hidden)')
+  await page.evaluate(() => { window.__bio.next = 'cancel' })
+  await page.click('#btn-unlock-fp')
+  assert.match(await waitMessage(page, 'msg-locked', /cancelled/), /password/)
+  await page.fill('#input-unlock-password', 'wrong-password-1!')
+  await page.click('#btn-unlock-pw')
+  assert.match(await waitMessage(page, 'msg-locked', /Invalid/), /Invalid password/)
+  await page.fill('#input-unlock-password', PASSWORD)
+  await page.click('#btn-unlock-pw')
+  await page.waitForSelector('#view-app:not(.hidden)')
+  await page.evaluate(() => { window.__bio.next = 'invalidated' })
+  await phoneTab(page, 'manage')
+  await page.click('#credentials-list .gate button')
+  assert.match(await page.locator('.wv-dialog-overlay .wv-dialog-text').textContent(), /re-enroll/i)
+  await fillDialog(page, [PASSWORD])
+  await page.waitForSelector('#credentials-list .gate', { state: 'detached' })
+  assert.deepEqual(page.errors, [])
+  await phone.context.close()
+})
+
+test('a cancelled re-enroll keeps the old fingerprint, and a finished one swaps key slots', async () => {
+  const phone = await newPhone(browser, server.url)
+  const { page } = phone
+  await setUpWithFingerprintAndPassword(phone)
+  await page.click('#btn-edit-fp')
+  await page.evaluate(() => { window.__bio.next = 'cancel' })
+  await fillDialog(page, [PASSWORD])
+  await waitMessage(page, 'msg-manage', /cancelled/)
+  await page.click('#btn-lock')
+  await page.waitForSelector('#view-locked:not(.hidden)')
+  await page.click('#btn-unlock-fp')
+  await page.waitForSelector('#view-app:not(.hidden)', { timeout: 5000 })
+  await page.click('#btn-edit-fp')
+  await fillDialog(page, [PASSWORD])
+  await waitMessage(page, 'msg-manage', /Fingerprint enrolled/)
+  const calls = await page.evaluate(() => window.__bio.calls)
+  assert.ok(calls.includes('remove:valid_vault_biometric_key_a'))
+  assert.equal(calls.filter((c) => c.startsWith('enroll:')).pop(), 'enroll:valid_vault_biometric_key_b')
+  await page.click('#btn-lock')
+  await page.click('#btn-unlock-fp')
+  await page.waitForSelector('#view-app:not(.hidden)', { timeout: 5000 })
+  await page.click('#btn-del-fp')
+  await fillDialog(page, [PASSWORD])
+  await fillDialog(page, [])
+  await waitMessage(page, 'msg-manage', /Fingerprint removed/)
+  assert.equal(await page.textContent('#status-fp'), 'Not enrolled')
+  await phone.context.close()
+})
+
+test('Clear Vault returns to setup and removes fingerprint keys', async () => {
+  const phone = await newPhone(browser, server.url)
+  const { page } = phone
+  await page.click('#btn-setup-fp')
+  await waitMessage(page, 'msg-setup', /Fingerprint enrolled/)
+  await page.click('#btn-setup-done')
+  await page.waitForSelector('#view-app:not(.hidden)')
+  assert.equal(await page.textContent('#status-pw'), 'Not enrolled')
+  await phoneTab(page, 'settings')
+  await page.click('#btn-clear-vault')
+  await fillDialog(page, [])
+  await fillDialog(page, [])
+  await page.waitForSelector('#view-setup:not(.hidden)')
+  assert.equal(await page.evaluate(() => localStorage.getItem('__bioKeys')), '{}')
+  await phone.context.close()
+})
