@@ -166,6 +166,7 @@ Your data stays on your own devices, so there is nothing on a company's server t
 * Single-file web bundle - build.js bundles the phone app from the extension's own modules into one self-contained HTML file, so both clients share one copy of the core code
 * Android via Capacitor, with native plugins for biometric auth, file saving, autofill, sharing, and the private browser
 * Every library is vendored into the bundle, and the scan path runs without Google SDKs
+* 71 automated tests in `tests/` cover the extension and the phone app, run with `npm test` on Node's built-in test runner, with Playwright as a development tool that drives a headless Chromium
 
 ## Current Status: v0.9.3 - Final Bug Fixes and Polish
 
@@ -223,6 +224,7 @@ Your data stays on your own devices, so there is nothing on a company's server t
 * ✅ New look on the phone: day and night modes, the striped V, raised and recessed design, redrawn start page backgrounds, and day and night widgets
 * ✅ Encrypted backup copy in the extension that restores the vault after the browser clears site data
 * ✅ New look in the extension: day and night modes, the striped V, and the raised and recessed design across the popup, Manage, the bookmarks panel, the User Guide, and the V tags on websites
+* ✅ 71 automated tests for the extension and the phone app, public in the repository and run with `npm test`
 
 **Before 1.0:**
 
@@ -316,7 +318,7 @@ Seed phrases are the highest-value secret most people own, and the common places
 
 ### Prerequisites
 
-* Node.js 18+
+* Node.js 18+ (22+ to run the tests)
 * Android Studio for device builds (optional)
 
 ### Build from Source
@@ -334,6 +336,16 @@ npm install
 npx cap sync
 npx cap open android
 ```
+
+### Run the Tests
+
+```bash
+npm install
+npx playwright install chromium
+npm test
+```
+
+The suite starts a local web server and a headless Chromium, then runs the extension and the phone app against sample sign-in pages and a stand-in for the phone's native features. Each file in `tests/` covers one area, such as logins, transfer, autofill, or phone sync.
 
 ## Architecture Highlights
 
@@ -445,6 +457,7 @@ Contributions welcome. This project maintains a compact, readable codebase with 
   * Constants in SCREAMING_SNAKE_CASE
   * Complete file implementations (no fragments)
   * No new dependencies without discussion
+* Run `npm test` before opening a pull request, and add tests for new behavior in the matching file in `tests/`
 
 **Join the Discord** Join the Discord for release announcements, setup help, and a direct line to report bugs or request features.
 https://discord.gg/2SP383cJs9
@@ -455,7 +468,7 @@ https://discord.gg/2SP383cJs9
 Report security issues via GitHub Security Advisories.
 
 **Audit Status:**
-Pre-1.0, in final bug fixes and polish. Community review welcome. auth.js, crypto.js, session.js, keypackage.js, sealed.js, vaultfile.js, wallets.js, linkedvault.js, and the native plugins are the surfaces that matter.
+Pre-1.0, in final bug fixes and polish. Community review welcome, and the automated tests in `tests/` run against the code with `npm test`. auth.js, crypto.js, session.js, keypackage.js, sealed.js, vaultfile.js, wallets.js, linkedvault.js, and the native plugins are the surfaces that matter.
 
 ## License
 

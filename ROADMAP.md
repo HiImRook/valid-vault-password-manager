@@ -16,6 +16,7 @@
 * ✅ Logins found on sites whose username box has no type
 * ✅ Revealed logins, misc credentials, and personal info cleared from Manage when the vault locks
 * ✅ Leftover code removed
+* ✅ 71 automated tests for the extension and the phone app, public in `tests/` and run with `npm test`
 
 ### v0.9.2 - A New Look (Oct 2026)
 
@@ -385,4 +386,4 @@ MIT License - See LICENSE file for details
 
 ---
 
-**Last Updated:** Oct 28, 2026
+**Last Updated:** Oct 30, 2026

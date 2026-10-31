@@ -13,6 +13,8 @@ The browser extension gets the phone's new look, with day and night modes, the s
 
 * **Day and night modes in the extension.** Ink for day and Platinum for night, switched with the sun and moon button. Every extension page shares the choice, and the login picker and save prompt on websites follow it too.
 * **A 32 pixel toolbar icon** for high-DPI screens, so the icon stays sharp at 125% and 150% scaling.
+* **71 automated tests in `tests/`, public in the repository.** The checks run against the code before releases shipped now live in the repository, where anyone can read them and run them with `npm test`. They cover the extension (saved logins, misc credentials, personal info, crypto wallets, vault and key export and import, locking and Clear Vault, autofill on sample sign-in pages, bookmarks, the popup, and the unlock window) and the phone app (setup, fingerprint and re-enroll, phone to phone sync and merging, auto-lock, data from older versions, QR sharing, and layout), one file per area, following the layout of the Valid Blockchain repository.
+* **Playwright as a development tool.** It drives a headless Chromium while the tests run on Node's built-in test runner, is listed under devDependencies, and is never part of the extension or the phone app.
 
 ### Changed
 
@@ -31,6 +33,7 @@ The browser extension gets the phone's new look, with day and night modes, the s
 ### Notes
 
 * The fingerprint icon comes from Phosphor Icons, used under the MIT License.
+* Running the tests needs Node 22 or newer and a one-time `npx playwright install chromium`.
 
 ## [0.9.2] - 2026-10-26
 
@@ -1108,15 +1111,15 @@ This release is a hardening and feature-completion pass driven by internal Play 
 
 ### Added
 
-* extension/ — browser extension brought into the repo (settings page, autofill dropdown, toolbar popup, content script)
-* extension/background.js — service worker answering credential requests so the autofill dropdown populates whether or not the popup is open
+* extension/: browser extension brought into the repo (settings page, autofill dropdown, toolbar popup, content script)
+* extension/background.js: service worker answering credential requests so the autofill dropdown populates whether or not the popup is open
 * Autofill dropdown renders on login fields and fills saved credentials for the current domain
-* Session key bridged to the worker via chrome.storage.session — memory only, cleared on browser close
+* Session key bridged to the worker via chrome.storage.session, memory only, cleared on browser close
 
 ### Fixed
 
-* Autofill dropdown showed an empty box when the popup was closed — the worker now serves credentials independently
-* Extension carried the pre-0.3.0 crypto — now on the same secure core as the app (WebAuthn PRF, verify-by-unwrap, PBKDF2 600k)
+* Autofill dropdown showed an empty box when the popup was closed. The worker now serves credentials independently
+* Extension carried the pre-0.3.0 crypto. It now runs on the same secure core as the app (WebAuthn PRF, verify-by-unwrap, PBKDF2 600k)
 
 ### Changed
 
@@ -1125,13 +1128,13 @@ This release is a hardening and feature-completion pass driven by internal Play 
 
 ### In Progress
 
-* Settings and options page access from the popup — actively being built
-* Full autofill profile (name, address, email, phone) alongside credentials — actively being built
-* Save credentials during signup rather than manual entry — actively being built
+* Settings and options page access from the popup, actively being built
+* Full autofill profile (name, address, email, phone) alongside credentials, actively being built
+* Save credentials during signup rather than manual entry, actively being built
 
 ### Notes
 
-* Autofill detection currently wires on fields present at page load — dynamic-form coverage is part of the in-progress autofill work
+* Autofill detection currently wires on fields present at page load. Dynamic-form coverage is part of the in-progress autofill work
 * App and extension now share one crypto and auth core
 
 ## [0.3.0](https://github.com/HiImRook/local-vault-password-manager/releases/tag/v0.3) - 2026-08-04
