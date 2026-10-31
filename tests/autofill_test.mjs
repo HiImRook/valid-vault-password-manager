@@ -73,7 +73,7 @@ test('submitting a login offers to save it with its extra field', async () => {
   await page.fill('#pin', '9999')
   await page.click('#go')
   await page.waitForSelector('#sp-save', { timeout: 10000 })
-  assert.match(await page.textContent('#sp-extra'), /1 additional field/)
+  assert.match(await page.textContent('#sp-extra'), /Also save this field:\s*Account PIN/)
   assert.match(await page.textContent('#sp-user'), /carol/)
   await page.click('#sp-save')
   await page.waitForTimeout(1500)
@@ -86,6 +86,35 @@ test('submitting a login offers to save it with its extra field', async () => {
   assert.equal(saved[0].username, 'carol')
   assert.equal(saved[0].password, 'carol-pw-3!')
   assert.match(JSON.stringify(saved[0].extra), /Account PIN.*9999/)
+})
+
+test('unchecking an extra field in the save prompt leaves it out of the saved login', async () => {
+  const page = await site('login.html')
+  await page.fill('#u', 'frank')
+  await page.fill('#p', 'frank-pw-6!')
+  await page.fill('#pin', '2468')
+  await page.click('#go')
+  await page.waitForSelector('#sp-save', { timeout: 10000 })
+  await page.locator('#sp-extra input[type="checkbox"]').uncheck()
+  await page.click('#sp-save')
+  await page.waitForTimeout(1500)
+  const saved = await page.evaluate(async () => {
+    const passwords = await import('/passwords.js')
+    const r = await passwords.getCredentials('127.0.0.1', await window.__testVaultKey())
+    const login = r.credentials.find((c) => c.username === 'frank')
+    return login ? (login.extraFields || []).length : -1
+  })
+  assert.equal(saved, 0)
+})
+
+test('signing in again does not ask to save a field the user left out', async () => {
+  const page = await site('login.html')
+  await page.fill('#u', 'frank')
+  await page.fill('#p', 'frank-pw-6!')
+  await page.fill('#pin', '2468')
+  await page.click('#go')
+  await page.waitForTimeout(2500)
+  assert.equal(await page.locator('#sp-save').isVisible().catch(() => false), false)
 })
 
 test('the V tag picker fills the username, password, and extra field', async () => {
@@ -115,7 +144,7 @@ test('a username box with no type gets a V tag and saves and fills back', async 
   await page.click('#go')
   await page.waitForSelector('#sp-save', { timeout: 10000 })
   assert.match(await page.textContent('#sp-user'), /dana/)
-  assert.match(await page.textContent('#sp-extra'), /1 additional field/)
+  assert.match(await page.textContent('#sp-extra'), /Also save this field:\s*Account PIN/)
   await page.click('#sp-save')
   await page.waitForTimeout(1200)
   const again = await site('untyped.html')

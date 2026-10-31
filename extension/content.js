@@ -475,12 +475,9 @@
   }
 
   function sameExtraFields(existingExtras, newExtras) {
-    const a = existingExtras || []
-    const b = newExtras || []
-    if (a.length !== b.length) return false
-    const byLabel = new Map(a.map((f) => [normalizeLabel(f.label), f.value]))
-    for (const f of b) {
-      if (byLabel.get(normalizeLabel(f.label)) !== f.value) return false
+    const current = new Map((newExtras || []).map((f) => [normalizeLabel(f.label), f.value]))
+    for (const f of (existingExtras || [])) {
+      if (current.get(normalizeLabel(f.label)) !== f.value) return false
     }
     return true
   }
@@ -532,8 +529,12 @@
         .details { padding: 10px 12px; margin-bottom: 10px; }
         .sub { color: var(--text-dim); font-size: 12px; word-break: break-all; }
         .user { color: var(--text); font-size: 14px; font-weight: 600; margin-top: 3px; word-break: break-all; }
-        .extra-note { color: var(--text-dim); font-size: 12px; margin-bottom: 4px; }
-        .extra-note:empty { display: none; }
+        .extras { margin-bottom: 4px; }
+        .extras:empty { display: none; }
+        .extra-head { color: var(--text-dim); font-size: 12px; margin-bottom: 6px; }
+        .extra-row { display: flex; align-items: center; gap: 8px; color: var(--text); font-size: 13px; padding: 3px 0; cursor: pointer; }
+        .extra-row input { width: 16px; height: 16px; margin: 0; accent-color: var(--text); cursor: pointer; flex: none; }
+        .extra-row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .msg { color: var(--danger); font-size: 12px; min-height: 16px; margin: 4px 0 10px; line-height: 1.4; }
         .row { display: flex; gap: 10px; }
       </style>
@@ -545,7 +546,7 @@
             <div class="sub" id="sp-domain"></div>
             <div class="user" id="sp-user"></div>
           </div>
-          <div class="extra-note" id="sp-extra"></div>
+          <div class="extras" id="sp-extra"></div>
           <div class="msg" id="sp-msg"></div>
           <div class="row">
             <button class="primary" id="sp-save">Save</button>
@@ -567,11 +568,28 @@
     shadow.getElementById('sp-domain').textContent = domain
     shadow.getElementById('sp-user').textContent = username || '(no username)'
     const extraEl = shadow.getElementById('sp-extra')
-    if (extraEl) {
-      extraEl.textContent = extraFields && extraFields.length
-        ? '+ ' + extraFields.length + ' additional field' + (extraFields.length !== 1 ? 's' : '') + ' on this form will be saved too'
-        : ''
+    const extraBoxes = []
+    extraEl.textContent = ''
+    if (extraFields && extraFields.length) {
+      const head = document.createElement('div')
+      head.className = 'extra-head'
+      head.textContent = 'Also save ' + (extraFields.length === 1 ? 'this field' : 'these fields') + ':'
+      extraEl.appendChild(head)
+      for (const field of extraFields) {
+        const row = document.createElement('label')
+        row.className = 'extra-row'
+        const box = document.createElement('input')
+        box.type = 'checkbox'
+        box.checked = true
+        const name = document.createElement('span')
+        name.textContent = field.label
+        row.appendChild(box)
+        row.appendChild(name)
+        extraEl.appendChild(row)
+        extraBoxes.push(box)
+      }
     }
+    const chosenExtras = () => (extraFields || []).filter((field, i) => extraBoxes[i] && extraBoxes[i].checked)
     let lockedMode = false
     function showLocked(text) {
       lockedMode = true
@@ -604,12 +622,12 @@
           showUnlocked()
           const check = await chrome.runtime.sendMessage({ action: 'getCredentialsForDomain', domain })
           const existing = check && check.success ? check.credentials.find(c => c.username === username) : null
-          if (existing && existing.password === password && sameExtraFields(existing.extraFields, extraFields)) {
+          if (existing && existing.password === password && sameExtraFields(existing.extraFields, chosenExtras())) {
             close()
             return
           }
         }
-        const result = await chrome.runtime.sendMessage({ action: 'saveCredential', domain, username, password, extraFields, loginType })
+        const result = await chrome.runtime.sendMessage({ action: 'saveCredential', domain, username, password, extraFields: chosenExtras(), loginType })
         if (result && result.locked) { showLocked(); return }
         if (!result || !result.success) { msgEl.textContent = 'Could not save. Please try again.'; return }
         close()

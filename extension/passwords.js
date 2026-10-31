@@ -538,8 +538,8 @@ function laterRecord(a, b) {
   const at = stamp(a)
   const bt = stamp(b)
   if (at !== bt) return at > bt ? a : b
-  if (!a.deleted && b.deleted) return a
-  if (a.deleted && !b.deleted) return b
+  if (a.deleted && !b.deleted) return a
+  if (b.deleted && !a.deleted) return b
   return JSON.stringify(a) >= JSON.stringify(b) ? a : b
 }
 

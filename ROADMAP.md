@@ -1,10 +1,19 @@
+
 # Valid Vault - Development Roadmap
 
-**Current Version:** v0.9.3 - **Status: Late Beta**
+**Current Version:** v0.9.3.1 - **Status: Late Beta**
 
 ---
 
 ## Version History (Completed)
+
+### v0.9.3.1 - Public Tests and Review Fixes (Oct 2026)
+
+* ✅ 78 automated tests for the extension and the phone app, public in `tests/` and run with `npm test`
+* ✅ A delete and an edit made in the same moment on two devices now resolve to the delete for logins and bookmarks, matching crypto wallets
+* ✅ The save prompt lists each extra field with a checkbox, and a field left out is not asked about again
+* ✅ Android Autofill recognizes trusted browsers by signing certificate as well as package name
+* ✅ README wording on offline password guessing corrected, and the private browser's Safe Browsing setting documented
 
 ### v0.9.3 - The Extension's New Look (Oct 2026)
 
@@ -16,7 +25,6 @@
 * ✅ Logins found on sites whose username box has no type
 * ✅ Revealed logins, misc credentials, and personal info cleared from Manage when the vault locks
 * ✅ Leftover code removed
-* ✅ 71 automated tests for the extension and the phone app, public in `tests/` and run with `npm test`
 
 ### v0.9.2 - A New Look (Oct 2026)
 
@@ -319,7 +327,7 @@
 
 ---
 
-## Upcoming After v0.9.3
+## Upcoming After v0.9.3.1
 
 ### Before 1.0
 

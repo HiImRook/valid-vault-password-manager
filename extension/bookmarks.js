@@ -169,8 +169,8 @@ function laterItem(a, b) {
   const at = a.updatedAt || 0
   const bt = b.updatedAt || 0
   if (at !== bt) return at > bt ? a : b
-  if (!a.deleted && b.deleted) return a
-  if (a.deleted && !b.deleted) return b
+  if (a.deleted && !b.deleted) return a
+  if (b.deleted && !a.deleted) return b
   return JSON.stringify(a) >= JSON.stringify(b) ? a : b
 }
 

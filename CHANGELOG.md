@@ -5,6 +5,27 @@ All notable changes to Valid Vault will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.3.1] - 2026-10-30
+
+The automated tests that releases have been checked against are now public and part of the repository, alongside fixes from a code review: same-moment sync conflicts, extra field choices in the save prompt, and stricter browser checks for Android Autofill.
+
+### Added
+
+* **78 automated tests in `tests/`, public in the repository.** The checks run against the code before releases shipped now live in the repository, where anyone can read them and run them with `npm test`. They cover the extension (saved logins, misc credentials, personal info, crypto wallets, vault and key export and import, sync merging, locking and Clear Vault, autofill on sample sign-in pages, bookmarks, the popup, and the unlock window) and the phone app (setup, fingerprint and re-enroll, phone to phone sync and merging, auto-lock, data from older versions, QR sharing, and layout), one file per area, following the layout of the Valid Blockchain repository.
+* **Playwright as a development tool.** It drives a headless Chromium while the tests run on Node's built-in test runner, is listed under devDependencies, and is never part of the extension or the phone app.
+* **Extra fields chosen one by one.** The save prompt lists each extra field on the form, such as an account PIN, with a checkbox. Only the fields left checked are saved, and signing in again does not ask about a field that was left out.
+
+### Changed
+
+* **Deletes win same-moment conflicts.** When one device deletes a login or a bookmark and another edits it in the same millisecond, the merge now keeps the delete, the same rule crypto wallets already used. A newer edit still wins over an older delete.
+* **Trusted browsers checked by certificate.** Android Autofill now recognizes a browser by its package name and its signing certificate, using the certificates Google publishes for browsers it trusts with passkeys, so a sideloaded app using a browser's name is treated as an ordinary app. Kiwi Browser, which has been discontinued, is no longer on the list.
+* **Docs corrected.** The README now says a wrong credential fails the unwrap and that testing a guess requires the full key derivation, and it notes that Android's Safe Browsing service is turned off in the private browser.
+
+### Notes
+
+* Running the tests needs Node 22 or newer and a one-time `npx playwright install chromium`.
+* The phone app is rebuilt with the merge fix.
+
 ## [0.9.3] - 2026-10-28
 
 The browser extension gets the phone's new look, with day and night modes, the striped V, and the raised and recessed design, from the popup to the V tags on websites. Logins on more sites are found and saved, and leftover code is removed.
@@ -13,9 +34,6 @@ The browser extension gets the phone's new look, with day and night modes, the s
 
 * **Day and night modes in the extension.** Ink for day and Platinum for night, switched with the sun and moon button. Every extension page shares the choice, and the login picker and save prompt on websites follow it too.
 * **A 32 pixel toolbar icon** for high-DPI screens, so the icon stays sharp at 125% and 150% scaling.
-* **71 automated tests in `tests/`, public in the repository.** The checks run against the code before releases shipped now live in the repository, where anyone can read them and run them with `npm test`. They cover the extension (saved logins, misc credentials, personal info, crypto wallets, vault and key export and import, locking and Clear Vault, autofill on sample sign-in pages, bookmarks, the popup, and the unlock window) and the phone app (setup, fingerprint and re-enroll, phone to phone sync and merging, auto-lock, data from older versions, QR sharing, and layout), one file per area, following the layout of the Valid Blockchain repository.
-* **Playwright as a development tool.** It drives a headless Chromium while the tests run on Node's built-in test runner, is listed under devDependencies, and is never part of the extension or the phone app.
-
 ### Changed
 
 * **The popup and unlock window redrawn.** The striped V and serif wordmark, a raised Unlock with Fingerprint button with a drawn fingerprint, and a recessed master password field. The FP and PW chips are gone, and the unlock window shows which site asked.
@@ -33,7 +51,6 @@ The browser extension gets the phone's new look, with day and night modes, the s
 ### Notes
 
 * The fingerprint icon comes from Phosphor Icons, used under the MIT License.
-* Running the tests needs Node 22 or newer and a one-time `npx playwright install chromium`.
 
 ## [0.9.2] - 2026-10-26
 

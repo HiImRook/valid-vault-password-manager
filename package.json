@@ -1,6 +1,6 @@
 {
   "name": "local-vault-password-manager",
-  "version": "0.9.3",
+  "version": "0.9.3.1",
   "description": "Local password manager with fingerprint authentication",
   "scripts": {
     "test": "node --test \"tests/*_test.mjs\""
