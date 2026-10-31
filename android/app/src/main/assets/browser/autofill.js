@@ -14,7 +14,13 @@
   const GAP = 10
   const BLOCKER_GAP = 6
   const BLOCKER_TRIES = 4
-  const FONT_RATIO = 0.5
+  const MARK_RATIO = 0.41
+  const SVG_NS = 'http://www.w3.org/2000/svg'
+  const V_MARK_PATH = 'M5.7 8L105 8L108.8 22.4L11.8 22.4ZM237 8L336.3 8L330.2 22.4L233.2 22.4ZM17.9 36.9L112.5 36.9L116.3 51.3L24 51.3ZM229.5 36.9L324.1 36.9L318 51.3L225.7 51.3ZM30.1 65.8L120 65.8L123.8 80.2L36.2 80.2ZM222 65.8L311.9 65.8L305.8 80.2L218.2 80.2ZM42.3 94.7L127.5 94.7L131.3 109.1L48.4 109.1ZM214.5 94.7L299.7 94.7L293.6 109.1L210.7 109.1ZM54.5 123.6L135 123.6L138.8 138L60.7 138ZM207 123.6L287.5 123.6L281.3 138L203.2 138ZM66.8 152.4L142.6 152.4L146.3 166.9L72.9 166.9ZM199.4 152.4L275.2 152.4L269.1 166.9L195.7 166.9ZM79 181.3L150.1 181.3L153.8 195.8L85.1 195.8ZM191.9 181.3L263 181.3L256.9 195.8L188.2 195.8ZM91.2 210.2L157.6 210.2L161.3 224.7L97.3 224.7ZM184.4 210.2L250.8 210.2L244.7 224.7L180.7 224.7ZM103.4 239.1L165.1 239.1L168.8 253.6L109.5 253.6ZM176.9 239.1L238.6 239.1L232.5 253.6L173.2 253.6ZM115.6 268L226.4 268L220.3 282.4L121.7 282.4ZM127.8 296.9L214.2 296.9L208.1 311.3L133.9 311.3ZM140 325.8L202 325.8L195.8 340.2L146.2 340.2ZM152.3 354.7L189.7 354.7L183.6 369.1L158.4 369.1ZM164.5 383.6L177.5 383.6L171.4 398L170.6 398Z'
+  const TAG_LOOKS = {
+    fill: { background: 'linear-gradient(180deg,#ffffff,#ebe7df) padding-box,linear-gradient(135deg,#4a4c52,#0e0f11) border-box', mark: '#1d1e21' },
+    generate: { background: 'linear-gradient(180deg,#2d3238,#1a1d21) padding-box,linear-gradient(135deg,#f4f6f8,#8a9098) border-box', mark: '#f4f6f8' }
+  }
   const SCAN_MS = 350
   const SAVE_REPEAT_MS = 4000
   const REPLY_MS = 180000
@@ -323,9 +329,9 @@
   function paint(host, kind) {
     const face = host.__vvFace
     const generate = kind === KIND_GENERATE
-    face.style.background = generate ? '#33FF66' : '#0A0E0A'
-    face.style.color = generate ? '#0A0E0A' : '#33FF66'
-    face.style.borderColor = generate ? '#33FF66' : '#1F9E40'
+    const look = generate ? TAG_LOOKS.generate : TAG_LOOKS.fill
+    face.style.background = look.background
+    host.__vvMark.style.fill = look.mark
     host.setAttribute('aria-label', generate ? 'Generate a password with Valid Vault' : 'Fill with Valid Vault')
   }
 
@@ -335,10 +341,19 @@
     host.style.cssText = 'all:initial!important;position:fixed!important;z-index:2147483647!important;width:' + TAG + 'px!important;height:' + TAG + 'px!important;display:none!important;cursor:pointer!important;margin:0!important;padding:0!important'
     const root = host.attachShadow({ mode: 'closed' })
     const face = document.createElement('div')
-    face.textContent = 'V'
-    face.style.cssText = 'width:100%;height:100%;box-sizing:border-box;border-radius:7px;border:1px solid #1F9E40;font-weight:bold;font-family:monospace;display:flex;align-items:center;justify-content:center;user-select:none;-webkit-user-select:none'
+    face.style.cssText = 'width:100%;height:100%;box-sizing:border-box;border-radius:50%;border:2px solid transparent;display:flex;align-items:center;justify-content:center;box-shadow:inset 0 1px 0 rgba(255,255,255,0.45),0 1px 0 rgba(0,0,0,0.2),0 1px 3px rgba(0,0,0,0.2);user-select:none;-webkit-user-select:none'
+    const mark = document.createElementNS(SVG_NS, 'svg')
+    mark.setAttribute('viewBox', '0 0 342 403')
+    mark.setAttribute('aria-hidden', 'true')
+    mark.setAttribute('focusable', 'false')
+    mark.style.cssText = 'display:block;width:14px;height:17px;margin-top:1px;pointer-events:none'
+    const path = document.createElementNS(SVG_NS, 'path')
+    path.setAttribute('d', V_MARK_PATH)
+    mark.appendChild(path)
+    face.appendChild(mark)
     root.appendChild(face)
     Object.defineProperty(host, '__vvFace', { value: face })
+    Object.defineProperty(host, '__vvMark', { value: mark })
     host.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation() }, true)
     host.addEventListener('mousedown', (e) => { e.preventDefault(); e.stopPropagation() }, true)
     host.addEventListener('click', (e) => {
@@ -601,7 +616,9 @@
       host.style.setProperty('height', size + 'px', 'important')
       host.style.setProperty('top', top + 'px', 'important')
       host.style.setProperty('left', Math.round(clearSpot(field, r, size)) + 'px', 'important')
-      host.__vvFace.style.fontSize = Math.round(size * FONT_RATIO) + 'px'
+      const markWidth = Math.round(size * MARK_RATIO)
+      host.__vvMark.style.width = markWidth + 'px'
+      host.__vvMark.style.height = Math.round(markWidth * 403 / 342) + 'px'
     }
   }
 
